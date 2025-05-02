@@ -1,0 +1,10 @@
+1. Only extract table rows with product name, quantity, unit, and price. Ignore all other text.
+2. Ignore header/footer, legal, and address info.
+3. Ignore subtotal, total, and VAT lines.
+4. Output only the table as JSON array of objects with fields: name, qty, unit, price.
+5. For each row, parse product name as string, quantity as number, unit as string, price as number.
+6. If price is missing or unreadable, set price to null.
+7. If unit is missing, set unit to null.
+8. If quantity is missing, set qty to null.
+9. If a row is not a product (e.g. discount, delivery), skip it.
+10. If price is faint or hard to read, set price to null and add a comment field: "faint-price".
