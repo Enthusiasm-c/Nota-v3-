@@ -10,7 +10,16 @@ class Position(BaseModel):
     price: Optional[float] = None
 
 
+from pydantic import field_validator
+
 class ParsedData(BaseModel):
     supplier: Optional[str] = None
-    date: Optional[date] = None
+    date: Optional[date] = None  # Принимает строку или date
     positions: list[Position]
+
+    # Валидатор: преобразует строку в date
+    @field_validator("date", mode="before")
+    def _parse_date(cls, v):
+        if isinstance(v, str):
+            return date.fromisoformat(v)
+        return v
