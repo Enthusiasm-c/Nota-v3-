@@ -52,7 +52,7 @@ async def photo_handler(message: Message):
         file = await bot.get_file(message.photo[-1].file_id)
         img_bytes = await bot.download_file(file.file_path)
         parsed_data = await asyncio.to_thread(
-            ocr.call_ocr, img_bytes.getvalue()
+            ocr.call_openai_ocr, img_bytes.getvalue()
         )
         products = data_loader.load_products("data/base_products.csv")
         match_results = matcher.match_positions(parsed_data.positions, products)
