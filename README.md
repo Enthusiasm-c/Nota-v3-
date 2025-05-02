@@ -21,11 +21,12 @@ Telegram-бот для автоматической проверки товар�
    make run-local
    ```
 
-## Тесты
-
-```sh
+### Run tests
+```bash
 make test
 ```
+
+By default OCR is stubbed; set USE_OPENAI_OCR=1 to try real GPT-4o.
 
 ## Структура
 

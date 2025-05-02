@@ -1,11 +1,4 @@
-run-local:
-	python bot.py
-
-test:
-	pytest -q
-
-lint:
-	flake8 app/ bot.py
-
-clean:
-	rm -rf tmp/*
+run-local: ; python bot.py
+test:      ; pytest -q
+lint:      ; black . --check
+clean:     ; rm -rf tmp/*

@@ -1,0 +1,7 @@
+{
+  "supplier": "Test Supplier",
+  "date": "2025-05-02",
+  "positions": [
+    {"name": "Tuna loin", "qty": 1, "unit": "kg"}
+  ]
+}
