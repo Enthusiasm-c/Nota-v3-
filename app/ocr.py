@@ -21,28 +21,31 @@ PROMPT = PROMPT_PATH.read_text(encoding="utf-8")
 
 # OpenAI function-calling schema for invoice parsing
 tool_schema = {
-    "name": "parse_invoice",
-    "description": "Extract structured data from an Indonesian supplier invoice photo",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "supplier": {"type": ["string", "null"]},
-            "date":     {"type": ["string", "null"], "description":"YYYY-MM-DD"},
-            "positions": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "required": ["name", "qty", "unit"],
-                    "properties": {
-                        "name":  {"type":"string"},
-                        "qty":   {"type":"number"},
-                        "unit":  {"type":"string"},
-                        "price": {"type":"number", "nullable":True}
+    "type": "function",
+    "function": {
+        "name": "parse_invoice",
+        "description": "Extract structured data from an Indonesian supplier invoice photo",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "supplier": {"type": ["string", "null"]},
+                "date": {"type": ["string", "null"], "description": "YYYY-MM-DD"},
+                "positions": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["name", "qty", "unit"],
+                        "properties": {
+                            "name": {"type": "string"},
+                            "qty": {"type": "number"},
+                            "unit": {"type": "string"},
+                            "price": {"type": "number", "nullable": True}
+                        }
                     }
                 }
-            }
-        },
-        "required": ["supplier", "date", "positions"]
+            },
+            "required": ["supplier", "date", "positions"]
+        }
     }
 }
 
