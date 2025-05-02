@@ -83,6 +83,40 @@ S-05	Multi-tenant, i18n, price anomaly alerts, dashboard (Grafana/Metabase).
 │   ├── base_suppliers.csv
 │   ├── base_products.csv
 │   └── aliases.csv        # grows over time
+## Sprint 1: Inline corrections & self-learning aliases
+
+### Features
+- Inline UI for every invoice line: ✅ OK, ✏️ Edit, 🗑 Remove.
+- Alias self-learning: user-confirmed names are saved to `data/aliases.csv` (deduplicated, lowercase).
+- Fuzzy matcher: merges aliases on startup, suggests top-5 similar products if unknown.
+- Command `/reload` reloads CSVs without restart.
+- Unit tests cover alias flow: unknown → edit → alias saved → next run = ok.
+- All bot messages in English.
+
+### Alias Flow Diagram
+
+```
+unknown → edit → alias saved → повтор → ok
+```
+
+### Data & Test Constraints
+* Do **NOT** edit `data/base_products.csv` or `data/base_suppliers.csv`.
+* All new aliases go ONLY to `data/aliases.csv`.
+* For unit-tests use files in `data/sample/`.
+
+**Особенности:**
+- Эти файлы не должны изменяться автоматически ботом или в процессе self-learning — только ручное редактирование.
+- Все новые алиасы и “обученные” продукты пишутся в отдельные файлы (`aliases.csv`, `learned_products.csv`), чтобы не затронуть базу.
+
+### Acceptance Checklist (DoD)
+- [x] Inline buttons for each invoice position.
+- [x] Edit flow allows user to correct name/qty/unit/price or remove a row.
+- [x] Alias self-learning: confirmed names are saved and recognized next time.
+- [x] Fuzzy suggestions: top-5 similar products shown if name is unknown.
+- [x] All tests pass, CI green.
+- [x] Docs updated (this file, README).
+
+---
 ├── docs/PROJECT_OVERVIEW.md
 ├── tests/
 │   ├── mock_invoice.json

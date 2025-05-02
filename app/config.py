@@ -8,8 +8,6 @@ class Settings(BaseSettings):
     OPENAI_MODEL: str = "gpt-4o"
     MATCH_THRESHOLD: float = 0.75
 
-    class Config:
-        env_file = os.getenv("ENV_FILE", ".env")
-        env_file_encoding = 'utf-8'
+    model_config = SettingsConfigDict(extra="allow", env_file=os.getenv("ENV_FILE", ".env"), env_file_encoding="utf-8")
 
 settings = Settings()

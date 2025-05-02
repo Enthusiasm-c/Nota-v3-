@@ -12,7 +12,7 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 
-def match_positions(positions: List[Dict], products: List[Dict], threshold: Optional[float] = None) -> List[Dict]:
+def match_positions(positions: List[Dict], products: List[Dict], threshold: Optional[float] = None, return_suggestions: bool = False) -> List[Dict]:
     if threshold is None:
         threshold = settings.MATCH_THRESHOLD
     results = []
@@ -24,14 +24,16 @@ def match_positions(positions: List[Dict], products: List[Dict], threshold: Opti
         best_score = 0
         matched_product = None
         status = "unknown"
+        fuzzy_scores = []
         for product in products:
-            alias = product.get("alias", "")
+            alias = product.get("alias", product.get("name", ""))
             if name.lower().strip() == alias.lower().strip():
                 matched_product = product
                 best_score = 1.0
                 status = "ok"
                 break
             score = levenshtein_ratio(name.lower().strip(), alias.lower().strip())
+            fuzzy_scores.append((score, product))
             if score > best_score:
                 best_score = score
                 best_match = product
@@ -41,12 +43,17 @@ def match_positions(positions: List[Dict], products: List[Dict], threshold: Opti
         elif status != "ok":
             status = "unknown"
         logger.debug(f"Match: {name} → {getattr(matched_product, 'alias', None)}; score={best_score:.2f}")
-        results.append({
+        result = {
             "name": name,
             "qty": qty,
             "unit": unit,
             "status": status,
             "product_id": matched_product.get("id") if matched_product else None,
             "score": best_score if best_score else None
-        })
+        }
+        if return_suggestions and status == "unknown":
+            # Top-5 fuzzy suggestions for unknown
+            fuzzy_scores.sort(reverse=True, key=lambda x: x[0])
+            result["suggestions"] = [p for s, p in fuzzy_scores[:5] if s > 0.5]
+        results.append(result)
     return results

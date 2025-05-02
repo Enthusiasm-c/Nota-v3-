@@ -21,12 +21,36 @@ Telegram-бот для автоматической проверки товар�
    make run-local
    ```
 
-### Run tests
-```bash
-make test
+### Sprint 1: Inline corrections & self-learning aliases
+
+- Inline UI for each invoice line: OK, Edit, Remove (in Telegram).
+- Alias self-learning: when a new name is confirmed, it is appended to `data/aliases.csv` (no duplicates, lowercase).
+- Fuzzy matcher: now merges aliases on startup and suggests top-5 similar products if unknown.
+- Unit tests cover alias flow: unknown → edit → alias saved → next run = ok.
+- All bot messages and inline captions in English.
+- **Immutable data**: `data/base_products.csv` and `data/base_suppliers.csv` are read-only, all new aliases go to `data/aliases.csv`.
+
+### Running tests
+
+Activate your virtual environment if needed:
+
+```sh
+source venv/bin/activate
 ```
 
-By default OCR is stubbed; set USE_OPENAI_OCR=1 to try real GPT-4o.
+Run all tests:
+
+```sh
+PYTHONPATH=. pytest
+```
+
+Or run a specific test (e.g. alias flow):
+
+```sh
+PYTHONPATH=. pytest tests/test_alias_flow.py
+```
+
+This will run all unit tests and check that the alias self-learning mechanism works as expected.
 
 ## Структура
 
