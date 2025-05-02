@@ -30,6 +30,32 @@ Telegram-бот для автоматической проверки товар�
 - All bot messages and inline captions in English.
 - **Immutable data**: `data/base_products.csv` and `data/base_suppliers.csv` are read-only, all new aliases go to `data/aliases.csv`.
 
+### Sprint 2: Real OCR Integration
+
+- **Stub mode** (default): No OpenAI calls, works offline, fast tests.
+- **Live mode**: Set `USE_OPENAI_OCR=1` and provide `OPENAI_API_KEY` in your environment to use GPT-4o Vision for real invoice parsing. Uses prompt from `prompts/invoice_ocr_en_v0.3.txt`.
+- **Cassette-based tests**: On first run with a real key, a cassette is recorded in `tests/cassettes/`. On CI or without key, cassette is replayed for fast, safe tests.
+- **Validation and error handling**: All OCR results validated with Pydantic. If parsing fails, user sees "⚠️ OCR failed, please retake the photo".
+- **Number normalization**: Prices and totals are normalized to float (removes Rp, commas, dots, etc).
+- **Timeout and logging**: Each OCR call times out after 30s and logs duration and image size.
+
+### How to enable real OCR
+
+1. Set `USE_OPENAI_OCR=1` in your `.env` or environment.
+2. Set your `OPENAI_API_KEY`.
+3. Run tests:
+   ```sh
+   PYTHONPATH=. pytest tests/test_ocr_live.py
+   ```
+   On first run, cassette will be recorded. On CI, cassette is replayed.
+
+### Roadmap
+- [x] Sprint 1: Inline corrections, self-learning aliases
+- [x] Sprint 2: Real OCR integration and cassette-based tests
+- [ ] Sprint 3: Price anomaly alerts, daily Syrve CSV sync
+
+---
+
 ### Running tests
 
 Activate your virtual environment if needed:
