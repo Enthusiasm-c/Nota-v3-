@@ -1,4 +1,3 @@
-
 def build_report(parsed_data, match_results: list) -> str:
     # Support both dict and ParsedData object
     supplier = getattr(parsed_data, "supplier", None)
@@ -11,17 +10,17 @@ def build_report(parsed_data, match_results: list) -> str:
     date_str = "—" if not date else str(date)
     ok_count = sum(1 for r in match_results if r["status"] == "ok")
     need_check_count = sum(1 for r in match_results if r["status"] != "ok")
-    report = f"\U0001F4E6  {supplier_str} • {date_str}\n"
+    report = f"{supplier_str} • {date_str}\n"
     report += "────────────────────────────────\n"
     # Table header (monospace)
     report += "```\n"
-    report += f"{'QTY'.ljust(5)} {'UNIT'.ljust(6)} {'NAME'.ljust(20)}  STATUS\n"
-    report += f"{'-'*5} {'-'*6} {'-'*20}  {'-'*12}\n"
+    report += f"#{'NAME'.ljust(20)} {'QTY'.ljust(5)} {'UNIT'.ljust(6)} {'PRICE'.ljust(8)}  STATUS\n"
     # Table rows
     for idx, r in enumerate(match_results):
+        name = str(r.get("name", "")).ljust(20)
         qty = str(r.get("qty", "")).ljust(5)
         unit = str(r.get("unit", "")).ljust(6)
-        name = str(r.get("name", "")).ljust(20)
+        price = str(r.get("price", "—")).ljust(8)
         status = r.get("status", "unknown")
         if status == "ok":
             status_str = "✅ ok"
@@ -31,7 +30,7 @@ def build_report(parsed_data, match_results: list) -> str:
             status_str = "❓ not found"
         else:
             status_str = status
-        report += f"{qty} {unit} {name}  {status_str}\n"
+        report += f"{idx+1} {name} {qty} {unit} {price}  {status_str}\n"
     report += "```\n"
     # Summary
     if ok_count > 0:

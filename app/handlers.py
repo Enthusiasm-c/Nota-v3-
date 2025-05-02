@@ -21,7 +21,7 @@ class EditPosition(StatesGroup):
 async def handle_edit(call: CallbackQuery, state: FSMContext):
     idx = int(call.data.split(":")[1])
     await state.update_data(edit_pos=idx)
-    await call.message.edit_reply_markup(reply_markup=keyboards.kb_choose_field(idx))
+    await call.message.edit_reply_markup(reply_markup=keyboards.kb_edit_fields(idx))
 
 # --- Field selection: set FSM and ask for new value ---
 @router.callback_query(F.data.startswith("field:"))
@@ -103,7 +103,7 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
         await message.reply("✅ This line is now ok; keyboard removed.")
         await state.clear()
     else:
-        await message.answer(f"Updated!\n{report}", reply_markup=keyboards.kb_choose_field(idx))
+        await message.answer(f"Updated!\n{report}", reply_markup=keyboards.kb_edit_fields(idx))
         await state.update_data(edit_pos=idx)
 
 
