@@ -3,7 +3,7 @@ from typing import Optional
 import os
 
 class Settings(BaseSettings):
-    BOT_TOKEN: str
+    TELEGRAM_BOT_TOKEN: str
     OPENAI_API_KEY: str
     OPENAI_MODEL: str = "gpt-4o"
     MATCH_THRESHOLD: float = 0.75

@@ -31,7 +31,7 @@ def cleanup_tmp():
 
 atexit.register(cleanup_tmp)
 
-bot = Bot(token=settings.BOT_TOKEN, parse_mode=ParseMode.MARKDOWN_V2)
+bot = Bot(token=settings.TELEGRAM_BOT_TOKEN, parse_mode=ParseMode.MARKDOWN_V2)
 dp = Dispatcher(storage=MemoryStorage())
 
 @dp.message(Command("start"))
