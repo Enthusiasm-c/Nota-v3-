@@ -25,9 +25,26 @@ def extract_json_block(text: str) -> str:
                     return text[start:i+1]
     raise ValueError("No JSON object found in text")
 
+import logging
+
+def _sanitize_json(obj):
+    # If already correct top-level structure, return as is
+    if isinstance(obj, dict) and all(k in obj for k in ("supplier", "date", "positions")):
+        return obj
+    # If it's a list or single dict, wrap as positions
+    if isinstance(obj, list):
+        return {"supplier": None, "date": None, "positions": obj}
+    if isinstance(obj, dict):
+        # If it's a dict with plausible position keys, wrap in positions
+        return {"supplier": None, "date": None, "positions": [obj]}
+    # Otherwise, fallback
+    return {"supplier": None, "date": None, "positions": []}
+
 def clean_ocr_response(text: str):
     """
     Cleans OpenAI OCR response and returns parsed dict.
     """
+    logging.debug(f"Raw OCR answer: {text!r}")
     json_str = extract_json_block(text)
-    return json.loads(json_str)
+    obj = json.loads(json_str)
+    return _sanitize_json(obj)
