@@ -1,22 +1,23 @@
-import asyncio, types
-from app import ocr
+import types, pytest
 from bot import photo_handler
-import pytest
+from app.models import ParsedData, Position
 
 @pytest.mark.asyncio
-async def test_handler_runs_to_thread(monkeypatch):
-    called = False
-    async def fake_download(*_): return types.SimpleNamespace(getvalue=lambda: b"img")
-    async def fake_file(*_): return types.SimpleNamespace(file_path="x")
-    monkeypatch.setattr("bot.bot.get_file", fake_file)
-    monkeypatch.setattr("bot.bot.download_file", fake_download)
+async def test_photo_ok(monkeypatch, fake_msg):
+    monkeypatch.setattr("app.ocr.call_openai_ocr", lambda _: ParsedData(
+        supplier="S", date="2025-05-02",
+        positions=[Position(name="A", qty=1, unit="kg")]
+    ))
+    monkeypatch.setattr("app.matcher.match_positions", lambda pos, prod=None: [])
     monkeypatch.setattr("app.formatter.build_report", lambda *_: "OK")
+    await photo_handler(fake_msg)
+    fake_msg.answer.assert_called_once_with("OK")
 
-    def fake_ocr(_):
-        nonlocal called
-        called = True
-        return ocr.ParsedData(supplier="X", date="2025-05-02", positions=[])
-    monkeypatch.setattr("app.ocr.call_openai_ocr", fake_ocr)
-    msg = types.SimpleNamespace(photo=[types.SimpleNamespace(file_id="id")], answer=lambda *_ , **__: None)
-    await photo_handler(msg)
-    assert called
+@pytest.mark.asyncio
+async def test_photo_error(monkeypatch, fake_msg):
+    monkeypatch.setattr("app.ocr.call_openai_ocr", lambda _: (_ for _ in ()).throw(RuntimeError))
+    await photo_handler(fake_msg)
+    fake_msg.answer.assert_called_once()
+    _, kwargs = fake_msg.answer.call_args
+    assert kwargs.get("parse_mode") is None
+pip install aiogram
