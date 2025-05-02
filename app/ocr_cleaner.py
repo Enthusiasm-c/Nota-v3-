@@ -28,16 +28,21 @@ def extract_json_block(text: str) -> str:
 import logging
 
 def _sanitize_json(obj):
-    # If already correct top-level structure, return as is
-    if isinstance(obj, dict) and all(k in obj for k in ("supplier", "date", "positions")):
-        return obj
-    # If it's a list or single dict, wrap as positions
+    # Если уже ParsedData-like
+    if isinstance(obj, dict):
+        # Если есть positions, но нет supplier/date — добавить их как None
+        if "positions" in obj:
+            if "supplier" not in obj:
+                obj["supplier"] = None
+            if "date" not in obj:
+                obj["date"] = None
+            return obj
+        # Если это dict-позиция
+        return {"supplier": None, "date": None, "positions": [obj]}
+    # Если это список позиций
     if isinstance(obj, list):
         return {"supplier": None, "date": None, "positions": obj}
-    if isinstance(obj, dict):
-        # If it's a dict with plausible position keys, wrap in positions
-        return {"supplier": None, "date": None, "positions": [obj]}
-    # Otherwise, fallback
+    # fallback
     return {"supplier": None, "date": None, "positions": []}
 
 def clean_ocr_response(text: str):
