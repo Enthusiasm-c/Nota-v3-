@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str
     OPENAI_MODEL: str = "gpt-4o"
     MATCH_THRESHOLD: float = 0.75
+    USE_OPENAI_OCR: bool = False
 
     model_config = SettingsConfigDict(
         extra="allow",
