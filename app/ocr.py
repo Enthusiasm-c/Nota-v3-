@@ -21,23 +21,16 @@ def _clean_num(v):
 def _stub_invoice():
     from datetime import date
     return ParsedData(
-        supplier="Test Supplier",
-        date=date.today(),
-        positions=[Position(name="Tuna loin", qty=1, unit="kg")],
-        total=None
-    )
 
 def call_openai_ocr(image_bytes: bytes) -> ParsedData:
-    if not getattr(settings, "USE_OPENAI_OCR", False):
-        return _stub_invoice()
     if not getattr(settings, "OPENAI_API_KEY", None):
-        return _stub_invoice()
+        raise RuntimeError("No OCR available (OPENAI_API_KEY missing)")
     if openai is None:
-        logging.warning("openai package not installed, falling back to stub")
-        return _stub_invoice()
+        logging.warning("openai package not installed")
     t0 = time.time()
     try:
         client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+        req_id = uuid.uuid4().hex[:8]
         rsp = client.chat.completions.create(
             model=settings.OPENAI_MODEL,
             temperature=0,
@@ -52,17 +45,19 @@ def call_openai_ocr(image_bytes: bytes) -> ParsedData:
                 ]
             }]
         )
-        from app.ocr_cleaner import clean_ocr_response
-        raw_json = rsp.choices[0].message.content.strip()
-        logging.info("OCR %.1fs %dB", time.time()-t0, len(image_bytes))
-        parsed = clean_ocr_response(raw_json)
-        # normalise numbers
-        for p in parsed.get("positions", []):
-            p["price"] = _clean_num(p.get("price"))
-        if "total" in parsed:
-            parsed["total"] = _clean_num(parsed["total"])
-        return ParsedData.model_validate(parsed)
-    except Exception as e:
-        import traceback
-        logging.error("OCR failed: %s", traceback.format_exc())
-        raise RuntimeError("⚠️ OCR failed, please retake the photo") from e
+        raw = rsp.choices[0].message.content.strip()
+        logging.debug(f"[{req_id}] RAW → {raw[:1000]}")
+        clean = _strip_code_fence(raw)
+        logging.debug(f"[{req_id}] CLEAN → {clean[:400]}")
+        try:
+            data = json.loads(clean)
+            logging.debug(f"[{req_id}] DICT →\n{pprint.pformat(data, width=88)}")
+            # normalise numbers
+            for p in data.get("positions", []):
+                p["price"] = _clean_num(p.get("price"))
+            if "total" in data:
+                data["total"] = _clean_num(data["total"])
+            return ParsedData.model_validate(data)
+        except Exception as e:
+            logging.error(f"[{req_id}] VALIDATION ERR", exc_info=True)
+            raise RuntimeError(f"⚠️ OCR failed. Logged as {req_id}. Please retake or forward to dev.") from e

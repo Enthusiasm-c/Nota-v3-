@@ -52,17 +52,20 @@ async def photo_handler(message: Message):
         file = await bot.get_file(message.photo[-1].file_id)
         img_bytes = await bot.download_file(file.file_path)
         parsed_data = await asyncio.to_thread(
-            ocr.call_openai_ocr, img_bytes.getvalue()
+            ocr.call_ocr, img_bytes.getvalue()
         )
         products = data_loader.load_products("data/base_products.csv")
         match_results = matcher.match_positions(parsed_data.positions, products)
         report = formatter.build_report(parsed_data, match_results)
         await message.answer(report, parse_mode=None)
-    except Exception:
-        logger.exception("Failed to process photo")
+    except Exception as exc:
+        import uuid
+        err_id = uuid.uuid4().hex[:8]
+        logger.exception(f"Photo failed <{err_id}>")
         await message.answer(
-            "⚠️ Sorry, something went wrong.",
-            parse_mode=None
+            f"⚠️ OCR failed. Logged as {err_id}. "
+            "Please retake the photo or send it to the developer.",
+            parse_mode=None,
         )
 
 if __name__ == "__main__":
