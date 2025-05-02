@@ -1,4 +1,3 @@
-from typing import List, Dict
 
 def build_report(parsed_data, match_results: list) -> str:
     # Support both dict and ParsedData object
@@ -14,7 +13,8 @@ def build_report(parsed_data, match_results: list) -> str:
     need_check_count = sum(1 for r in match_results if r["status"] != "ok")
     report = f"\U0001F4E6  {supplier_str} • {date_str}\n"
     report += "────────────────────────────────\n"
-    report += f"✅ {ok_count} ok\n"
+    if ok_count > 0:
+        report += f"✅ {ok_count} ok\n"
     report += f"⚠️  {need_check_count} need check\n\n"
     # List every position with its status
     for idx, r in enumerate(match_results):

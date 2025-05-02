@@ -2,12 +2,10 @@ from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.filters import Command
 from app import matcher, alias, data_loader, keyboards
-from app.ocr import ParsedData, Position
-import uuid
 
 router = Router()
+
 
 class EditPosition(StatesGroup):
     waiting_edit = State()
@@ -26,13 +24,15 @@ async def handle_position_action(call: CallbackQuery, state: FSMContext):
     if action == "ok":
         positions[pos_idx]["status"] = "ok"
         await call.message.edit_reply_markup(reply_markup=keyboards.build_invoice_keyboard(positions))
+        await call.message.answer("You can cancel editing at any time:", reply_markup=keyboards.build_global_cancel_kb())
     elif action == "remove":
         positions[pos_idx]["status"] = "removed"
         await call.message.edit_reply_markup(reply_markup=keyboards.build_invoice_keyboard(positions))
+        await call.message.answer("You can cancel editing at any time:", reply_markup=keyboards.build_global_cancel_kb())
     elif action == "edit":
         await state.set_state(EditPosition.waiting_edit)
         await state.update_data(edit_pos=pos_idx)
-        await call.message.answer("Send corrected value (e.g. Tuna loin 0.8 kg 75000)")
+        await call.message.answer("Send corrected value (e.g. Tuna loin 0.8 kg 75000)", reply_markup=keyboards.build_global_cancel_kb())
 
 @router.message(EditPosition.waiting_edit)
 async def process_edit(message: Message, state: FSMContext):
@@ -45,7 +45,7 @@ async def process_edit(message: Message, state: FSMContext):
     # Parse user input (very basic)
     parts = message.text.strip().split()
     if len(parts) < 3:
-        await message.answer("Please enter: name qty unit [price]")
+        await message.answer("Please enter: name qty unit [price]", reply_markup=keyboards.build_global_cancel_kb())
         return
     name = parts[0]
     qty = float(parts[1])
@@ -76,7 +76,7 @@ async def process_edit(message: Message, state: FSMContext):
         await message.answer("Not recognized. Pick the correct product:", reply_markup=kb)
         await state.update_data(suggested_name=name)
         return
-    await message.answer("No match found and no suggestions available.")
+    await message.answer("No match found and no suggestions available.", reply_markup=keyboards.build_global_cancel_kb())
     await state.clear()
 
 @router.callback_query(F.data.startswith("suggest:"))

@@ -2,28 +2,28 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from typing import Optional
 
+
+
 def build_position_kb(idx: int, status: str) -> Optional[InlineKeyboardMarkup]:
+    # Only a single 'Edit' button for unknown/invalid rows
     if status == "ok":
         return None
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✏️ Edit", callback_data=f"edit:{idx}")],
-        [InlineKeyboardButton(text="✅ OK",  callback_data=f"ok:{idx}"),
-         InlineKeyboardButton(text="🗑 Delete", callback_data=f"del:{idx}")]
+        [InlineKeyboardButton(text="✏️ Edit", callback_data=f"edit:{idx}")]
     ])
 
+
+
 def build_inline(position_id: int):
+    # Only a single 'Edit' button for unknown/invalid rows
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(text="✅ OK", callback_data=f"pos:{position_id}:ok"),
-                InlineKeyboardButton(text="✏️ Edit", callback_data=f"pos:{position_id}:edit"),
-                InlineKeyboardButton(text="🗑 Remove", callback_data=f"pos:{position_id}:remove"),
-            ]
+            [InlineKeyboardButton(text="✏️ Edit", callback_data=f"pos:{position_id}:edit")]
         ]
     )
 
 def build_invoice_keyboard(positions):
-    # One block per position (not grouped, for simplicity)
+    # Only a single 'Edit' button per unknown/invalid row
     rows = []
     for idx, pos in enumerate(positions):
         if pos.get("status") == "removed":
@@ -34,11 +34,20 @@ def build_invoice_keyboard(positions):
                 callback_data=f"pos:{idx}:noop"
             )
         ])
-        rows.append([
-            InlineKeyboardButton(text="✅ OK", callback_data=f"pos:{idx}:ok"),
-            InlineKeyboardButton(text="✏️ Edit", callback_data=f"pos:{idx}:edit"),
-            InlineKeyboardButton(text="🗑 Remove", callback_data=f"pos:{idx}:remove"),
-        ])
+        if pos.get("status") != "ok":
+            rows.append([
+                InlineKeyboardButton(text="✏️ Edit", callback_data=f"pos:{idx}:edit")
+            ])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def build_global_cancel_kb():
+    """Returns an inline keyboard with a single global Cancel button."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Cancel", callback_data="global:cancel")]
+        ]
+    )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 def build_invoice_report(positions):
