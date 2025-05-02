@@ -12,14 +12,20 @@ class Position(BaseModel):
 
 from pydantic import field_validator
 
+import sys
+if sys.version_info >= (3, 10):
+    from typing import TypeAlias
+    DateOrNone: TypeAlias = date | None
+else:
+    from typing import Optional as DateOrNone
+
+import datetime
+
 class ParsedData(BaseModel):
-    supplier: Optional[str] = None
-    date: Optional[date] = None  # Принимает строку или date
+    supplier: Optional[str]
+    date: Optional[datetime.date]
     positions: list[Position]
 
-    # Валидатор: преобразует строку в date
     @field_validator("date", mode="before")
-    def _parse_date(cls, v):
-        if isinstance(v, str):
-            return date.fromisoformat(v)
-        return v
+    def parse_iso(cls, v):
+        return datetime.date.fromisoformat(v) if isinstance(v, str) else v
