@@ -36,7 +36,7 @@ from aiogram.enums import ParseMode
 
 bot = Bot(
     token=settings.TELEGRAM_BOT_TOKEN,
-    default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN_V2),
+    default=DefaultBotProperties(parse_mode=None),
 )
 dp = Dispatcher(storage=MemoryStorage())
 
@@ -57,7 +57,7 @@ async def photo_handler(message: Message):
         products = data_loader.load_products("data/base_products.csv")
         match_results = matcher.match_positions(parsed_data.positions, products)
         report = formatter.build_report(parsed_data, match_results)
-        await message.answer(report)
+        await message.answer(report, parse_mode=None)
     except Exception:
         logger.exception("Failed to process photo")
         await message.answer(
