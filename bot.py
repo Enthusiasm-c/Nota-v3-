@@ -32,11 +32,18 @@ atexit.register(cleanup_tmp)
 bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
-@dp.message(Command("start"))
-async def start_handler(message):
-    await message.answer("Привет! Отправьте фото накладной — я всё проверю.")
+from aiogram.filters import CommandStart
+from aiogram.enums import ParseMode
+from aiogram import F
 
-@dp.message(Command("photo"))
+@dp.message(CommandStart())
+async def cmd_start(message):
+    await message.answer(
+        "👋 Hi! Send me a *photo* of your supplier invoice — I’ll parse and validate it.",
+        parse_mode=ParseMode.MARKDOWN_V2,
+    )
+
+@dp.message(F.photo)
 async def photo_handler(message):
     try:
         file = await bot.get_file(message.photo[-1].file_id)
@@ -55,6 +62,19 @@ async def photo_handler(message):
             "Please retake the photo or send it to the developer.",
             parse_mode=None,
         )
+
+# Fallback for any text message that is not a command
+@dp.message(F.text & ~F.command)
+async def text_fallback(message):
+    await message.answer("📸 Please send an invoice photo (image only).", parse_mode=None)
+
+# Silence unhandled update logs
+async def _dummy(update, data):
+    pass
+
+dp["__unhandled__"] = _dummy
+import logging
+logging.getLogger("aiogram.event").setLevel(logging.DEBUG)
 
 if __name__ == "__main__":
     async def main():
