@@ -1,0 +1,605 @@
+id,name,code,measureName,is_ingredient
+5b08a4c4-2453-a7f6-4275-4db8016a2e1f,Rounding in guest's favor,1,,0
+57cf4be9-739b-f21e-7d7d-31f595445ccf,Rounding of unit price in guest's favor,2,,0
+e87fe48c-6a67-407e-bd9f-23b0dddd9071,service,183,,0
+9a9e94a3-f8b8-42bf-9b13-b7a043f5eed6,TAX,184,,0
+b11fe18d-6451-4e0a-846a-ffe235f09d2c,Almond milk iced,231,,0
+0735deed-d733-4618-bdc5-8ca48476720d,Milk iced,229,,0
+2636a651-423f-4e49-8ab8-4079500a3cc7,Oat milk iced,230,,0
+4bdd5059-973d-4d00-b989-d1b6e58c1f8d,Almond milk,219,,0
+eb2f7014-3a29-4028-b80a-d07f617150a9,Milk ,217,,0
+7229383e-c17a-46ea-9f80-4d9242978f90,Oat milk,218,,0
+0dfd12cc-ecfb-414c-8a55-d5e3a61aeacb,Almond milk small,227,,0
+bd6114a9-c02e-4edc-84e9-1669a90e8f04,milk small,225,,0
+96fd705c-d246-4c35-ad5b-6e23bdb1bb07,oat milk small,226,,0
+04a086f9-b763-42a2-8883-210941ffa608,Caramel 30 ml,242,,0
+2123ef9e-d8fe-4744-a2db-2add77de2343,No caramel,243,,0
+dba7451f-7528-44fe-8a98-01af9db633b9,Decaf,311,,0
+339f81ec-6186-498f-bb09-a52fd02fcacc,Jasmine green tea,264,,0
+593a6c88-0d53-461f-bfd2-94a06e3f95ea,Milk oolong tea,263,,0
+20cb9e3f-629a-490e-b69d-b350a2582b50,Apple juice ice,323,,0
+a85a00be-932c-4317-a750-84945f98c9a9,Apple juice no ice,324,,0
+bc180408-8d09-4bed-93f1-f767d106afe4,Mango juice ice,321,,0
+d241e255-5562-41f8-bc90-657747880a42,Mango juice no ice,322,,0
+d3e20863-168e-4443-8df2-b16d0c4618a3,Watermelon juice ice,318,,0
+6deee696-7358-42bc-8921-2c9ea98693ba,mix herb s/f,165,,0
+48bf7c28-e344-4a93-b091-d77ace017276,poached egg,104,,0
+2a4b5ae1-0046-4fc5-9753-3b9b1e848515,morning glory s/f,175,,0
+ca5a792c-148d-4ae8-bad8-40b29c7df51f,shrimp stoke s/f,143,,0
+40e9ea8f-e331-4c21-b92e-1854ea1989f8,scramble s/f,136,,0
+d0e7a739-a93c-461c-8708-c5a6d50cd761,sesame mix s/f,178,,0
+93388a20-46e3-4f9a-9a3a-5bef3308b522,sunny side egg,177,,0
+40c6c603-97d1-4421-b179-a7eb2ec1dc29,local spinach,44,,0
+5d127dee-8191-4da9-9466-555958d93a49,black olive,56,,0
+8a403968-029c-41e5-819d-58149667c312,buckwheat tea,252,,0
+17dc5560-a631-4a53-ae58-faa3e2f9dee1,sunkist,64,,0
+885c62ab-c384-47f4-b68b-325e52d883a0,corn starch,170,,0
+6c576c27-928b-45c0-95c4-2df6a98ecae8,tenderloin beef,30,,0
+5320f4ba-1bd6-4851-819c-63c6b91838ab,shrimps,45,,0
+1e5b62e9-8d7c-48d8-a5a4-bb0c6bbe5a8a,cream cheese,25,,0
+f46e210c-e03e-4b36-bb2b-35d30aaff72f,butter,65,,0
+7e62a0cc-51a5-4f4d-b726-0ec2bcbe9fe0,cashew nuts,17,,0
+4518bd6a-6e6c-4666-80ec-4d8f3d3fcb42,Olive oil,7,,0
+6469497d-b4c8-4edc-8a2f-26992b643561,mint,55,,0
+8c8f8e5d-0eea-4c16-9f5c-0fa57a77f543,water Aqua,105,,0
+5888d6c3-ea7b-4711-bda2-372feb6e7d52,emmental cheese,83,,0
+799f6209-5cac-4fa2-b7ce-390b4663632b,bay leafs,149,,0
+1c4aa40e-6bb0-46c8-bac9-d4d33414d6f8,oat milk,91,,0
+05490246-dc17-4370-9f27-f65e6f83f8ce,milk powder,157,,0
+69566cc7-22a9-4c8f-93fe-77154331d7b5,cottage cheese,78,,0
+9ef71292-7c56-4835-ac04-fb4d68749a23,dragon fruit,53,,0
+200be701-f6b7-41ed-bad8-b58bbb9b6642,Passion fruit,272,,0
+a815ce5a-5d2a-45e3-8187-318b6daa76ec,mozzarela,68,,0
+7b025e66-1759-4553-8bb3-6e2adbe770df,Coke ,331,,0
+7e886971-13ad-44fe-a8c0-fe979e83d8c2,jasmine green tea,250,,0
+2bdf5771-c257-4d93-aeca-4c6386c9ef8c,edamame,75,,0
+27b5e239-4a6c-40bc-9911-e82e48480019,Coconut fresh,254,,0
+93c31450-4241-42ac-91d8-8ef648ae81e6,prosciutto cotto,82,,0
+877af579-851e-4902-a269-a3e25c9e23b4,ciabatta,97,,0
+acabab3f-2f34-436e-920f-75eb5dfa80d0,sun dried tomatoes,79,,0
+67b562f9-ca4e-449b-9e9a-3ad4dc95f81d,ginger,269,,0
+1ae90104-e573-4dac-a338-4f27c3a36ef9,spring onion,132,,0
+e2ca8160-45fa-4122-a704-ca40f0337644,Coke zero,332,,0
+5ad598e8-5b74-4a92-ad6e-51276c9d7e6b,almond milk,92,,0
+a46df4a3-70ec-4059-8418-eb125f62c23c,tonic ,94,,0
+5dc03159-0058-4881-82b0-4f8748b0423d,Matcha,249,,0
+1de5f663-e202-41a5-a485-b90a097e2b4d,cranberry juice,96,,0
+177a587b-365b-48b5-96e6-d297bac533a7,avocado,153,,0
+9f44b8a2-331c-4256-b477-e492906004e0,cooking cream,42,,0
+846e1443-da60-49fb-be32-a4ae6ae65df5,hazelnut,61,,0
+69ed4729-3621-4567-826e-6881e2c461a1,logo paper,21,,0
+a971b5ca-fdfe-46fb-bbb9-2d1f02aa366e,Tomato,58,,0
+986362b7-e875-46ab-9d05-d25971bfc8f8,Bacon,70,,0
+034e3db0-1fd3-402d-9f42-95c8fc40ecd2,polenta,69,,0
+f100b5b8-cf53-4d4e-a353-eacae09e3b5a,potato,74,,0
+e50d2ca0-a85b-48cb-8ac2-8e4f81d7e38b,wheat flour,23,,0
+e544e226-b34d-4d42-a91e-b0205947f1b9,tomatoes paste,139,,0
+e12a4b42-8390-4160-b0b1-e9de6a3e4f58,Basil,18,,0
+2608a00a-6338-441b-958e-d98a48badbb5,cheddar cheese blok,62,,0
+df9f2fd8-398f-4766-8660-89ee0034a613,mascarpone,86,,0
+8ac113af-ac0a-4a14-a616-3b35786f45d6,truffle paste,72,,0
+6919d105-6e8d-40bb-96b8-b6b49b4b6d70,oregano ,28,,0
+6771d3d8-7e70-4368-a958-480bec390c01,red wine vinegar,47,,0
+95d7995d-24f3-4696-8266-907272e512a4,chili flakes,81,,0
+09d26bc3-be24-4f8f-984a-51057e84b5df,radish,76,,0
+5176f6d4-005b-474e-9a5c-2ec489c1eecb,green buckwheat,50,,0
+53b11be9-e0da-4ab2-b591-98866fcdcde7,brioche bun,29,,0
+b1597e39-7a29-473c-9360-9aaee4db0d03,You look pine smoothie,312,,0
+c2ab25f8-7a42-4476-8e0d-f923011b5d11,apple cider,66,,0
+fb212d1d-c545-46b5-8090-9c46adc59464,quinoa,13,,0
+9a9a302a-a137-453a-aa4a-64a4a73fcc1a,apple,212,,0
+f0656c16-77c7-4e9e-b805-4ae752fec90d,eral grey tea,251,,0
+fa5a343c-e4e0-4046-a477-4bfb6e3a7288,chick peas,5,,0
+3ef47eef-f991-413c-86ca-a0d9b6966526,leaf me alone smoothy,275,,0
+98bf59d3-4a4c-4552-8993-df542da6df13,edible flowers,99,,0
+0c1406a6-2f5d-403a-916b-402203d82d79,broccoli,67,,0
+01a7ca2a-8fb6-4359-acd3-8b40e6e128f9,White sugar,38,,0
+a39e8dd4-6749-4302-b10b-7804b8f0e8a3,peanut butter,172,,0
+f9219c8f-c009-41e2-bc8a-a0cf567a8096,parmesan whole,19,,0
+b00a1aa2-11aa-4947-9737-1d141388ed75,greek yogurt,158,,0
+b5569fe0-b01c-4d93-82d6-b770f4b9c826,Sesame white,6,,0
+a3e30c3b-d9f7-4630-9ead-11ccaf54432b,honey,39,,0
+47b7614a-a86b-4cfb-a454-dde550a226bf,sesame black,100,,0
+8c61fe2f-cc0f-4ff6-9f8b-a48f6b563ac2,salmon fillet,27,,0
+c912f2de-de69-40ba-863b-97b6af9a0cae,rosemary ,148,,0
+eb886780-3230-4139-9370-7f474b670f69,processed cheese,49,,0
+91b6c537-c21b-4b94-90f2-db2737ce9e62,zucchini,22,,0
+0a3697d0-6362-404b-89a7-cc6c57d1aa98,watermelon,266,,0
+61aa6384-2fe2-4d0c-aad8-73c5d5dc79c5,chicken breast,14,,0
+b0a091a1-5960-4da5-b5bc-779339c5d3e1,parsley,32,,0
+4831917b-9563-41c8-a71a-345dfa3478fe,mushroom,71,,0
+5cd43ac8-2354-496d-9eb2-e51c973ff97e,egg,3,,0
+6e515eb5-06f5-4959-a492-db37d500c84e,croissant,63,,0
+6264ae2f-d94f-4769-9ef0-b63431410f03,coffee beans,85,,0
+ff3afd62-317e-4edc-8873-e6d5624c06fe,Garlic,9,,0
+d75c00b6-209d-4be5-a0bc-46063091af5f,lime,8,,0
+2c735e04-5760-4b4c-9fd5-3d07274a0cc2,dixi vinegar,52,,0
+4b66663e-af84-42a1-a7fe-5e42ad908745,Dijon mustard,41,,0
+c76d9dd3-2b1a-489a-99de-4168f2acc696,red wine,147,,0
+b50a1e7f-007a-44d3-9430-561fd652eca9,carrot,141,,0
+3a2907ac-77ee-485b-b46c-c92fcc810132,english spinach,73,,0
+4d656af7-4b0c-45ae-919b-c5b38716b32f,whipped cream,101,,0
+f89d184f-4440-498c-ad09-ff2ebba60b8d,red onion,37,,0
+69a301fe-c94b-4b6a-acf8-412c69c4e480,tomatoes pelati,46,,0
+8f96959f-0edc-4c29-8a49-7d0c458c76d9,AM to PM smoothy,276,,0
+4a67a90d-7fe3-4961-8386-7fbd5219203b,lemon,15,,0
+7090d4b9-daa3-47b7-8c3f-697ab70304cc,Romana,35,,0
+bca23673-f459-413a-9630-910416f0bd7f,parmesan ground,20,,0
+46f4fb46-0f68-4fe9-90bf-ac1c78476df7,oolong tea ,253,,0
+bf6df0b6-50d1-4f37-ab65-b31cf3482bdd,soy sauce,51,,0
+8829050a-dd2b-4258-9bbe-48f16065396e,microgreens,98,,0
+3d9e9575-56a5-48f5-a5ab-bf361376f4e8,goji berry,283,,0
+e8abc91b-51ad-4ab9-a1e8-c96f56f02971,paprika fresh,48,,0
+88ae8118-65ae-45d3-b465-45da754bb662,tyme,33,,0
+ed0ec442-ee00-4249-9f8e-2aa148818873,Mango,54,,0
+e0ae02a7-1e01-4edb-8608-7b04a67adbf3,cucumber,59,,0
+1a9b2e73-b14f-4a16-b738-70dd464d60c8,balsamic vinegar,60,,0
+59847491-2356-406f-9e7f-f8e78561e65a,Cumin powder,12,,0
+f582e04a-36c9-447a-9861-9d1547221223,Arugula,36,,0
+c4ddb80e-2aaf-4189-9739-ca924653e7e6,Summmertime madness smoothy,277,,0
+2806f8f3-a2ce-4549-a855-e1eef59d5b28,caramel,103,,0
+cdf752b4-5553-49dc-9155-6acb452b0a83,smoked paprika,31,,0
+099d5002-07ec-4329-97b0-b260112755d6,milk,43,,0
+578740e0-326c-4957-806d-d7bf8a061d1a,brecel,102,,0
+8b72dced-cff4-4730-a4fb-1ff6c07a00a7,salt,10,,0
+a0f17031-a7b4-4725-a383-090acd516f03,cocao powder,89,,0
+d3daf9c5-c805-4b79-86c2-6a371d9055d7,danish rye,84,,0
+91727b8e-da88-4920-ada4-c1dadd91bb9c,dill,26,,0
+35e4d496-2730-42e0-aaae-ee204e915d6c,decaf coffee beans,259,,0
+30e342f7-aafd-4486-b4f1-3c0217e792d6,sand cookies,90,,0
+37fd1a84-31f1-4a79-8ffe-e7c6af1585b5,Coriander ground,11,,0
+9194268b-fbcd-4c10-bd66-92361160ca8a,ricotta,77,,0
+227f5fd5-ac4c-4a9f-ae19-ab440d028ce4,soda water,95,,0
+7caff932-546f-4031-b7a9-04a82ec59962,eggplant,80,,0
+2bba7486-15c4-4808-9d29-a4a4ae606b1a,mayo,40,,0
+a1ea5899-8742-4266-bf08-70562dacde7a,chocolate chips,88,,0
+fe26c7c8-7e6a-41c8-a7d0-abc7d486bd92,black pepper,24,,0
+fdb5bc7b-3dc9-469f-b436-ae1065e794a9,Beetroot,4,,0
+ffc3b7a1-612f-451a-91b3-365ffe4323a1,fetta cheese,57,,0
+626fc810-548b-4519-93b7-27b99dd61b19,granolla,211,,0
+15f727af-ad64-4960-a1e4-f4e50b70eb74,cheddar slice,34,,0
+b57f6a39-4201-4a71-879e-9e9a1863c7bb,shrimps frozen,180,,0
+e19b29f2-7e61-4ca2-a285-b77ecd4a3ae5,pineapple,87,,0
+9bac5140-1a98-442c-940d-ea4b9329d437,Buckwheat tea,261,,0
+8e829ea4-c3a8-4817-8095-7512006617ea,Royal earl grey tea,265,,0
+793f07ee-7561-4afc-9000-126677a6fcea,Brioche with prosciutto and pears,346,,0
+2f363390-d09c-4577-87a4-9eb274776166,Brioche with salmon and truffle hollandise,347,,0
+c62dac82-b046-4bbd-aa23-1b64b2a6f913,King cottage pie s/f,351,,0
+bb4de7dc-b786-4963-8f79-0b00ff873ade,Almond,354,,0
+925fdc0b-896c-47a2-9551-aa4790b1f743,brioche Shokopan,344,,0
+45868196-7740-4016-bada-27f71704af0a,pear,345,,0
+b2243961-e868-4dd5-b61f-dcb298305bc8,sparkling water,348,,0
+2142dd5d-3e6d-4317-9b0a-a56f1ccc652c,sunflower seeds,355,,0
+e844cc42-0146-4680-b887-769cc3fe1ecf,walnut,353,,0
+ee58dd53-90ba-41be-812e-2bb034dbbfeb,Chia seeds,356,,0
+a7fc6d58-d79a-40c5-938b-4c49dbd366e6,Dried dates,357,,0
+49c78cec-fbfa-4346-a13b-af02769d0ed1,condinsed milk,358,,0
+9121a8cc-dd8b-4574-b48e-38c8e68ff06d,Raisin,359,,0
+dc04cac7-3f6a-448a-9417-f330ec3f9570,ice cubes,361,,0
+7e17d022-ede2-4cb1-bffb-c044f1b2702b,Water Clio,238,,0
+4a14fdaa-ca1f-4dc4-9520-1938e009aa16,equipment,362,,0
+82eb0745-5f64-4d37-b086-3e968b49563b,kitchen napkins,364,,0
+48a9a2a5-8ccd-4351-84b4-69c6f5fb50f7,pen,365,,0
+829d439a-c61f-44ba-b457-8964f9edbbd4,packaging and cash area ,367,,0
+eb061b04-ca86-45c2-a00d-a536601914d9,key safety box,366,,0
+e4f42b59-04fc-4691-b0f7-b22bb0b22311,mandarin,368,,0
+afd0baa8-fe81-4f40-a55c-460805b4e78f,onion,369,,0
+d83fbe49-7cb5-4a8f-a5e1-b7376f1021ad,bimoil,370,,0
+442c7768-9457-4efc-b788-15759b62faef,grated coconut,371,,0
+6d18420f-f1c3-4b7a-a006-acaf2bf36566,Coriander fresh,372,,0
+9d7681e6-e560-40cf-8548-be17c0bc3dd4,Sunlite,373,,0
+0915ee06-9a87-4726-83e9-b845e9709dc3,gas portable,374,,0
+abd602aa-7db6-40b0-8126-5df9bc44a099,gas,375,,0
+3b1b89b7-f27f-405f-93be-3ee10952517a,Coconut milk iced,232,,0
+954a4799-a13e-4b9f-84d7-b7380190727f,Coconut milk,220,,0
+74c21f55-279c-4a6f-b022-63f262574ffb,Coconut milk small,233,,0
+8e85e87c-5df8-453e-9bc0-ca9ecb6a0810,jeruk lumajang,382,,0
+6ffd448c-8226-4ab5-8295-2b232f27518b,Strawberry fresh,384,,0
+f0a3a575-4c14-47da-a1dd-7270b89b6b7b,Chickpea seeds,385,,0
+8b57d773-aefa-4c97-aac0-4cbc254d9f26,Tuna canned,386,,0
+aebffe0a-8338-494d-ac2b-d2b5125e30cb,Public utilites,388,,0
+2c0d2098-f9ec-4a57-8233-10344b67b1a0,Printing,390,,0
+f07cbba7-98c1-4fce-9de5-7493c0ce6f9d,Rent,391,,0
+8e7f42ae-17fa-4ac6-b176-8c3acf0c0b99,Consulting,392,,0
+20c1692f-8ac5-4a57-8ad1-ced5ec1eef24,Construction and renovation,389,,0
+c7cfc574-3efb-4896-8160-5345520e8206,vanilla,393,,0
+9d91e0d6-0982-4174-b936-6999a2b4ad97,teramisu cream s/f,169,,0
+48efe56f-9294-48eb-a85f-fcf3663176d6,arugula s/f,118,,0
+29ede99b-823a-4c59-89f4-cd3fea2ac019,broccoli s/f,134,,0
+c5ac8fe1-8043-4964-a70d-aca22071cd8c,carrot s/f,142,,0
+50135e76-afbc-4b43-bd58-aca50a46b61a,Coconut water,255,,0
+ef759bab-8d70-44a8-afda-5143c964f057,cucumber s/f,130,,0
+47756f03-4420-43d1-aec6-217c56a289e2,danish rye s/f,174,,0
+10958aa4-6743-4af2-86a0-2582cfca5d8b,dragon fruit s/f,126,,0
+d1f057c8-487e-4ecf-a539-4f17479b260b,eggplant s/f,162,,0
+bf04fd3a-b65d-4133-8778-68fc0889f5f0,emmental cheese s/f,198,,0
+0a430917-53a7-484e-a33e-4027831062f8,fresh basil s/f,111,,0
+4cb5e07e-4c23-42ca-8fd5-b0860c5d1fd0,mint s/f,128,,0
+398ecfe2-269f-4aff-8b7c-c230161ac022,mozzarella s/f,137,,0
+e3c0b3ce-a639-4605-bb7e-e2b324c21ab9,mushroom s/f,145,,0
+c4b3c2dc-86a6-4827-88ce-532d39901739,paprika fresh s/f,121,,0
+5f8b9860-faf2-4997-b1db-1cd43fe96abd,parmesan whole s/f,125,,0
+2c0e746c-ca99-4047-b5f6-41ab4a3e9fb7,pineapple s/f,210,,0
+0ce91f57-1062-40fd-ae2c-684a9b02f4d8,quinoa s/f,107,,0
+c434c1ef-0a10-427a-9cac-3293301c1658,radish s/f,156,,0
+55da7cdd-0b58-48b1-abee-c0a1381216f7,red onion s/f,117,,0
+076ec7f6-8b52-4dc8-a454-5869bd90dbf8,romaine lettuce s/f,116,,0
+f44d5333-f75a-4191-9ce2-da48ba3f37f3,shrimps s/f,120,,0
+8bfe1193-e964-44e1-8d32-0664d3b4a242,spring onion s/f,133,,0
+79902039-fa8e-424e-b9e4-ff6b54eaeaf5,tomatoes s/f,129,,0
+5402f1cb-72df-4684-ac5f-912985567634,Coconut milk s/f,381,,0
+a25a160b-0919-4f9b-807f-5d978b451b36,Simple syrup,396,,0
+86947fe3-9d4c-46be-8fb5-6b0a037408b4,dill cream cheese s/f,114,,0
+12c679f4-e584-457f-8b1c-19294cfec613,pesto sauce s/f,110,,0
+80e392e6-e5fd-43f8-a391-843d24737248,tomato salsa,122,,0
+bbdcc353-3084-4cee-92bb-9153d44c0c3e,ricotta balls,160,,0
+871410c2-ab69-44d8-897d-c128f6b5648d,onion powder,397,,0
+8567aaa7-5f74-42b9-8c36-58a112b73248,Garlic powder,398,,0
+5ce4d8e9-bf7f-4e44-b57d-9c46f44b88e6,sauce shrimp and grits s/f,140,,0
+5f56d210-4d38-4262-8c5e-aabb623ae2dd,rosti sauce s/f,179,,0
+aa70857a-1b54-4055-9607-e32622177b43,mustard sauce s/f,167,,0
+9e565c60-185d-4597-9c3b-995cc1747a80,beef broth s/f,150,,0
+5812b4b5-5939-4943-b296-6a623e05505d,caramel onion s/f,166,,0
+74aed880-9e4e-4679-95b2-da457984fa66,beetroot juice s/f,176,,0
+ca053ea2-ea10-4d0e-aabf-bdae636ca9f0,greek yogurt s/f,159,,0
+f41757a0-3393-4173-b423-738dce7c0968,spinach water,124,,0
+794c948d-7431-485f-bff8-b724a8cfc4c6,Grain Mustard,399,,0
+5b9a6436-6c5b-4066-ac87-a62209ead851,sunflower oil,400,,0
+c6632df3-79f5-4b8a-907d-abdb0556f947,pulled beef s/f,135,,0
+b46b6af5-7071-4fdc-bc4a-d0a706eff9ad,zucchini pancakes s/f,164,,0
+50d5f749-82c6-4b57-a1ca-5d0b6b3353d5,Oat flakes,403,,0
+06860729-d70c-46a9-890c-361de8850a3c,Almond flakes,404,,0
+6844a2a3-4e6b-4a31-a612-047509d15240,icing sugar ,405,,0
+8d92497b-5bf4-4de2-b94e-9a503cf8a3fb,coconut milk milk lab,93,,0
+51e76ef9-0aaa-4675-9072-5317a074cc04,Guava,406,,0
+f27b6f54-cb78-43ba-bfa6-1d451ee96684,banana,407,,0
+8e90278e-994f-467b-b7b3-0f4af3e87ea4,pesto cream cheese s/f,161,,0
+3d4b0c94-f820-40fe-8d0f-75b3928bbf8f,Bulgur,408,,0
+d95e6044-da43-4b11-9967-89086fa2af40,Bulgur s/f,409,,0
+da657ef8-5c22-4b1d-b837-97c1fd133485,green beans,411,,0
+5b51b712-4e6b-4210-88e4-b12f0d75b59f,King cottage cheese pie,352,,0
+3151a167-d315-4ed1-af49-1089db208f46,Tuna,414,,0
+ffc6a453-5ac9-4712-aaf2-c36cdca5aff7,sun dried tomatoes s/f,416,,0
+7e342efe-37cb-4d1f-b64c-476dfb28461f,zucchini s/f,112,,0
+e870cb65-1a04-4340-b3f4-d9d2f13b3701,english spinash s/f,146,,0
+1364d6dc-0c14-4f85-86d7-5a60f7ef09d0,prosciutto cotto s/f,197,,0
+6e8fc35d-49ba-45c8-ba86-44547877ccb5,Sourdough s/f,109,,0
+83e08448-74ab-4332-91ec-ff8e2c975807,Decoration chips s/f,168,,0
+f1453cc0-7f42-47fb-8d0b-2ef2add75a2d,Green oil s/f,401,,0
+e0cffe41-8857-40da-bd0c-362a974c4f6a,hashbrown base s/f,144,,0
+0cc62e5b-9d67-472e-8286-baca739641ef,peanut butter cheesecake s/f,173,,0
+ab140208-6cf1-4921-ae76-5dfab4d874aa,rose vine sauce s/f,151,,0
+d039e5e2-0284-4dbf-bf68-560602b00488,salmon s/f,113,,0
+32d51ec4-9341-4338-8a52-25bc8509bc7e,Orange Juice no ice,315,,0
+64f7d4b3-a9f6-47ff-a238-3f8db2f0e064,spinach s/f,119,,0
+573683f3-2d18-430f-ae32-86c517d96065,shrimps frozen s/f,181,,0
+28081924-421a-4893-9081-956aad5a5e47,shakshuka s/f,138,,0
+149cbe1d-535d-4ab5-ad1a-bd05ddbc8dc5,eggplant marinara s/f,163,,0
+472838d9-1744-49fc-9c95-c60f9e3f4282,mango s/f,127,,0
+03fcfd1f-e0e9-4c0f-b80f-27cf903b2ec1,Watermelon juice no ice,317,,0
+e846ff85-13b7-4664-8b0b-590e60e2dfd1,Pineapple juice no ice,319,,0
+20d3e03d-686b-4280-8729-03232402cbf3,dragon+pineapple+passion juice s/f,273,,0
+8f97e18c-9f3d-4a64-8768-5ecfee1c15b5,Pineapple juice ice,320,,0
+89018ba4-e0fd-4715-b3bc-3d7e8cc6a18f,Gherkins,417,,0
+688e927f-7908-44c8-a034-af396b3fb495,Sriracha,418,,0
+4b9d3ccf-90be-4432-a5a0-08063718ed98,Lavash,419,,0
+a8a5c30f-207d-4c98-bbc9-fd208b08509d,basil mayo s/f,420,,0
+c85f5b7e-6247-4a11-bdb6-12e409af1d8b,Canned corn,421,,0
+627cad6a-d9bc-4177-b9bf-383dee60410e,tumeric fresh,425,,0
+f8f6d08a-deb0-485d-b8ad-531affd176be,cinamon stick,426,,0
+081812bb-67c8-430d-b0e1-66399c5c6bba,palm sugar,427,,0
+ada1a892-f3b2-45ba-bbb5-265161723b16,Lemongrass fresh,428,,0
+f0195b6e-5b9a-4b7f-945c-052b3e91138e,Carbonara sauce s/f,429,,0
+003f212f-1f15-45ee-ba47-e0f2ea2f60ac,Pickled cucumber,431,,0
+cc5a4e63-345f-4ef8-8ef5-b25c00f46da2,Sriracha mayo s/f,432,,0
+794fca66-ecb2-467f-b41c-d921c3b63235,Chipotle Peppers,433,,0
+4de383b0-389f-482c-92f9-988b88deaeea,Halloumi,435,,0
+22e64ff7-6c8f-449b-85e9-c43eb91852c6,blackcurrant tea ,436,,0
+1ac2d54b-3c10-4e92-9b7d-b14a0ff0e163,mango tea,437,,0
+b3908626-cdad-4ebb-b701-ea879c99458c,lychee tea,438,,0
+87db34b2-0a86-453f-be60-da466549deb2,Dragon+pineapple+ passion juice,274,,0
+d4c333bd-4175-4b9c-98f1-959555eac489,Ice cranberry goji tea,285,,0
+d4b78aa6-1d20-4900-adae-eec5a7a2ab91,Mango ice tea,439,,0
+49c86582-d400-4f53-a365-4417e4848259,papaya,440,,0
+8b7d515e-2f5b-4b03-9bce-54a10d4813cd,Papaya s/f,441,,0
+ef452612-40c9-4a78-b4c3-5fe6e7e974ba,Zucchini bulgur with salsa and cream,423,,0
+1afebd94-dd7e-4caf-a717-627f48034bcb,basque cheesecake s/f,171,,0
+4a8d6cf8-c8c0-4537-9628-d228f10c94b2,Sausage chicken,448,,0
+03876f1d-944d-4097-bde4-2251ce50a399,Prosciuto Cheddar sandwich,446,,0
+347833a6-0891-4356-a6e2-efd46c34743c,coffee whipped cream,450,,0
+e7aea9a8-2c54-443c-aa27-48a4580d7d88,banana bread,451,,0
+9a1a3da0-a84e-435e-aed2-fb250a980804,white chocolate,453,,0
+4a71e225-667e-4fbf-a68f-9585bb80e329,passion fruit pure,454,,0
+76ac5350-a497-4c80-b5c6-ec5beafd83fa,gold chocolate,455,,0
+6cbf2971-bc73-4c01-abe6-67c956d2c6e0,coconut cream,456,,0
+1f8bb4d4-5b11-43fb-be36-fa232b81fb5a,sushi rice,457,,0
+9e7074cc-28f8-4455-8eb7-c57480e51f69,rice vinegar,458,,0
+0486398b-002e-4670-9fe0-83332486bac2,nori,460,,0
+3490a3ce-ea0f-4bbf-8c2f-84c846ab91a3,bread cramb panco,461,,0
+af07decc-9a33-4de5-bd6f-14eee2790b98,sushi pink ginger,462,,0
+f3dd2b80-0dc2-4b7e-972d-e1d492fbc16c,Tom Yam paste,463,,0
+11acf398-e208-4032-8bbe-05426e88befe,Galangal,464,,0
+f2c79f2b-9854-42e7-bdde-e1003d958526,wasabi powder,465,,0
+a0401bf9-9ebf-47d5-beb2-26ffea913987,Kafir lime leafs,466,,0
+89cb0ac6-4cca-475d-88ff-f5b17f9abe88,shimeji mushroom,467,,0
+d65e1f8d-d154-4411-b636-c85bcc6447e0,Teriyski sauce,468,,0
+44f2e89e-ab98-49d5-bfe3-5240475fbe48,corn fresh,469,,0
+077c52b8-de72-4389-b332-26b232c6a218,fish sauce,470,,0
+d039b4a0-bbee-448e-965d-0c43b84bce7f,Combu,459,,0
+770ae977-757d-4412-8fc3-59f873784481,Sushizo,471,,0
+2fd96373-d043-450a-bf35-dec992eaa358,Sushi rice S/F,472,,0
+aab2f74d-d3cb-4c63-a145-ed3d7de1a320,Edamame tom yam s/f,473,,0
+3be36d50-fe86-4185-be0b-5b1a0ca20197,Corn boiled s/f,474,,0
+de92818b-f974-4ac1-839f-f44a51e346d8,breaded sushi rice s/f,475,,0
+c194c869-21d1-4801-b887-fb391512e81c,soy milk,476,,0
+573cf2a9-729f-445c-b6de-b4a5f7be844b,omlet sausages s/f,477,,0
+bf01fd26-d304-4356-b48f-e2fdafe78105,Shrimp boiled,478,,0
+67e63c52-9eac-460f-a77f-44411e0cc271,Fryed shimeji s/f,479,,0
+7bdbfad8-d080-4819-b9e4-5655614d3986,sesame oil,481,,0
+e76276ed-38f5-4c15-9164-3a5e0e0104d3,Tuna tartar,482,,0
+611622fb-744b-47e6-b5a7-97a89b8d0250,Minced beef 80/20,484,,0
+8651d6ba-39c8-4dd0-b18a-0c7ed7aa838b,star anise,485,,0
+a8a309c2-dabc-490b-a380-6ff29970caa7,marinaded red onion,486,,0
+c96fec02-90a0-43a5-8976-02ba0f6c3fa2,Azian big breakfast,480,,0
+49b36a90-9806-4f18-a041-72195a0542fa,Edo breakfast,483,,0
+2cd1bcd3-ca26-4bfc-8962-ffe0f8664c1a,Carbonara hashbrown,424,,0
+2c822e3f-1ca1-4b54-bada-cdfef54d0bc1,Santan Kara,488,,0
+d79c84c4-f446-4a5a-9d41-032952c9bd43,terasi udang,489,,0
+df801cda-e5cd-482d-8d75-015fd55c0519,pizza toping,490,,0
+5e9b6049-ce85-4609-a4e1-800bd3b063ea,Tempe,491,,0
+12837031-c880-4e03-9240-316397bfebb9,fried onion,492,,0
+f64d7a38-fbfa-4dd1-a6c9-f5f801d738ec,avocado frozen,493,,0
+4383cea4-d6d9-4605-921f-647402a96373,Brioche loaf ,430,,0
+64b1b43b-7cc9-46d3-b02d-a5790c280ae3,banana bread with whipped coffe and walnut,452,,0
+2f6add10-fc52-4014-8f28-e3cd919186d7,Peanut butter cheesecake,209,,0
+895b65ab-fcfe-40b3-b0ec-1f5247a21131,Rucolla,494,,0
+eb585bcb-13f1-4188-9609-1003da75f2ea,Smoked Pork Leg Ham,495,,0
+ea70da09-de33-4760-a1c7-5a3991c4b33f,Chili Sauce,496,,0
+59e3d937-d5bc-46d3-8157-8484392a14c6,Candle nut,497,,0
+9ba1ddab-c1f9-4a0a-8d4a-88ea224e55a1,Chili,498,,0
+bae28329-7a23-4335-b965-262d6197db45,Melinjo,499,,0
+9b034962-0b26-4aa1-b580-4c6df9e4bdb6,oyster sauce,500,,0
+ad72528a-916c-487e-87e9-666b1d551c4b,Fermipan ,501,,0
+51dbe5e1-d149-4170-8fa4-d8fa1b913996,Italian Mortadella Sliced,502,,0
+73586047-762e-4cc0-a2cc-0a2865f747d0,pork leg ham,503,,0
+8a8f068b-bb2e-43c0-944a-ed2bdce3f52b,Soursop Passion,504,,0
+120f5d2c-0de4-4deb-b7b0-7fc3d3e1495c,white ground pepper,505,,0
+803af393-8d65-4965-b7d5-5b6485f0b30c,Rolled Oats,506,,0
+b5bacb4c-4a79-4fb6-9699-8b4cc60d2418,Tortilla 10,507,,0
+b066d194-3667-4f1c-82bc-966b627f75de,Mix Spicy,508,,0
+82829e85-4c17-488e-8abb-295bbcf40d4f,Mustard,509,,0
+842793b7-24f9-4f9a-93e3-70d5e310b971,multigrain,510,,0
+9302c032-30f2-4e8f-8b31-06548e620f4b,Matcha coconut,258,,0
+28e037f9-a24b-4bff-900c-70602c9fa25e,Matcha orange,282,,0
+9461b4ca-edb4-4312-bbfc-cfc31d28e3f9,Chuck Shabu-Shabu,511,,0
+c067b0fc-4066-42d6-beab-0b30f6759202,Toast Sweet,512,,0
+35fe08e2-e9e0-4f8d-bddc-6ef0bff593be,Toast,513,,0
+910d1bae-5fb5-44e7-a329-c021222482ed,Vegan Brioche,514,,0
+f694040c-e395-45fb-819f-548a21ea2274,oatmeal porridge,327,,0
+b6fa2f7b-4f8b-434d-aa1e-01178b682122,paprika powder,516,,0
+8800f709-450d-4572-9b28-1196dc93ca80,Chipotle ranch sauce,434,,0
+2a1abe69-34a8-4e1f-a4d0-2af6a5ec9e64,oreo,517,,0
+a446ef55-c16f-4f1b-9c38-e85acdb7a6fb,bean ,518,,0
+426e2d8f-a492-4b79-831b-e35401db2a95,Drink Sachet,519,,0
+cc65b705-0905-4dda-98f8-0d9ea0d1426a,baking powder,520,,0
+a9b900fc-2b9a-452b-9fe7-260ec0b9d104,Americano,239,,0
+206af032-a8fb-4eab-9d2c-f50bacd80e66,Bumble coffee,244,,0
+2c80ab8e-bad8-45a3-8a87-7c754b4684cc,Cappuccino,221,,0
+f84b1ec4-2802-4c73-a9d1-294d7ce5b8fb,Cappuccino iced,235,,0
+5e4cd8af-fc14-4c0a-ac5a-55b0c2c59e92,Coffee tonic,248,,0
+1f1e2872-7b0e-452c-98fa-ffa10242f893,Espresso,246,,0
+2b0cfa9d-784e-4e62-bab6-465630d2a830,Flat white,234,,0
+a3d0f2dd-ab0e-4a17-84c6-6053bb0f6785,Latte,222,,0
+e09f560b-5d93-4a69-8edc-699b135230ef,Latte iced,236,,0
+581735df-fae4-468e-a8a7-a46e1f760fde,Long black,240,,0
+40686574-8cff-4ee2-976e-153a87a30657,Piccolo,247,,0
+8cf7f4c1-5156-4d7a-becc-a990b415bb3e,Apple juice,445,,0
+1698f567-ec9a-4461-8dc9-8b16995e6345,Fresh juice,325,,0
+2067b0a3-ef85-475a-9617-ee864eec6c5a,Frozen lemonade,443,,0
+738f73aa-fdef-406d-a383-0198b84efc18,Green juice,281,,0
+8ee1f187-9d15-4ed6-9cf6-ecd816d9a78f,Orange juice,444,,0
+2f3c0a1d-6a5b-40a8-b619-da5f0a78f1fb,Orange+Carrot+Ginger juice,271,,0
+119b81f5-9238-4211-9be3-6ed8da2bc960,Papaya strawberry juice,442,,0
+6111b460-fad2-47c1-bb0e-e41c81e23f07,Watermelon+apple+lemon juice,268,,0
+6284ed14-b447-405f-8d7d-03b5a7c8c389,Whole young coconut,291,,0
+b67b70a4-4d5e-452f-8ba7-f5bcc8795455,Matcha latte,256,,0
+fe9758fa-351a-48e8-917c-57a7eceb698e,Matcha latte iced,257,,0
+7986fb79-224a-444c-8800-6dd3708b65c0,Matcha tea,262,,0
+620c234d-fc25-4228-8778-674ab39d15d8,AM to PM smoothie,280,,0
+e06318c8-fc0a-4320-8693-fd33f429461e,Leaf me alone smoothie,279,,0
+f20f1fbc-f030-45df-b298-f40b86687b24,Summertime madness smoothie,278,,0
+d59200ac-5879-4e97-b344-488c509e74d9,Coke 0.25,334,,0
+bb93cce8-8346-4356-9bfb-80c0ff4d386f,Coke zero 0.25,335,,0
+2c9eef67-77a9-4aae-8696-6d91bcb7bbe9,Soda water,292,,0
+de3e12bc-cfdc-44ba-aa16-dadb120193b4,Sparkling water,349,,0
+95541216-3aea-4b36-8d35-694ae6d470d2,Tonic water 0.25,336,,0
+e8578b43-459e-4657-9b43-2408cadb19de,Bulgur with chicken and vegetable,412,,0
+7e0f1357-f0c6-4198-8a21-93eaa30c6507,Green buckwheat with tuna and vegetables,415,,0
+04f7c0b8-1338-4da2-86a1-6ec7edb7e107,Quinoa with chicken and vegetable,413,,0
+b701eaed-0f36-437d-8312-d219394ec38d,Breaky burrito,422,,0
+9008ba63-5471-4dba-9bd9-70ccf3a5a02b,Pesto chicken on beetroot hummus,203,,0
+4498e80a-c619-4e47-82b4-300b82963912,Creamy Spinach,182,,0
+3b6928e9-7374-4b8b-bc35-b6115e556a1c,Croffle with pesto shrimps,195,,0
+9ad96d5c-c84a-4640-b5ec-abbf753f1073,Scandi breakfast,199,,0
+5b6648e8-97a4-46ae-a7d3-2e7344da9fef,Shrimp & Grits with poached eggs and bacon,188,,0
+40c03269-32e7-4158-aeed-3f69549f5e7e,Bacon/Avo egg drop sandwich,447,,0
+af412509-23a4-4024-8247-bdc18c297a7a,Mango ricotta balls,206,,0
+411e1afb-f5bd-4255-bf10-f6c539c3697b,apple cider dressing s/f,152,,0
+a571bc6e-1cc8-4ea9-b634-c81fa1db62d9,Prosciutto cotto slised 50 gr,309,,0
+e768c08e-1ddd-4c78-b57c-9ee11ec63801,Pulled beef 40 gr,521,,0
+7c388601-6eef-40be-9cda-d0145b1c1c41,Salmon 40 gr,302,,0
+a0d3c6b5-c6f7-47c3-aace-53607d7e9e8d,Avocado slised 60 gr,308,,0
+b55468dc-e243-4fb7-a455-f23dec423cd9,Baked salsa 40 gr,376,,0
+c3f788c9-6349-4fa8-9d92-ed08f3f57e63,Boiled egg,328,,0
+821990bf-7912-47fc-97fe-f0d62b98787b,Broccoli 80 gr,380,,0
+f962451e-ad14-42e4-949e-9fb22a492870,Butter 20 gr,330,,0
+3ad29e7f-29db-4f5e-a94e-035981d51771,Chicken 80 gr,300,,0
+0816e6bf-36ad-4c1c-8e3f-7f70600a8793,Croffle,303,,0
+c344a042-6585-40b8-a96a-4b5453bb9510,Cucumber 50 gr,341,,0
+eb2839e3-43c4-4815-93da-59a343a0691e,Danish rye 100 gr,304,,0
+430f4cc8-6a91-43a9-9c24-561f24f6fc7a,Dill cream cheese 40 gr,310,,0
+571e5a7b-2e40-43e5-b613-8297c1d309f7,Emmental cheese 40 gr,377,,0
+f5c56f4c-2c9d-40d4-aff8-3fc4d62f8988,Feta cheese 30 gr,329,,0
+3f305775-f9e9-47f6-86a6-d2a37f060f4f,Fried bacon 2 slice,306,,0
+d7eedb75-f9ea-4532-9b73-6879f44bc958,Hash brown 1 pcs,299,,0
+e125b537-b715-4319-9b60-c4d4efb693ee,Hummus 60 gr,295,,0
+a066ecf6-e8f2-4cc4-be6e-39eaeafc1682,Mushrums 50 gr,379,,0
+609c9754-6547-49e5-a18a-a1ac0f9862c4,Parmesan grouded 20 gr,326,,0
+9988c70d-3721-40e8-8c70-e2372c9161ac,Parmesan sliced 40 gr,378,,0
+84ea4f5d-3537-4df8-851d-8dc8f8b91e8b,Poached egg,296,,0
+bad9fb66-2398-4dc6-a19d-5af350aabc68,Shrimps 45 gr,301,,0
+66c18a87-2b62-435f-9a34-8f67e4bffc69,Scramble 1 egg,298,,0
+630645ed-87de-437d-9ff1-fe1f12dc3b97,Sour dough 60 gr,305,,0
+e246242c-ca68-4c4e-80e8-bad60e5c4959,Sunny side egg,297,,0
+cf641ca3-b326-46b9-8a7b-eae8e1cf799a,Tomato 50 gr,342,,0
+fda7d3b4-2fea-4a00-a817-04497672aece,Avocado mash 40 gr,307,,0
+d576df50-bb39-47c4-9259-82823dd48a9a,Avocado s/f,154,,0
+874045a8-eea8-43f3-a7f3-8b99710d090f,Roast beef 60 gr,350,,0
+1285a912-1d0e-4578-a9db-aa41cb526252,Roast beef brioche bun,190,,0
+328a3220-5c76-4081-b143-cc8f0ec843a7,hollandise sauce,131,,0
+40cb353c-c7bf-4c5e-9cf3-26952bc7d22a,watermelom+apple+lenon juice,267,,0
+8ee80e68-8d3d-4227-a1cd-2a642259fb2d,chicken fillet s/f,108,,0
+fbfb543b-3771-4308-8e87-aa800fbe4f8d,avocado mash s/f,155,,0
+169c0e5b-0207-429e-b542-358efed74184,hummus,106,,0
+a6712d4c-0764-4d44-a9b0-322d0ef3bae1,kintamani orange,523,,0
+a5962ba5-a7dc-42f1-a837-eb97fc13a4ac,Celery ,525,,0
+55c3dc0a-711c-41cc-a908-199624783e47,Gelatin,526,,0
+39200c5c-02c4-4d01-a23b-007ccb9e83b0,canned peaches,529,,0
+1a95967e-7a42-43c9-ab6d-c9b679c72403,cannen peaches s/f,530,,0
+2d6a21d9-7cc2-4d1a-8e68-9ed8024b01de,Pita Bread,527,,0
+d538050b-84f4-4637-8011-c34ced8a2d4d,frozen cherry,533,,0
+01b046e0-e42c-47eb-9ecc-f0d1085eb386,Peach,537,,0
+3da5f5e2-f8d1-4ff2-8348-8e250feceb92,Tea,538,,0
+7e67e240-8505-4844-8beb-5885ff27ccbf,pancake dough,532,,0
+3badd9e7-4b85-4cfd-80de-aa118f66551a,cherry jam s/f,539,,0
+d2111e58-181c-4369-8a12-8f9da5f914a5,pistachio pilled,540,,0
+ef8c3dfb-11b4-4d56-a616-d8befc33a641,raspberry frozen,541,,0
+324579de-076f-4ca8-8723-b54d73e31dc9,raspberry jam,542,,0
+8ba0616b-28e6-40f6-88ee-74eeba9155df,powder beetroot,543,,0
+ce91705f-364f-4b3b-842d-3b2b6b11ba2c,banana sauce s/f,544,,0
+4976963b-14a4-477e-9ffa-4e37777e716c,orange+carrot+ginger juice s/f,270,,0
+7381b8dc-a4c1-46bb-923c-5d82d6ec0eed,Cery marascino,536,,0
+c9411995-77b8-4d74-9d13-f42a5565d4a9,Croffle with Avocado,547,,0
+22888f03-3ae2-4ee2-8fd6-52311b2c542f,Salmon scramble,548,,0
+730fc733-af1b-43bd-b438-8ba09c25b433,Cheese plate breakfast,549,,0
+5aa37e4d-5fc9-4cec-a89f-18aed68dc976,Orange juice ice,316,,0
+96b1fe7b-96cd-44ee-9afd-6bb07ae2ce66,Sukist juice s/f,402,,0
+9cb2bd10-380c-45f4-b79f-9814833024a8,green buckwheat s/f,123,,0
+decfe73c-b66d-4add-b123-ca6dd21d2263,chinese sauce,550,,0
+568ba143-b21c-4a59-832e-2e1797c5e27e,Pistachio & raspberry pancakes,545,,0
+ac5042c8-be54-46ce-a65e-1cb55bf19f2a,Cherry & sour cream pancakes,535,,0
+13db4682-5d49-4d26-a0cb-ae341691ce53,Ulamsari pork,551,,0
+5fe02be1-c1f2-4e09-9ad7-606604c582d4,kintamani orange s/f,524,,0
+85e7769f-2988-480b-951d-9a8b1e352036,Local orange juice s/f,383,,0
+a2b33843-32fe-49dd-bb2f-c7a8af650e93,Orange juice s/f,241,,0
+b67be8f3-0476-449c-a945-515e27d192be,Tropical fruit salad,214,,0
+0976c2e7-bed7-43f6-a47c-46c660a8f0ba,Big atlantic breakfast,201,,0
+3618a339-6737-4626-83c2-9e53ba4129aa,Roast beef rose wine sauce,204,,0
+38b04145-69c1-47ad-bfbb-a2cf162ea288,Croffle with salted salmon,194,,0
+6461c090-843e-493d-ba30-4780f8f01789,Chinese style toast,552,,0
+0d1b581a-1a99-4361-81e3-7493a31c7754,apple juice,284,,0
+e8e17d68-bef8-4f78-8284-2382c9665da9,apple s/f,213,,0
+aab52a0d-ef55-400c-ac81-1023a7f939ea,tomatoes cherry,553,,0
+77770e56-fef9-4f19-b4e2-c35f804e645a,blanched cherry tomatoes s/f,554,,0
+5e669674-5c03-4b72-a1bd-6b7e04fdfb9c,marinade for tomatoes cherry s/f,555,,0
+ddc09cc0-6d74-4522-acd2-44cd91225a3e,pickled tomatoes s/f,556,,0
+79ea2f69-a5c8-446d-bef6-983f026c3ebb,zucchini in marinade s/f,557,,0
+b2826d57-3b96-4502-a3d4-020847ddd551,cream of protains s/f,558,,0
+d05cc1d4-97cc-44d8-9f20-94de41ca7bc4,cream pesto s/f,559,,0
+8b4e2d35-e2d2-4a1a-b4f5-0277c548f0c8,dried egg yolk,560,,0
+321a3714-822d-4f89-b5ed-3e72a70aa1cb,Focaccia,561,,0
+c17268b0-a420-4892-9857-b53ae4fabf8e,stracciatella,562,,0
+b8269c3a-afcb-4aad-99ba-8a1ae7878eb0,chicken sausages,564,,0
+20785a9d-5100-44af-9e6d-4fdf9099e1ec,baby potato,565,,0
+caf89e42-7308-445d-adf1-2c32c116e12b,anchous,566,,0
+ce3bf53f-67f2-4a13-9dcf-3bfeaef694e6,Tomato jam,567,,0
+68e52edd-8341-4bc4-bc0c-42cdb7c11ba2,butter spread,569,,0
+183e6338-7c5d-4144-96a7-1e5d7f80436d,boiled baby potato,570,,0
+353baf00-2e9d-44db-9fd1-aa2c851e9f1e,foccacia with stracciatella,563,,0
+90c3e122-a15e-4962-8ea3-2ccaa0be2998,halloumi breakfast bowl,522,,0
+2e144edb-15b0-47a5-87bb-971e593e9ff7,Caesar sauce,568,,0
+0b2d604a-32ee-487a-a67c-c4b5089c1a86,savory stack,572,,0
+d6e51f9d-c270-450a-9e67-b7d1adfb08df,gym man breakfast,573,,0
+f6e7e03b-1d5e-4073-9692-f565222863d3,El ranchero rosti,575,,0
+81e96ec8-caf9-44b9-92ab-73bff821bc31,Cesar breakfast,571,,0
+baee4665-8b53-45e9-b244-42b4e7cb9bd6,pumpkin seed,578,,0
+1b8e882e-01a7-49ab-8af5-61c29c0899be,Maple Syrup,579,,0
+47e8664a-c42a-4019-8f75-4a28cf5ea439,Roast beef s/f,115,,0
+ff3875ad-7db0-455f-9afb-4babd04530fc,Wagyu/Cheddar egg drop sandwich,449,,0
+8f57e685-7aeb-48fc-add6-40dfca99866c,cabbage,580,,0
+41fb8a7b-199e-4a34-881f-77c18fc389a2,cabbage sf,581,,0
+86586335-12ae-4c7c-ac85-7e17fb0dbfec,cabbage pancake sf,582,,0
+7ceca3fe-b300-42df-b461-58941a72f1e8,tropical syrniki,576,,0
+ed1d189f-7de4-4e9f-a180-440d65518998,raspberry syrniki,577,,0
+38211d19-0ddc-4062-98cf-731f1f86d330,worcestershire sauce,583,,0
+2e35e395-975f-4f16-bfc9-45b16d17b353,Huevos taco bowl,574,,0
+12acdfe3-f178-4c01-9f57-59a0bf71d127,tomato sauce,584,,0
+3c114e8b-89ea-4e9b-b801-8bb954ec6b39,worchestershire teriyaki sauce,585,,0
+d045a724-6d41-4b57-bb93-fb8f91b99ca8,brie cheese,587,,0
+866990af-4f0d-4741-a3fb-6588ab2ed895,baguette,588,,0
+1925a40c-5d84-43d8-b964-d0a53c3014bc,blueberry frozen,589,,0
+ce0cb77f-2d10-473c-b1ba-b29f1bca283d,pecan,590,,0
+cf335446-33ce-4fe7-bc56-60ad18fa0bd1,blueberry jam,591,,0
+751cb1ff-3fd8-4392-ac81-533304ff220a,Amelie breakfast,592,,0
+3c940dee-33df-4fc2-a29f-32c74d1d738f,halloumi 60 gr,593,,0
+667a4208-1bb4-4676-bbd3-6b56dae299be,Tuna melt sandwich,594,,0
+c1013cc9-6ee6-46ea-a314-27512e3fac09,Tunakado toast,595,,0
+176daa44-c5fe-45b6-9660-fadb8702475e,Okonomiyaki with cheddar and bacon,586,,0
+890b0d7b-70d3-4158-a50d-226c92acfb79,RUM BABA DOUGH S/F,596,,0
+6756a353-fb01-4ef9-811f-cfb4cbeefb7c,rum,597,,0
+321604d2-b576-42fe-87eb-78c226286f43,rum syrup s/f,598,,0
+ace0ac3a-e3c0-4305-a0d9-98669006f802,Lemon jam,599,,0
+881abb37-bc03-4a09-8004-f3a64a3f8b99,Rum Baba,600,,0
+29fdfbb3-6188-4ed1-a9de-cc8c4a7a7844,Zucchini pancakes,193,,0
+4a0f5240-820a-4ee5-954f-b79b48d6b75c,Like a turkish breakfast,202,,0
+c5fd45b9-2bfc-4e8b-9880-b8ec1645ca65,Blueberry almond,602,,0
+2982f267-6f44-45ef-a776-0bf43f8bcabb,Condensed milk+ eddible flowers,603,,0
+b6cf5f0b-bc9a-4416-a719-be6f58ccefa9,peaches+ pistachio,604,,0
+f0543024-1eb4-4052-ac26-94eb8e34075a,Big syrnik ,531,,0
+b5241bb6-e2ad-4263-99a6-c9775445208b,The EGG,515,,0
+63f769fb-632c-48e2-9436-0bf85fcfe7cd,cheesecake san sebastian,208,,0
+6dff1939-53d1-459e-8750-c5037b6df48c,Green buckwheat in pesto sauce with parmesan,192,,0
+2aceb279-61b6-4fc1-a0d2-0831050feb20,Pulled beef for Grill cheese,606,,0
+21a8a686-5095-4c00-b227-c4b8480cfce3,proscutto cotto for grill cheese,607,,0
+2f376983-82be-4b23-943a-ef9ddf4a85ca,Grilled cheese sandwich ,189,,0
+2d734568-73fc-4da7-8187-e592fc09b202,Cheezshuka,191,,0
+f11b8d1c-1d3e-4ce0-a178-f6243be001c9,Humshuka,186,,0
+4b5c7805-4745-4c72-854b-6d33bfbd3035,Rosti with creamy truffle chicken,187,,0
+02617c79-0aaa-4ee6-a666-48cd6b2b0236,You look pine!,313,,0
+4c5c6868-de7a-4590-be7c-11f3bd7768bd,No add on,608,,0
+618c0067-5887-4f0c-8e47-7c2dcd51cf58,waffle cone,609,,0
+6b76c063-3e15-4803-a3ec-667ec33bbb89,shallot,610,,0
+ce4278ea-b063-4271-a8cf-21e585fa1ab3,yogurt powder,611,,0
+de2c0f52-8181-4587-b288-07aa3cf8308e,milk chocolate compound,612,,0
+8f7cbbe5-9a3b-4f7f-91db-30e7a18e5dd4,peanuts salted,613,,0
+00d3899b-9c16-440f-9308-74ac0c8a22b8,frozen yogurt,614,,0
+f7908dbf-bbfb-43e8-b7a2-80d4a177809d,coconut oil,615,,0
+a8c181df-79fa-4968-ae45-806f6b71fba3,milk chocolate sauce,616,,0
+02032914-c4bb-498b-a28c-f17befa5e4fc,pink chocolate sauce,617,,0
+2a3fa23a-359f-487f-a3c3-27fbbf6a0635,bumble frozen yogurt,618,,0
+8378e0a5-c7d2-4b75-9c66-a5027b6917b1,lemon&cookies frozen yogurt,619,,0
+3d3e6560-ddfe-4ecb-b07a-27af588ca28e,Grill for sandwich,620,,0
+271f58e1-f415-40d7-b2e8-ddde61815d14,lemon juice,621,,0
+75f1caca-987f-4efb-8861-6d90da513e73,cottage cheese s/f(homemade),622,,0
+c872b989-4519-4b6e-b0bf-fd991f4bcd06,syrnik 160 gr,528,,0
+0577d025-7e1c-44db-bc27-4279d370e0db,Teramissirnik,207,,0
+90555652-b768-4464-867b-d6582e91d154,Cottage cheese bowl with fruits,360,,0
+09064728-79e4-4d9e-9d33-1c0bb3070ba7,sourdough bread,16,,0
+b45f4b17-4f4e-4dac-a9a7-ecb679cf65e1,ESL Barista,487,,0
+62b99684-2600-488f-9e2a-f665860ae8d3,sour cream,534,,0
+b9e3cb51-11ba-4d22-b171-e1851fde710f,cheddar slices 30 gr,623,,0
+da605886-9aed-4449-8c79-b4cc59a1f2b5,Mozzarella 60 gr,624,,0
+cb09c15f-8f3f-4a55-ad80-464d192eff9a,Blender,625,,0
+4c2c3a89-d7ec-4dfa-8e08-3eeb52d6bd0f,coca cola,626,,0
+91c7392d-f984-4b71-aaa3-0136ec9e560d,coca cola zero,627,,0
+1e3af35a-b8d1-4176-8405-bdf0fe8f7683,matbucha s/f,628,,0
+533a42dc-aa6a-4064-9cc7-4ca468e217cd,baba ghanush s/f,629,,0
+c288a1cf-4d4b-45e2-842a-d1348e384e6e,pomegranat,630,,0
+bafc428a-b490-42cd-b423-607f0ab12763,smoked duck,631,,0
+b4549d49-d61b-42c5-b080-55e89cbcac1d,Izraeli breakfast with duck,632,,0
+0451aea2-cd68-4ac3-88ce-b878588ea3cd,zucchini wrap,633,,0
+4a1886ba-6d7a-4593-a100-4283101b0d61,Zucchini/salmon gratin,634,,0
+9722e4a0-fab2-42ab-b49e-f2c5677f06e1,lemon pie dough s/f,635,,0
+9a16da04-38c0-4296-b5e9-dec08ea326da,xanthan gum,636,,0
+6b2289c8-ff2c-4441-800a-791ce5fe76d5,lemon jam for pie s/f,637,,0
+7986a442-52ed-4425-acc7-872261f84950,lemon pie s/f,638,,0
