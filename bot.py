@@ -31,7 +31,13 @@ def cleanup_tmp():
 
 atexit.register(cleanup_tmp)
 
-bot = Bot(token=settings.TELEGRAM_BOT_TOKEN, parse_mode=ParseMode.MARKDOWN_V2)
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
+
+bot = Bot(
+    token=settings.TELEGRAM_BOT_TOKEN,
+    default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN_V2),
+)
 dp = Dispatcher(storage=MemoryStorage())
 
 @dp.message(Command("start"))
