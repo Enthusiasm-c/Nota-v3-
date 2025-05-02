@@ -1,3 +1,13 @@
+def escape_md(text, version=2):
+    # Escapes all special characters for MarkdownV2
+    # https://core.telegram.org/bots/api#markdownv2-style
+    if not isinstance(text, str):
+        text = str(text)
+    specials = r"_*[]()~`>#+-=|{}.!"
+    for c in specials:
+        text = text.replace(c, f"\\{c}")
+    return text
+
 def build_report(parsed_data, match_results: list) -> str:
     # Support both dict and ParsedData object
     supplier = getattr(parsed_data, "supplier", None)
@@ -6,8 +16,8 @@ def build_report(parsed_data, match_results: list) -> str:
     date = getattr(parsed_data, "date", None)
     if date is None and isinstance(parsed_data, dict):
         date = parsed_data.get("date", None)
-    supplier_str = "Unknown supplier" if not supplier else str(supplier)
-    date_str = "—" if not date else str(date)
+    supplier_str = "Unknown supplier" if not supplier else escape_md(str(supplier), version=2)
+    date_str = "—" if not date else escape_md(str(date), version=2)
     ok_count = sum(1 for r in match_results if r.get("status") == "ok")
     need_check_count = sum(1 for r in match_results if r.get("status") != "ok")
 
@@ -16,21 +26,22 @@ def build_report(parsed_data, match_results: list) -> str:
         f"\U0001F4E6 *Supplier:* {supplier_str}\n"
         f"\U0001F4C6 *Invoice date:* {date_str}\n"
     )
-    # Single divider
     report += "────────────────────────────────────────\n"
-    # Table in code block, fixed width
-    report += "`\n"
-    report += "`#  NAME                     QTY  UNIT  PRICE      STATUS`\n"
+    # Table in MarkdownV2 code block
+    table = [
+        '```python',
+        '#  NAME                     QTY  UNIT  PRICE      STATUS'
+    ]
     for idx, r in enumerate(match_results, 1):
-        name = str(r.get("name", ""))
+        name = escape_md(str(r.get("name", "")), version=2)
         if len(name) > 22:
             name = name[:22] + "…"
         name = name.ljust(24)
-        qty = str(r.get("qty", "")).rjust(5)
-        unit = str(r.get("unit", "")).ljust(6)
+        qty = escape_md(str(r.get("qty", "")), version=2).rjust(5)
+        unit = escape_md(str(r.get("unit", "")), version=2).ljust(6)
         price = r.get("price")
         price_str = f"{price:,}" if price not in (None, "", "-") else "—"
-        price_str = price_str.rjust(8)
+        price_str = escape_md(price_str, version=2).rjust(8)
         status = r.get("status", "unknown")
         if status == "ok":
             status_str = "✅ ok"
@@ -39,9 +50,10 @@ def build_report(parsed_data, match_results: list) -> str:
         elif status == "unknown":
             status_str = "❓ not found"
         else:
-            status_str = str(status)
-        report += f"`{idx:<3} {name}{qty} {unit}{price_str}  {status_str}`\n"
-    report += "`\n"
+            status_str = escape_md(str(status), version=2)
+        table.append(f"{idx:<3} {name}{qty} {unit}{price_str}  {status_str}")
+    table.append('```')
+    report += "\n".join(table) + "\n"
     report += "────────────────────────────────────────\n"
     # Summary (outside code block, no '✅ 0 ok')
     summary = []

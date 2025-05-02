@@ -127,7 +127,7 @@ def register_handlers(dp, bot):
                 message_id=progress_msg_id,
                 text=report,
                 reply_markup=kb_report(match_results),
-                parse_mode=ParseMode.MARKDOWN,
+                parse_mode="MarkdownV2",
             )
             await state.set_state(NotaStates.editing)
         except Exception:
