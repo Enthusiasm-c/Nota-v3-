@@ -20,7 +20,7 @@ class EditPosition(StatesGroup):
 @router.callback_query(F.data.startswith("edit:"))
 async def handle_edit(call: CallbackQuery, state: FSMContext):
     idx = int(call.data.split(":")[1])
-    await state.update_data(edit_pos=idx)
+    await state.update_data(edit_pos=idx, msg_id=call.message.message_id)
     await call.message.edit_reply_markup(reply_markup=keyboards.kb_edit_fields(idx))
 
 # --- Field selection: set FSM and ask for new value ---
@@ -28,9 +28,9 @@ async def handle_edit(call: CallbackQuery, state: FSMContext):
 async def handle_field_choose(call: CallbackQuery, state: FSMContext):
     _, field, idx = call.data.split(":")
     idx = int(idx)
-    await state.update_data(edit_pos=idx, edit_field=field)
+    await state.update_data(edit_pos=idx, edit_field=field, msg_id=call.message.message_id)
     await state.set_state(getattr(EditPosition, f"waiting_{field}"))
-    await call.message.reply(f"Send new {field} for line {idx+1}:", reply_markup=ForceReply())
+    await call.message.edit_text(f"Send new {field} for line {idx+1}:", reply_markup=ForceReply())
 
 # --- Cancel for row: restore Edit button ---
 @router.callback_query(F.data.startswith("cancel:"))
@@ -41,7 +41,7 @@ async def handle_cancel(call: CallbackQuery, state: FSMContext):
             await call.message.edit_reply_markup(reply_markup=None)
         except Exception:
             pass
-        await call.message.answer("Editing cancelled. All keyboards removed.")
+        await call.message.edit_text("Editing cancelled. All keyboards removed.")
         await state.clear()
         return
     # cancel:<idx>
@@ -70,7 +70,8 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
     data = await state.get_data()
     invoice = data.get("invoice")
     idx = data.get("edit_pos")
-    if invoice is None or idx is None:
+    msg_id = data.get("msg_id")
+    if invoice is None or idx is None or msg_id is None:
         await message.answer("Session expired. Please resend the invoice.")
         await state.clear()
         return
@@ -99,13 +100,13 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
     report = keyboards.build_invoice_report(invoice["positions"]) if hasattr(keyboards, "build_invoice_report") else ""
     if match["status"] == "ok":
         # Remove keyboard if ok
-        await message.answer(f"Updated!\n{report}")
-        await message.reply("✅ This line is now ok; keyboard removed.")
+        await message.bot.edit_message_text(f"Updated!\n{report}", message.chat.id, msg_id)
+        await message.bot.edit_message_reply_markup(message.chat.id, msg_id, reply_markup=None)
         await state.clear()
     else:
-        await message.answer(f"Updated!\n{report}", reply_markup=keyboards.kb_edit_fields(idx))
+        await message.bot.edit_message_text(f"Updated!\n{report}", message.chat.id, msg_id)
+        await message.bot.edit_message_reply_markup(message.chat.id, msg_id, reply_markup=keyboards.kb_edit_fields(idx))
         await state.update_data(edit_pos=idx)
-
 
 @router.callback_query(F.data.startswith("suggest:"))
 async def handle_suggestion(call: CallbackQuery, state: FSMContext):

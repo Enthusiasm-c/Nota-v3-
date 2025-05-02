@@ -44,21 +44,30 @@ def match_positions(positions: List[Dict], products: List[Dict], threshold: Opti
             if score > best_score:
                 best_score = score
                 best_match = product
-        if status != "ok" and best_score >= threshold:
+        # Fuzzy-rename rule: if Levenshtein score >= 0.98, set parsed.name = product.alias and status = 'ok'
+        # This rule is strict and does not allow near-duplicates
+        canonical_name = name
+        if best_match is not None and best_score >= 0.98:
             matched_product = best_match
             status = "ok"
-        elif status != "ok":
-            status = "unknown"
+            canonical_name = best_match.get("alias", best_match.get("name", name))
+        # If not matched by 0.98 rule, but still above threshold, use regular logic
+        elif best_match is not None and best_score >= threshold:
+            matched_product = best_match
+            status = "ok"
+            canonical_name = best_match.get("alias", best_match.get("name", name))
         logger.debug(f"Match: {name} → {getattr(matched_product, 'alias', None)}; score={best_score:.2f}")
         result = {
-            "name": name,
+            "name": canonical_name,
             "qty": qty,
             "unit": unit,
             "status": status,
             "product_id": matched_product.get("id") if matched_product else None,
-            "score": best_score if best_score else None
+            "score": best_score if best_score else None,
+            "canonical_name": canonical_name
         }
         if return_suggestions and status == "unknown":
+
             # Top-5 fuzzy suggestions for unknown
             fuzzy_scores.sort(reverse=True, key=lambda x: x[0])
             result["suggestions"] = [p for s, p in fuzzy_scores[:5] if s > 0.5]

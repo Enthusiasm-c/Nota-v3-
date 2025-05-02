@@ -8,19 +8,29 @@ def build_report(parsed_data, match_results: list) -> str:
         date = parsed_data.get("date", None)
     supplier_str = "Unknown supplier" if not supplier else str(supplier)
     date_str = "—" if not date else str(date)
-    ok_count = sum(1 for r in match_results if r["status"] == "ok")
-    need_check_count = sum(1 for r in match_results if r["status"] != "ok")
-    report = f"{supplier_str} • {date_str}\n"
-    report += "────────────────────────────────\n"
-    # Table header (monospace)
-    report += "```\n"
-    report += f"#{'NAME'.ljust(20)} {'QTY'.ljust(5)} {'UNIT'.ljust(6)} {'PRICE'.ljust(8)}  STATUS\n"
-    # Table rows
-    for idx, r in enumerate(match_results):
-        name = str(r.get("name", "")).ljust(20)
-        qty = str(r.get("qty", "")).ljust(5)
+    ok_count = sum(1 for r in match_results if r.get("status") == "ok")
+    need_check_count = sum(1 for r in match_results if r.get("status") != "ok")
+
+    # Header (bold supplier and date)
+    report = (
+        f"\U0001F4E6 *Supplier:* {supplier_str}\n"
+        f"\U0001F4C6 *Invoice date:* {date_str}\n"
+    )
+    # Single divider
+    report += "────────────────────────────────────────\n"
+    # Table in code block, fixed width
+    report += "`\n"
+    report += "`#  NAME                     QTY  UNIT  PRICE      STATUS`\n"
+    for idx, r in enumerate(match_results, 1):
+        name = str(r.get("name", ""))
+        if len(name) > 22:
+            name = name[:22] + "…"
+        name = name.ljust(24)
+        qty = str(r.get("qty", "")).rjust(5)
         unit = str(r.get("unit", "")).ljust(6)
-        price = str(r.get("price", "—")).ljust(8)
+        price = r.get("price")
+        price_str = f"{price:,}" if price not in (None, "", "-") else "—"
+        price_str = price_str.rjust(8)
         status = r.get("status", "unknown")
         if status == "ok":
             status_str = "✅ ok"
@@ -29,11 +39,16 @@ def build_report(parsed_data, match_results: list) -> str:
         elif status == "unknown":
             status_str = "❓ not found"
         else:
-            status_str = status
-        report += f"{idx+1} {name} {qty} {unit} {price}  {status_str}\n"
-    report += "```\n"
-    # Summary
+            status_str = str(status)
+        report += f"`{idx:<3} {name}{qty} {unit}{price_str}  {status_str}`\n"
+    report += "`\n"
+    report += "────────────────────────────────────────\n"
+    # Summary (outside code block, no '✅ 0 ok')
+    summary = []
     if ok_count > 0:
-        report += f"✅ {ok_count} ok\n"
-    report += f"⚠️  {need_check_count} need check\n"
-    return report
+        summary.append(f"✅ {ok_count} ok")
+    if need_check_count > 0:
+        summary.append(f"⚠️ {need_check_count} need check")
+    if summary:
+        report += "        ".join(summary)
+    return report.strip()

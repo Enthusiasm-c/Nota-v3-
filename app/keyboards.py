@@ -1,18 +1,47 @@
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 
-from typing import Optional
-
-
-
-def kb_edit(idx: int) -> InlineKeyboardMarkup:
-    """Single Edit button for a problem row."""
+# Главное меню (inline)
+def kb_main(lang: str = "en") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="✏️ Edit", callback_data=f"edit:{idx}")]]
+        inline_keyboard=[
+            [InlineKeyboardButton(text="➕ Upload new invoice", callback_data="action:new")],
+            [InlineKeyboardButton(text="ℹ️ Help", callback_data="action:help")],
+        ]
     )
 
+# Клавиатура для загрузки файла (reply)
+def kb_upload() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="/cancel")]],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
 
-def kb_edit_fields(idx: int) -> InlineKeyboardMarkup:
-    """First row: Name, Qty, Unit, Price; Second row: Cancel only."""
+# Клавиатура помощи (reply)
+def kb_help_back() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="Back")]],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
+
+# Клавиатура отчёта (inline)
+def kb_report(match_results: list) -> InlineKeyboardMarkup:
+    # Кнопки Edit только для проблемных строк
+    edit_buttons = [
+        [InlineKeyboardButton(text=f"✏️ Edit line {i+1}", callback_data=f"edit:{i}")]
+        for i, r in enumerate(match_results) if r.get("status") != "ok"
+    ]
+    # Confirm + Cancel всегда
+    base_buttons = [
+        [InlineKeyboardButton(text="✅ Confirm", callback_data="confirm:invoice")],
+        *edit_buttons,
+        [InlineKeyboardButton(text="🚫 Cancel", callback_data="cancel:all")],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=base_buttons)
+
+# Меню выбора поля для редактирования (inline)
+def kb_field_menu(idx: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -21,18 +50,20 @@ def kb_edit_fields(idx: int) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="Unit", callback_data=f"field:unit:{idx}"),
                 InlineKeyboardButton(text="Price", callback_data=f"field:price:{idx}")
             ],
-            [
-                InlineKeyboardButton(text="Cancel", callback_data=f"cancel:{idx}")
-            ]
+            [InlineKeyboardButton(text="Cancel", callback_data=f"cancel:{idx}")]
         ]
     )
 
-
-def kb_cancel_all() -> InlineKeyboardMarkup:
-    """Global cancel button under the report."""
+# Оставляем для совместимости (по одной строке)
+def kb_edit(idx: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="🚫 Cancel edit", callback_data="cancel:all")]]
+        inline_keyboard=[[InlineKeyboardButton(text="✏️ Edit", callback_data=f"edit:{idx}")]]
     )
 
-# kb_edit remains as is (single Edit button)
-# Remove any dead code after kb_cancel_all
+def kb_edit_fields(idx: int) -> InlineKeyboardMarkup:
+    return kb_field_menu(idx)
+
+def kb_cancel_all() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="🚫 Cancel", callback_data="cancel:all")]]
+    )
