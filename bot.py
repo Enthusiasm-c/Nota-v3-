@@ -54,7 +54,8 @@ async def photo_handler(message: Message):
         parsed_data = await asyncio.to_thread(
             ocr.call_openai_ocr, img_bytes.getvalue()
         )
-        report = formatter.build_report(parsed_data)
+        match_results = matcher.match_positions(parsed_data.positions)
+        report = formatter.build_report(parsed_data, match_results)
         await message.answer(report)
     except Exception:
         logger.exception("Failed to process photo")
