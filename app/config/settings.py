@@ -1,2 +1,2 @@
 class Settings:
-    pass
+    USE_OPENAI_OCR = True

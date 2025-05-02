@@ -52,9 +52,10 @@ def call_openai_ocr(image_bytes: bytes) -> ParsedData:
                 ]
             }]
         )
+        from app.ocr_cleaner import clean_ocr_response
         raw_json = rsp.choices[0].message.content.strip()
         logging.info("OCR %.1fs %dB", time.time()-t0, len(image_bytes))
-        parsed = json.loads(raw_json)
+        parsed = clean_ocr_response(raw_json)
         # normalise numbers
         for p in parsed.get("positions", []):
             p["price"] = _clean_num(p.get("price"))
