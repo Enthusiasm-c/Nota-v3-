@@ -20,4 +20,3 @@ async def test_photo_error(monkeypatch, fake_msg):
     fake_msg.answer.assert_called_once()
     _, kwargs = fake_msg.answer.call_args
     assert kwargs.get("parse_mode") is None
-pip install aiogram

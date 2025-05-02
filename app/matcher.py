@@ -17,9 +17,16 @@ def match_positions(positions: List[Dict], products: List[Dict], threshold: Opti
         threshold = settings.MATCH_THRESHOLD
     results = []
     for pos in positions:
-        name = pos.get("name", "")
-        qty = pos.get("qty", "")
-        unit = pos.get("unit", "")
+        # Support both dict and pydantic Position
+        name = getattr(pos, "name", None)
+        if name is None and isinstance(pos, dict):
+            name = pos.get("name", "")
+        qty = getattr(pos, "qty", None)
+        if qty is None and isinstance(pos, dict):
+            qty = pos.get("qty", "")
+        unit = getattr(pos, "unit", None)
+        if unit is None and isinstance(pos, dict):
+            unit = pos.get("unit", "")
         best_match = None
         best_score = 0
         matched_product = None
