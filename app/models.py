@@ -9,7 +9,7 @@ class Position(BaseModel):
     price: Optional[float] = None
 
 class ParsedData(BaseModel):
-    supplier: str
-    date: date
+    supplier: Optional[str] = None
+    date: Optional[date] = None
     positions: List[Position]
     total: Optional[float] = None
