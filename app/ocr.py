@@ -107,7 +107,10 @@ def call_openai_ocr(image_bytes: bytes) -> ParsedData:
             ]
         }],
         tools=[tool_schema],
-        tool_choice={"name": "parse_invoice"}
+        tool_choice={
+            "type": "function",
+            "function": {"name": "parse_invoice"}
+        }
     )
     message = rsp.choices[0].message
     raw = str(message)[:1000]
