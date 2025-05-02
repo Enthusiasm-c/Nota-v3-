@@ -54,7 +54,8 @@ async def photo_handler(message: Message):
         parsed_data = await asyncio.to_thread(
             ocr.call_openai_ocr, img_bytes.getvalue()
         )
-        match_results = matcher.match_positions(parsed_data.positions)
+        products = data_loader.load_products("data/products.csv")
+        match_results = matcher.match_positions(parsed_data.positions, products)
         report = formatter.build_report(parsed_data, match_results)
         await message.answer(report)
     except Exception:
