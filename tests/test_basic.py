@@ -4,8 +4,8 @@ from app.matcher import match_positions
 from datetime import date
 
 def test_csv_loaded():
-    assert load_products()  # list non-empty
-    assert load_suppliers()
+    assert load_products("data/sample/base_products.csv")  # list non-empty
+    assert load_suppliers("data/sample/base_suppliers.csv")
 
 def test_matcher_stub():
     parsed = ParsedData(
@@ -13,6 +13,6 @@ def test_matcher_stub():
         date=date.today(),
         positions=[{"name": "Tuna loin", "qty": 1, "unit": "kg"}],
     )
-    results = match_positions(parsed.positions, load_products())
+    results = match_positions(parsed.positions, load_products("data/sample/base_products.csv"))
     assert len(results) == 1
     assert results[0]["status"] in {"ok", "unknown"}
