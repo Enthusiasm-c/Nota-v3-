@@ -6,7 +6,7 @@ def test_full_flow_with_real_data():
     products = data_loader.load_products("data/base_products.csv")
     parsed = ParsedData(
         supplier="Test Supplier",
-        date=date.today(),
+        date=None,
         positions=[
             Position(name="Тунец", qty=2, unit="kg"),
             Position(name="Лосось", qty=1, unit="kg"),

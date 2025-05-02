@@ -1,0 +1,3 @@
+Extract structured data from an Indonesian supplier invoice photo.
+
+If supplier or date is unreadable, set to null. Never omit keys. Do not add commentary.

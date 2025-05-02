@@ -1,7 +1,6 @@
 from datetime import date
-from typing import Optional, List
+from typing import Optional
 from pydantic import BaseModel
-
 
 
 class Position(BaseModel):
@@ -14,5 +13,4 @@ class Position(BaseModel):
 class ParsedData(BaseModel):
     supplier: Optional[str] = None
     date: Optional[date] = None
-    positions: List[Position]
-    total: Optional[float] = None
+    positions: list[Position]

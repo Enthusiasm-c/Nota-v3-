@@ -4,9 +4,11 @@ import os
 from app.ocr import call_openai_ocr, ParsedData
 
 
+class DummyMsg:
+    tool_calls = [type('F', (), {'function': type('A', (), {'arguments': '[{"name":"Kacang","qty":1,"unit":"gr"}]'})()})()]
 class DummyRsp:
-    def __init__(self, content):
-        self.choices = [type('msg', (), {'message': type('msg', (), {'content': content})})()]
+    def __init__(self):
+        self.choices = [type('msg', (), {'message': DummyMsg()})()]
 
 
 @pytest.mark.asyncio
@@ -15,7 +17,7 @@ async def test_top_level_list(monkeypatch):
     monkeypatch.setattr('app.ocr.settings', type('S', (), {'OPENAI_API_KEY': 'k', 'OPENAI_MODEL': 'm'})())
     class DummyComp:
         def create(self, **kw):
-            return DummyRsp('[{"name":"Kacang","qty":1,"unit":"gr"}]')
+            return DummyRsp()
     class DummyChat:
         completions = DummyComp()
     class DummyOpenAI:

@@ -1,6 +1,15 @@
-# Placeholder for future inline keyboards
-
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+from typing import Optional
+
+def build_position_kb(idx: int, status: str) -> Optional[InlineKeyboardMarkup]:
+    if status == "ok":
+        return None
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✏️ Edit", callback_data=f"edit:{idx}")],
+        [InlineKeyboardButton(text="✅ OK",  callback_data=f"ok:{idx}"),
+         InlineKeyboardButton(text="🗑 Delete", callback_data=f"del:{idx}")]
+    ])
 
 def build_inline(position_id: int):
     return InlineKeyboardMarkup(

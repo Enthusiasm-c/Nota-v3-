@@ -11,7 +11,7 @@ def test_csv_loaded():
 def test_matcher_stub():
     parsed = ParsedData(
         supplier="Any Supplier",
-        date=date.today(),
+        date=None,
         positions=[{"name": "Tuna loin", "qty": 1, "unit": "kg"}],
     )
     # Convert Position objects to dicts for matcher
