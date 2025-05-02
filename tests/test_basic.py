@@ -7,12 +7,15 @@ def test_csv_loaded():
     assert load_products("data/sample/base_products.csv")  # list non-empty
     assert load_suppliers("data/sample/base_suppliers.csv")
 
+
 def test_matcher_stub():
     parsed = ParsedData(
         supplier="Any Supplier",
         date=date.today(),
         positions=[{"name": "Tuna loin", "qty": 1, "unit": "kg"}],
     )
-    results = match_positions(parsed.positions, load_products("data/sample/base_products.csv"))
+    # Convert Position objects to dicts for matcher
+    positions = [p.dict() if hasattr(p, 'dict') else p for p in parsed.positions]
+    results = match_positions(positions, load_products("data/sample/base_products.csv"))
     assert len(results) == 1
     assert results[0]["status"] in {"ok", "unknown"}
