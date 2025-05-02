@@ -1,5 +1,5 @@
 import pytest
-from app.formatter import build_report
+from app.formatter import build_report, W_IDX, W_NAME, W_QTY, W_UNIT, W_PRICE, W_STATUS
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -36,3 +36,30 @@ async def test_formatter_no_bad_chars():
     assert '```' in sent_text, "Table must be in code block"
     assert '#  NAME' in sent_text, "Header must be present and not cause error"
     # (Тест не падает, если нет TelegramBadRequest)
+
+    # Проверяем, что нет языка после трёх кавычек
+    for line in sent_text.splitlines():
+        if line.strip().startswith('```'):
+            assert line.strip() == '```', "Code block must not have language tag!"
+            break
+    # Проверяем, что все строки таблицы имеют нужную длину колонок
+    in_table = False
+    for line in sent_text.splitlines():
+        if line.strip() == '```':
+            if in_table:
+                break
+            in_table = True
+            continue
+        if in_table and line.strip() and not line.startswith('─'):
+            # Проверяем длины колонок (разбиваем по срезам)
+            idx = line[:W_IDX]
+            name = line[W_IDX:W_IDX+W_NAME]
+            qty = line[W_IDX+W_NAME:W_IDX+W_NAME+W_QTY]
+            unit = line[W_IDX+W_NAME+W_QTY:W_IDX+W_NAME+W_QTY+W_UNIT]
+            price = line[W_IDX+W_NAME+W_QTY+W_UNIT:W_IDX+W_NAME+W_QTY+W_UNIT+W_PRICE]
+            # status = остаток
+            assert len(idx) == W_IDX
+            assert len(name) == W_NAME
+            assert len(qty) == W_QTY
+            assert len(unit) == W_UNIT
+            assert len(price) == W_PRICE

@@ -8,6 +8,32 @@ def escape_md(text, version=2):
         text = text.replace(c, f"\\{c}")
     return text
 
+# Fixed column widths
+W_IDX, W_NAME, W_QTY, W_UNIT, W_PRICE, W_STATUS = 3, 22, 6, 6, 9, 12
+
+def _row(idx, name, qty, unit, price, status):
+    name = (name[:W_NAME-1] + "…") if len(name) > W_NAME else name
+    # Корректно форматируем price
+    try:
+        price_val = float(price)
+        price_str = f"{price_val:,.0f}"
+    except (TypeError, ValueError):
+        price_str = "—"
+    return (
+        f"{str(idx).ljust(W_IDX)}"
+        f"{name.ljust(W_NAME)}"
+        f"{str(qty).rjust(W_QTY)} "
+        f"{unit.ljust(W_UNIT)} "
+        f"{price_str.rjust(W_PRICE)} "
+        f"{status}"
+    )
+
+def build_table(rows: list[str]) -> str:
+    header = _row("#", "NAME", "QTY", "UNIT", "PRICE", "STATUS")
+    divider = "─" * len(header)
+    body = "\n".join(rows)
+    return f"```\n{header}\n{divider}\n{body}\n```"
+
 def build_report(parsed_data, match_results: list) -> str:
     # Support both dict and ParsedData object
     supplier = getattr(parsed_data, "supplier", None)
@@ -27,21 +53,13 @@ def build_report(parsed_data, match_results: list) -> str:
         f"\U0001F4C6 *Invoice date:* {date_str}\n"
     )
     report += "────────────────────────────────────────\n"
-    # Table in MarkdownV2 code block
-    table = [
-        '```python',
-        '#  NAME                     QTY  UNIT  PRICE      STATUS'
-    ]
+    # Build table rows
+    rows = []
     for idx, r in enumerate(match_results, 1):
         name = escape_md(str(r.get("name", "")), version=2)
-        if len(name) > 22:
-            name = name[:22] + "…"
-        name = name.ljust(24)
-        qty = escape_md(str(r.get("qty", "")), version=2).rjust(5)
-        unit = escape_md(str(r.get("unit", "")), version=2).ljust(6)
+        qty = escape_md(str(r.get("qty", "")), version=2)
+        unit = escape_md(str(r.get("unit", "")), version=2)
         price = r.get("price")
-        price_str = f"{price:,}" if price not in (None, "", "-") else "—"
-        price_str = escape_md(price_str, version=2).rjust(8)
         status = r.get("status", "unknown")
         if status == "ok":
             status_str = "✅ ok"
@@ -51,9 +69,8 @@ def build_report(parsed_data, match_results: list) -> str:
             status_str = "❓ not found"
         else:
             status_str = escape_md(str(status), version=2)
-        table.append(f"{idx:<3} {name}{qty} {unit}{price_str}  {status_str}")
-    table.append('```')
-    report += "\n".join(table) + "\n"
+        rows.append(_row(idx, name, qty, unit, price, status_str))
+    report += build_table(rows) + "\n"
     report += "────────────────────────────────────────\n"
     # Summary (outside code block, no '✅ 0 ok')
     summary = []
