@@ -44,40 +44,24 @@ dp = Dispatcher(storage=MemoryStorage())
 async def start_handler(message: Message):
     await message.answer("Привет! Отправьте фото накладной — я всё проверю.")
 
+import asyncio
+
 @dp.message(F.photo)
 async def photo_handler(message: Message):
     try:
-        photo = message.photo[-1]
-        file_id = photo.file_id
-        file = await bot.get_file(file_id)
-        file_path = file.file_path
-        image_bytes = await bot.download_file(file_path)
-        # Save to tmp/ with uuid
-        uid = str(uuid.uuid4())
-        tmp_path = TMP_DIR / f"{uid}.jpg"
-        with open(tmp_path, "wb") as f:
-            f.write(image_bytes.read())
-        # OCR (stub)
-        try:
-            parsed_data = await ocr.call_openai_ocr(image_bytes.getvalue())
-        except NotImplementedError:
-            # For dev: mock parsed_data
-            parsed_data = {
-                "supplier": "TESTSUPPLIER",
-                "date": "26-Sep-2023",
-                "positions": [{"name": "Product A", "qty": 1, "unit": "pcs"} for _ in range(17)] + [{"name": "Unknown", "qty": 1, "unit": "pcs"} for _ in range(3)]
-            }
-        # Load data
-        suppliers = data_loader.load_suppliers("data/suppliers.csv")
-        products = data_loader.load_products("data/products.csv")
-        # Match
-        match_results = matcher.match_positions(parsed_data["positions"], products)
-        # Format report
-        report = formatter.build_report(parsed_data, match_results)
+        file = await bot.get_file(message.photo[-1].file_id)
+        img_bytes = await bot.download_file(file.file_path)
+        parsed_data = await asyncio.to_thread(
+            ocr.call_openai_ocr, img_bytes.getvalue()
+        )
+        report = formatter.build_report(parsed_data)
         await message.answer(report)
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to process photo")
-        await message.answer("⚠️ Sorry, something went wrong.")
+        await message.answer(
+            "⚠️ Sorry, something went wrong.",
+            parse_mode=None
+        )
 
 if __name__ == "__main__":
     import asyncio
