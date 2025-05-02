@@ -4,3 +4,5 @@ httpx
 python-Levenshtein
 python-dotenv # dev only
 pytest # for testing
+pytest-vcr
+openai

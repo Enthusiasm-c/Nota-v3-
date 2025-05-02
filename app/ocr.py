@@ -55,8 +55,22 @@ def call_openai_ocr(image_bytes: bytes) -> ParsedData:
     logging.debug(f"[{req_id}] RAW → {raw[:1000]}")
     clean = _strip_code_fence(raw)
     logging.debug(f"[{req_id}] CLEAN → {clean[:400]}")
+    def _sanitize_json(obj):
+        if isinstance(obj, dict):
+            if "positions" in obj:
+                if "supplier" not in obj:
+                    obj["supplier"] = None
+                if "date" not in obj:
+                    obj["date"] = None
+                return obj
+            return {"supplier": None, "date": None, "positions": [obj]}
+        if isinstance(obj, list):
+            return {"supplier": None, "date": None, "positions": obj}
+        return {"supplier": None, "date": None, "positions": []}
+
     try:
         data = json.loads(clean)
+        data = _sanitize_json(data)
         logging.debug(f"[{req_id}] DICT →\n{pprint.pformat(data, width=88)}")
         # normalise numbers
         for p in data.get("positions", []):

@@ -1,0 +1,4 @@
+Return exactly ONE JSON object with keys supplier,date,positions;
+do NOT return an array at the top level.
+
+# (Add your full previous prompt content below, if needed)
