@@ -1,17 +1,15 @@
+import asyncio
 import logging
-import uuid
-import os
-import shutil
 import atexit
-from pathlib import Path
-from aiogram import Bot, Dispatcher, F, types
+from aiogram import Bot, Dispatcher
 from aiogram.filters import Command
-from aiogram.types import Message
-from aiogram.enums.parse_mode import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.utils.markdown import hbold
+from app import ocr, matcher, data_loader
+from app.formatter import build_report
 from app.config import settings
-from app import data_loader, ocr, matcher, formatter
+from pathlib import Path
+import shutil
+import uuid
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -31,36 +29,26 @@ def cleanup_tmp():
 
 atexit.register(cleanup_tmp)
 
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
-
-bot = Bot(
-    token=settings.TELEGRAM_BOT_TOKEN,
-    default=DefaultBotProperties(parse_mode=None),
-)
+bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
 @dp.message(Command("start"))
-async def start_handler(message: Message):
+async def start_handler(message):
     await message.answer("Привет! Отправьте фото накладной — я всё проверю.")
 
-import asyncio
-
-@dp.message(F.photo)
-async def photo_handler(message: Message):
+@dp.message(Command("photo"))
+async def photo_handler(message):
     try:
         file = await bot.get_file(message.photo[-1].file_id)
         img_bytes = await bot.download_file(file.file_path)
-        parsed_data = await asyncio.to_thread(
-            ocr.call_openai_ocr, img_bytes.getvalue()
-        )
+        parsed_data = await asyncio.to_thread(ocr.call_openai_ocr, img_bytes.getvalue())
         products = data_loader.load_products("data/base_products.csv")
         match_results = matcher.match_positions(parsed_data.positions, products)
-        report = formatter.build_report(parsed_data, match_results)
+        report = build_report(parsed_data, match_results)
         await message.answer(report, parse_mode=None)
-    except Exception as exc:
-        import uuid
+    except Exception:
         err_id = uuid.uuid4().hex[:8]
+        logger = logging.getLogger("bot")
         logger.exception(f"Photo failed <{err_id}>")
         await message.answer(
             f"⚠️ OCR failed. Logged as {err_id}. "
@@ -69,8 +57,8 @@ async def photo_handler(message: Message):
         )
 
 if __name__ == "__main__":
-    import asyncio
     async def main():
         logger.info("Bot polling started.")
         await dp.start_polling(bot)
+
     asyncio.run(main())
