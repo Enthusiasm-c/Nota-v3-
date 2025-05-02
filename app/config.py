@@ -3,8 +3,8 @@ import os
 
 
 class Settings(BaseSettings):
-    TELEGRAM_BOT_TOKEN: str
-    OPENAI_API_KEY: str
+    TELEGRAM_BOT_TOKEN: str = ""
+    OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o"
     MATCH_THRESHOLD: float = 0.75
     USE_OPENAI_OCR: bool = False
