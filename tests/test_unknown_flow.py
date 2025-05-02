@@ -1,6 +1,6 @@
 from app.models import ParsedData
 from app.formatter import build_report
-from app.keyboards import build_position_kb
+from app.keyboards import kb_edit
 
 from datetime import date
 
@@ -22,6 +22,6 @@ def test_unknown_supplier_triggers_keyboard():
     ]
     report = build_report(parsed, match_results)
     assert "Unknown supplier" in report
-    kb = build_position_kb(0, match_results[0]["status"])
+    kb = kb_edit(0)
     assert kb is not None
     assert any("edit:0" in btn.callback_data for row in kb.inline_keyboard for btn in row)

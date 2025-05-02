@@ -13,18 +13,28 @@ def build_report(parsed_data, match_results: list) -> str:
     need_check_count = sum(1 for r in match_results if r["status"] != "ok")
     report = f"\U0001F4E6  {supplier_str} • {date_str}\n"
     report += "────────────────────────────────\n"
-    if ok_count > 0:
-        report += f"✅ {ok_count} ok\n"
-    report += f"⚠️  {need_check_count} need check\n\n"
-    # List every position with its status
+    # Table header (monospace)
+    report += "```\n"
+    report += f"{'QTY'.ljust(5)} {'UNIT'.ljust(6)} {'NAME'.ljust(20)}  STATUS\n"
+    report += f"{'-'*5} {'-'*6} {'-'*20}  {'-'*12}\n"
+    # Table rows
     for idx, r in enumerate(match_results):
-        name = r.get("name", "?")
+        qty = str(r.get("qty", "")).ljust(5)
+        unit = str(r.get("unit", "")).ljust(6)
+        name = str(r.get("name", "")).ljust(20)
         status = r.get("status", "unknown")
         if status == "ok":
             status_str = "✅ ok"
         elif status == "unit_mismatch":
-            status_str = "❗ unit mismatch"
+            status_str = "⚖️ unit mismatch"
+        elif status == "unknown":
+            status_str = "❓ not found"
         else:
-            status_str = "⚠️ unknown"
-        report += f"{idx+1}. {name} — {status_str}\n"
+            status_str = status
+        report += f"{qty} {unit} {name}  {status_str}\n"
+    report += "```\n"
+    # Summary
+    if ok_count > 0:
+        report += f"✅ {ok_count} ok\n"
+    report += f"⚠️  {need_check_count} need check\n"
     return report

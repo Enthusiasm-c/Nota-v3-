@@ -39,7 +39,7 @@ from aiogram.filters import CommandStart
 from aiogram.enums import ParseMode
 from aiogram import F
 from aiogram.types import InlineKeyboardMarkup, CallbackQuery
-from app.keyboards import build_position_kb
+from app.keyboards import kb_edit
 
 # In-memory store for match_results keyed by user_id and message_id
 user_matches = {}
@@ -121,7 +121,7 @@ def register_handlers(dp, bot):
             # Send inline keyboards for each unknown/unit_mismatch
             for idx, pos in enumerate(match_results):
                 if pos["status"] != "ok":
-                    kb = build_position_kb(idx, pos["status"])
+                    kb = kb_edit(idx)  # Single edit button for problematic row
                     if kb:
                         await message.answer(
                             f"Line {idx+1}: {pos['name']} — needs review",

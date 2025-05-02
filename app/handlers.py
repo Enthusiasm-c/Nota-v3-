@@ -7,77 +7,105 @@ from app import matcher, alias, data_loader, keyboards
 router = Router()
 
 
+from aiogram.types import ForceReply
+
 class EditPosition(StatesGroup):
-    waiting_edit = State()
+    waiting_field = State()
+    waiting_name = State()
+    waiting_qty = State()
+    waiting_unit = State()
+    waiting_price = State()
 
-@router.callback_query(F.data.startswith("pos:"))
-async def handle_position_action(call: CallbackQuery, state: FSMContext):
-    # Parse callback data: pos:<uuid>:<action>
-    _, pos_id, action = call.data.split(":")
-    # Fetch invoice from state (should be set in photo handler)
-    invoice = (await state.get_data()).get("invoice")
-    if not invoice:
-        await call.answer("Session expired. Please resend the invoice.", show_alert=True)
-        return
-    positions = invoice["positions"]
-    pos_idx = int(pos_id)
-    if action == "ok":
-        positions[pos_idx]["status"] = "ok"
-        await call.message.edit_reply_markup(reply_markup=keyboards.build_invoice_keyboard(positions))
-        await call.message.answer("You can cancel editing at any time:", reply_markup=keyboards.build_global_cancel_kb())
-    elif action == "remove":
-        positions[pos_idx]["status"] = "removed"
-        await call.message.edit_reply_markup(reply_markup=keyboards.build_invoice_keyboard(positions))
-        await call.message.answer("You can cancel editing at any time:", reply_markup=keyboards.build_global_cancel_kb())
-    elif action == "edit":
-        await state.set_state(EditPosition.waiting_edit)
-        await state.update_data(edit_pos=pos_idx)
-        await call.message.answer("Send corrected value (e.g. Tuna loin 0.8 kg 75000)", reply_markup=keyboards.build_global_cancel_kb())
+# --- EDIT button pressed: show choose-field menu ---
+@router.callback_query(F.data.startswith("edit:"))
+async def handle_edit(call: CallbackQuery, state: FSMContext):
+    idx = int(call.data.split(":")[1])
+    await state.update_data(edit_pos=idx)
+    await call.message.edit_reply_markup(reply_markup=keyboards.kb_choose_field(idx))
 
-@router.message(EditPosition.waiting_edit)
-async def process_edit(message: Message, state: FSMContext):
+# --- Field selection: set FSM and ask for new value ---
+@router.callback_query(F.data.startswith("field:"))
+async def handle_field_choose(call: CallbackQuery, state: FSMContext):
+    _, field, idx = call.data.split(":")
+    idx = int(idx)
+    await state.update_data(edit_pos=idx, edit_field=field)
+    await state.set_state(getattr(EditPosition, f"waiting_{field}"))
+    await call.message.reply(f"Send new {field} for line {idx+1}:", reply_markup=ForceReply())
+
+# --- Cancel for row: restore Edit button ---
+@router.callback_query(F.data.startswith("cancel:"))
+async def handle_cancel(call: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    invoice = data.get("invoice")
-    pos_idx = data.get("edit_pos")
-    if not invoice or pos_idx is None:
-        await message.answer("Session expired. Please resend the invoice.")
-        return
-    # Parse user input (very basic)
-    parts = message.text.strip().split()
-    if len(parts) < 3:
-        await message.answer("Please enter: name qty unit [price]", reply_markup=keyboards.build_global_cancel_kb())
-        return
-    name = parts[0]
-    qty = float(parts[1])
-    unit = parts[2]
-    price = float(parts[3]) if len(parts) > 3 else None
-    invoice["positions"][pos_idx].update({"name": name, "qty": qty, "unit": unit})
-    if price:
-        invoice["positions"][pos_idx]["price"] = price
-    # Re-run matcher for this row, with suggestions
-    products = data_loader.load_products()
-    match = matcher.match_positions([invoice["positions"][pos_idx]], products, return_suggestions=True)[0]
-    invoice["positions"][pos_idx]["status"] = match["status"]
-    if match["status"] == "ok" and name.lower() != products[0]["alias"].lower():
-        alias.add_alias(name, match["product_id"])
-        await message.answer("Updated! See new report below.")
-        await message.answer(keyboards.build_invoice_report(invoice["positions"]))
+    if call.data == "cancel:all":
+        try:
+            await call.message.edit_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+        await call.message.answer("Editing cancelled. All keyboards removed.")
         await state.clear()
         return
-    # If still unknown, offer suggestions
-    if match["status"] == "unknown" and match.get("suggestions"):
-        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-        kb = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text=p.get("alias", p.get("name", "")), callback_data=f"suggest:{pos_idx}:{p['id']}")]
-                for p in match["suggestions"]
-            ]
-        )
-        await message.answer("Not recognized. Pick the correct product:", reply_markup=kb)
-        await state.update_data(suggested_name=name)
-        return
-    await message.answer("No match found and no suggestions available.", reply_markup=keyboards.build_global_cancel_kb())
+    # cancel:<idx>
+    idx = int(call.data.split(":")[1])
+    await call.message.edit_reply_markup(reply_markup=keyboards.kb_edit(idx))
     await state.clear()
+
+# --- Field value reply: validate, update, match, redraw ---
+@router.message(EditPosition.waiting_name)
+async def process_name(message: Message, state: FSMContext):
+    await process_field_reply(message, state, "name")
+
+@router.message(EditPosition.waiting_qty)
+async def process_qty(message: Message, state: FSMContext):
+    await process_field_reply(message, state, "qty")
+
+@router.message(EditPosition.waiting_unit)
+async def process_unit(message: Message, state: FSMContext):
+    await process_field_reply(message, state, "unit")
+
+@router.message(EditPosition.waiting_price)
+async def process_price(message: Message, state: FSMContext):
+    await process_field_reply(message, state, "price")
+
+async def process_field_reply(message: Message, state: FSMContext, field: str):
+    data = await state.get_data()
+    invoice = data.get("invoice")
+    idx = data.get("edit_pos")
+    if invoice is None or idx is None:
+        await message.answer("Session expired. Please resend the invoice.")
+        await state.clear()
+        return
+    value = message.text.strip()
+    # Validation
+    if field == "qty":
+        try:
+            value = float(value)
+        except Exception:
+            await message.answer("Enter a valid number for qty.", reply_markup=ForceReply())
+            return
+    elif field == "price":
+        try:
+            value = float(value)
+        except Exception:
+            await message.answer("Enter a valid number for price.", reply_markup=ForceReply())
+            return
+    invoice["positions"][idx][field] = value
+    # Match
+    products = data_loader.load_products()
+    match = matcher.match_positions([invoice["positions"][idx]], products, return_suggestions=True)[0]
+    invoice["positions"][idx]["status"] = match["status"]
+    # Redraw
+    from aiogram.utils.markdown import escape_md
+    from aiogram.types import InlineKeyboardMarkup
+    report = keyboards.build_invoice_report(invoice["positions"]) if hasattr(keyboards, "build_invoice_report") else ""
+    if match["status"] == "ok":
+        # Remove keyboard if ok
+        await message.answer(f"Updated!\n{report}")
+        await message.reply("✅ This line is now ok; keyboard removed.")
+        await state.clear()
+    else:
+        await message.answer(f"Updated!\n{report}", reply_markup=keyboards.kb_choose_field(idx))
+        await state.update_data(edit_pos=idx)
+
 
 @router.callback_query(F.data.startswith("suggest:"))
 async def handle_suggestion(call: CallbackQuery, state: FSMContext):
