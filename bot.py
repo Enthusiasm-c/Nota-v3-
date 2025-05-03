@@ -99,7 +99,7 @@ def register_handlers(dp, bot=None):
     logging.getLogger("aiogram.event").setLevel(logging.DEBUG)
     dp.message.register(cmd_start, CommandStart())
     dp.callback_query.register(cb_new_invoice, F.data == "action:new")
-    dp.message.register(photo_handler, NotaStates.awaiting_file, F.photo)
+    dp.message.register(photo_handler, F.photo)
     dp.message.register(handle_nlu_text, NotaStates.editing)
     dp.callback_query.register(cb_set_supplier, F.data == "set_supplier")
     dp.callback_query.register(cb_unit_btn, F.data.startswith("unit:"))
