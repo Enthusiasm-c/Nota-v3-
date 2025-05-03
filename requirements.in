@@ -5,4 +5,4 @@ python-Levenshtein
 python-dotenv # dev only
 pytest # for testing
 pytest-vcr
-openai
+openai>=1.13

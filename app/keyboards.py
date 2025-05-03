@@ -41,16 +41,18 @@ def kb_report(match_results: list) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=base_buttons)
 
 # Меню выбора поля для редактирования (inline)
-def kb_field_menu(idx: int) -> InlineKeyboardMarkup:
+def kb_field_menu(idx: int = None) -> InlineKeyboardMarkup:
+    # Универсальный вариант: если idx=None, то просто field:name и т.д.
+    suffix = f":{idx}" if idx is not None else ""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="Name", callback_data=f"field:name:{idx}"),
-                InlineKeyboardButton(text="Qty", callback_data=f"field:qty:{idx}"),
-                InlineKeyboardButton(text="Unit", callback_data=f"field:unit:{idx}"),
-                InlineKeyboardButton(text="Price", callback_data=f"field:price:{idx}")
+                InlineKeyboardButton(text="Name", callback_data=f"field:name{suffix}"),
+                InlineKeyboardButton(text="Qty", callback_data=f"field:qty{suffix}"),
+                InlineKeyboardButton(text="Unit", callback_data=f"field:unit{suffix}"),
+                InlineKeyboardButton(text="Price", callback_data=f"field:price{suffix}")
             ],
-            [InlineKeyboardButton(text="Cancel", callback_data=f"cancel:{idx}")]
+            [InlineKeyboardButton(text="Cancel", callback_data=f"cancel{suffix}")]
         ]
     )
 
@@ -62,6 +64,20 @@ def kb_edit(idx: int) -> InlineKeyboardMarkup:
 
 def kb_edit_fields(idx: int) -> InlineKeyboardMarkup:
     return kb_field_menu(idx)
+
+# Кнопка Set supplier (inline)
+def kb_set_supplier() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="✏️ Set supplier", callback_data="set_supplier")]]
+    )
+
+# Авто-кнопки unit (inline)
+def kb_unit_buttons() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=unit, callback_data=f"unit:{unit}") for unit in ["kg", "g", "l", "ml", "pcs"]]
+        ]
+    )
 
 def kb_cancel_all() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(

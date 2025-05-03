@@ -8,6 +8,10 @@ def load_suppliers(path: str = "data/suppliers.csv") -> List[Dict]:
 
 from app.alias import read_aliases
 
+def load_units() -> list:
+    # Можно заменить на загрузку из файла, если потребуется
+    return ["kg", "g", "l", "ml", "pcs", "pack"]
+
 def load_products(products_path: str = "data/base_products.csv", aliases_path: str = "data/aliases.csv") -> List[Dict]:
     with open(products_path, encoding='utf-8') as f:
         products = list(csv.DictReader(f))

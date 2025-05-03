@@ -1,0 +1,19 @@
+# DEBUG: build_report output for test_report_layout_strict
+
+from app.formatter import build_report
+
+def main():
+    parsed_data = {
+        "supplier": "UD. WIDI WIGUNA",
+        "date": "2025-04-29"
+    }
+    match_results = [
+        {"name": "olive oil orille 5liter", "qty": 2, "unit": "gh", "price": None, "status": "unknown"},
+        {"name": "lumajang", "qty": 30, "unit": "kg", "price": None, "status": "unknown"},
+        {"name": "verylongproductnamethatiswaytoolong", "qty": 1, "unit": "kg", "price": 1234.56, "status": "ok"},
+    ]
+    report = build_report(parsed_data, match_results)
+    print(report)
+
+if __name__ == "__main__":
+    main()

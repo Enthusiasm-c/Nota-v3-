@@ -13,6 +13,18 @@ class DummyRsp:
 
 @pytest.mark.asyncio
 async def test_top_level_list(monkeypatch):
+    # Patch app.config.ocr_client to a dummy so get_ocr_client() returns not None
+    import app.config
+    class DummyComp:
+        def create(self, **kw):
+            return DummyRsp()
+    class DummyChat:
+        completions = DummyComp()
+    class DummyOpenAI:
+        def __init__(self, api_key=None):
+            self.chat = DummyChat()
+    app.config.ocr_client = DummyOpenAI()
+
     # Patch openai and settings
     monkeypatch.setattr('app.ocr.settings', type('S', (), {'OPENAI_API_KEY': 'k', 'OPENAI_MODEL': 'm'})())
     class DummyComp:

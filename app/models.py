@@ -8,6 +8,8 @@ class Position(BaseModel):
     qty: float
     unit: str
     price: Optional[float] = None
+    price_per_unit: Optional[float] = None
+    total_price: Optional[float] = None
 
 
 from pydantic import field_validator
@@ -25,6 +27,9 @@ class ParsedData(BaseModel):
     supplier: Optional[str]
     date: Optional[datetime.date]
     positions: list[Position]
+    price: Optional[float] = None
+    price_per_unit: Optional[float] = None
+    total_price: Optional[float] = None
 
     @field_validator("date", mode="before")
     def parse_iso(cls, v):

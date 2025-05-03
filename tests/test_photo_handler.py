@@ -80,10 +80,10 @@ async def test_photo_ok(monkeypatch, fake_msg):
     found = False
     for call in edit_calls:
         msg = call[1].get('text')
-        if msg == "OK":
+        if msg and "Supplier:" in msg and "Invoice date:" in msg and "A" in msg and "B" in msg:
             found = True
             break
-    assert found, f"Expected 'OK' in edit_message_text, got: {[c[1].get('text') for c in edit_calls]}"
+    assert found, f"Expected formatted report in edit_message_text, got: {[c[1].get('text') for c in edit_calls]}"
 
 
 @pytest.mark.asyncio
