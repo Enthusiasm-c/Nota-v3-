@@ -120,13 +120,14 @@ async def handle_suggestion(call: CallbackQuery, state: FSMContext):
         await call.answer("Session expired. Please resend the invoice.", show_alert=True)
         return
     products = data_loader.load_products()
-    prod = next((p for p in products if p["id"] == product_id), None)
+    prod = next((p for p in products if getattr(p, "id", None) == product_id), None)
     if not prod:
         await call.answer("Product not found.", show_alert=True)
         return
     invoice["positions"][pos_idx]["name"] = suggested_name
     invoice["positions"][pos_idx]["status"] = "ok"
     alias.add_alias(suggested_name, product_id)
-    await call.message.answer(f"Alias '{suggested_name}' saved for product {prod.get('alias', prod.get('name', ''))}.")
+    prod_name = getattr(prod, 'alias', None) or getattr(prod, 'name', '')
+    await call.message.answer(f"Alias '{suggested_name}' saved for product {prod_name}.")
     await call.message.answer(keyboards.build_invoice_report(invoice["positions"]))
     await state.clear()

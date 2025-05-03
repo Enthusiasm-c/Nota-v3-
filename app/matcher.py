@@ -123,12 +123,12 @@ def match_positions(positions: List[Dict], products: List[Dict], threshold: Opti
                     break
             if best is not None and sc >= getattr(settings, "FUZZY_PROMPT_THRESHOLD", 90):
                 canonical_name = best
-                matched_product = next((p for p in products if p.get("alias", p.get("name", "")) == best), None)
+                matched_product = next((p for p in products if (getattr(p, "alias", None) or getattr(p, "name", None) if not isinstance(p, dict) else p.get("alias", p.get("name", ""))) == best), None)
                 if matched_product:
                     status = "ok"
-                    result_id = matched_product.get("id")
-                    if matched_product.get("id"):
-                        used_ids.add(matched_product.get("id"))
+                    result_id = getattr(matched_product, "id", None) if not isinstance(matched_product, dict) else matched_product.get("id")
+                    if result_id:
+                        used_ids.add(result_id)
                 else:
                     result_id = None
                 best_score = sc / 100.0

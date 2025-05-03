@@ -3,6 +3,14 @@ from typing import Optional
 from pydantic import BaseModel
 
 
+class Product(BaseModel):
+    id: str
+    code: str
+    name: str
+    alias: str
+    unit: str
+    price_hint: float | None = None
+
 class Position(BaseModel):
     name: str
     qty: float
