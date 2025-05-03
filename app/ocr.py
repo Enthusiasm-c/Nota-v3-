@@ -108,7 +108,7 @@ def call_openai_ocr(image_bytes: bytes) -> ParsedData:
     t0 = time.time()
     req_id = uuid.uuid4().hex[:8]
     prompt_prefix = build_prompt()
-    logging.info(f"ocr_prompt:\n{prompt_prefix}")
+    # logging.info(f"ocr_prompt:\n{prompt_prefix}")  # Убрано из production-логов
     try:
         rsp = client.chat.completions.create(
             model=settings.OPENAI_MODEL,
@@ -126,8 +126,8 @@ def call_openai_ocr(image_bytes: bytes) -> ParsedData:
         )
         message = rsp.choices[0].message
         data = _sanitize_response(message)
-        logging.debug(f"[{req_id}] CLEAN → {json.dumps(data)[:400]}")
-        logging.debug(f"[{req_id}] DICT →\n{pprint.pformat(data, width=88)}")
+        # logging.debug(f"[{req_id}] CLEAN → {json.dumps(data)[:400]}")
+        # logging.debug(f"[{req_id}] DICT →\n{pprint.pformat(data, width=88)}")
         # normalise numbers
         for p in data.get("positions", []):
             p["price"] = _clean_num(p.get("price"))

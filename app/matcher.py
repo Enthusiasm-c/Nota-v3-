@@ -33,7 +33,7 @@ def fuzzy_best(name: str, catalog: dict[str, str]) -> tuple[str, float]:
 
 def match_positions(positions: List[Dict], products: List[Dict], threshold: Optional[float] = None, return_suggestions: bool = False) -> List[Dict]:
     # Debug logging
-    debug_mode = True  # Включаем режим отладки
+    # debug_mode = True  # Отключено для production-логов
     if threshold is None:
         threshold = settings.MATCH_THRESHOLD
     results = []

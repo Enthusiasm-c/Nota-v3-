@@ -2,16 +2,16 @@ import asyncio
 import logging
 import atexit
 from aiogram import Bot, Dispatcher
-from aiogram.types import InlineKeyboardMarkup
+from aiogram.fsm.state import StatesGroup, State
+from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command
 from aiogram.fsm.storage.memory import MemoryStorage
 from app import ocr, matcher, data_loader
-from app.formatter import build_report, escape_md
-from app.assistant import ask_assistant
-from app.config import settings, get_chat_client
+from app.utils.md import escape_v2
+from app.config import settings
 from pathlib import Path
+from aiogram.types import CallbackQuery
 import shutil
-import uuid
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 TMP_DIR = Path("tmp")
 TMP_DIR.mkdir(exist_ok=True)
 
+
 def cleanup_tmp():
     try:
         shutil.rmtree(TMP_DIR)
@@ -29,30 +30,22 @@ def cleanup_tmp():
     except Exception as e:
         logger.error(f"Failed to clean tmp/: {e}")
 
+
 atexit.register(cleanup_tmp)
+
 
 def create_bot_and_dispatcher():
     bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
     return bot, dp
 
-# Create global bot and dp for handler decorators
-bot, dp = create_bot_and_dispatcher()
+
+# Глобальные bot и dp убраны для тестируемости.
+bot = None
+dp = None
 
 
-# Handler registration (all handlers must be at module scope)
 
-
-from aiogram.filters import CommandStart
-from aiogram.enums import ParseMode
-from aiogram import F
-from aiogram.types import InlineKeyboardMarkup, CallbackQuery
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import StatesGroup, State
-from app.keyboards import kb_main, kb_upload, kb_help_back, kb_report, kb_field_menu
-
-
-# FSM States
 class NotaStates(StatesGroup):
     lang = State()
     main_menu = State()
@@ -61,22 +54,45 @@ class NotaStates(StatesGroup):
     editing = State()
     help = State()
 
-# In-memory store for user sessions: {user_id: {msg_id: {...}}}
+
 user_matches = {}
 
-# --- Safe edit function ---
-async def safe_edit(bot, chat_id, msg_id, text, kb=None, **kwargs):
-    if kb is not None and not isinstance(kb, InlineKeyboardMarkup):
-        kb = None
-    await bot.edit_message_text(
-        chat_id=chat_id,
-        message_id=msg_id,
-        text=text,
-        reply_markup=kb,
-        **kwargs
-    )
 
-assistant_thread_id = None
+def is_inline_kb(kb):
+    return kb is None or isinstance(kb, InlineKeyboardMarkup)
+
+
+async def safe_edit(bot, chat_id, msg_id, text, kb=None, **kwargs):
+    if not is_inline_kb(kb):
+        kb = None
+    parse_mode = kwargs.get("parse_mode")
+    if parse_mode in ("MarkdownV2", ParseMode.MARKDOWN_V2):
+        text = escape_v2(text)
+    try:
+        await bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=msg_id,
+            text=text,
+            reply_markup=kb,
+            **kwargs
+        )
+    except Exception as e:
+        logger = logging.getLogger("bot")
+        if isinstance(e, types.TelegramBadRequest) and (
+            "can't parse entities" in str(e) or "parse_mode" in str(e)
+        ):
+            logger.warning(
+                f"MarkdownV2 edit failed, retrying without parse_mode: {e}")
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=msg_id,
+                text=text,
+                reply_markup=kb,
+                **{k: v for k, v in kwargs.items() if k != "parse_mode"}
+            )
+        else:
+            raise
+
 
 def register_handlers(dp, bot=None):
     dp.message.register(cmd_start, CommandStart())
@@ -99,7 +115,10 @@ def register_handlers(dp, bot=None):
     dp.message.register(cancel_command, Command("cancel"))
     dp.message.register(handle_edit_reply, F.reply_to_message)
 
+# Remove any handler registration from the module/global scope.
+
 __all__ = ["create_bot_and_dispatcher", "register_handlers"]
+
 
 async def cmd_start(message, state: FSMContext):
     global assistant_thread_id
@@ -116,6 +135,8 @@ async def cmd_start(message, state: FSMContext):
     )
 
 
+
+
 async def cb_new_invoice(callback: CallbackQuery, state: FSMContext):
     await state.set_state(NotaStates.awaiting_file)
     await safe_edit(
@@ -126,6 +147,7 @@ async def cb_new_invoice(callback: CallbackQuery, state: FSMContext):
         kb=kb_upload(),
     )
     await callback.answer()
+
 
 
 async def photo_handler(message, state: FSMContext):
@@ -154,20 +176,22 @@ async def handle_nlu_text(message, state: FSMContext):
             # For now, just acknowledge
             await safe_edit(
                 bot, chat_id, msg_id,
-                escape_md("Изменения применены (edit_line)", version=2),
+                escape_v2("Изменения применены (edit_line)", version=2),
                 parse_mode=ParseMode.MARKDOWN_V2
             )
             await state.set_state(NotaStates.editing)
+
             return
     except Exception:
         pass
     # Otherwise, reply with assistant's text
     await safe_edit(
         bot, chat_id, msg_id,
-        escape_md(assistant_response, version=2),
+        escape_v2(assistant_response, version=2),
         parse_mode=ParseMode.MARKDOWN_V2
     )
     await state.set_state(NotaStates.editing)
+
 
 
 async def cb_set_supplier(callback: CallbackQuery, state: FSMContext):
@@ -178,7 +202,9 @@ async def cb_set_supplier(callback: CallbackQuery, state: FSMContext):
         "Введите название поставщика:",
     )
     await callback.answer()
+
     await state.set_state(NotaStates.editing)
+
 
 
 async def cb_unit_btn(callback: CallbackQuery, state: FSMContext):
@@ -190,7 +216,9 @@ async def cb_unit_btn(callback: CallbackQuery, state: FSMContext):
         f"Единица изм. выбрана: {unit}",
     )
     await callback.answer()
+
     await state.set_state(NotaStates.editing)
+
 
 
 async def cancel_action(event, state: FSMContext):
@@ -198,6 +226,7 @@ async def cancel_action(event, state: FSMContext):
     msg_id = event.message.message_id if hasattr(event, "message") else event.message_id
     await safe_edit(bot, chat_id, msg_id, "Действие отменено.", kb=kb_main())
     await state.set_state(NotaStates.main_menu)
+
 
 
 async def cb_help(callback: CallbackQuery, state: FSMContext):
@@ -215,18 +244,21 @@ async def cb_help(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@dp.message(NotaStates.help, F.text.casefold() == "back")
+
 async def help_back(message, state: FSMContext):
     await state.set_state(NotaStates.main_menu)
+
     await message.answer(
         "Ready to work. What would you like to do?",
         reply_markup=kb_main(),
     )
 
 
-@dp.callback_query(F.data == "cancel:all")
+
+
 async def cb_cancel(callback: CallbackQuery, state: FSMContext):
     await state.set_state(NotaStates.main_menu)
+
     await safe_edit(
         bot,
         callback.message.chat.id,
@@ -237,7 +269,7 @@ async def cb_cancel(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@dp.callback_query(F.data.startswith("edit:"))
+
 async def cb_edit_line(callback: CallbackQuery, state: FSMContext):
     idx = int(callback.data.split(":")[1])
     await callback.message.edit_reply_markup(
@@ -246,7 +278,7 @@ async def cb_edit_line(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@dp.callback_query(F.data.startswith("cancel:"))
+
 async def cb_cancel_row(callback: CallbackQuery, state: FSMContext):
     if callback.data == "cancel:all":
         await callback.message.edit_reply_markup(reply_markup=None)
@@ -258,6 +290,7 @@ async def cb_cancel_row(callback: CallbackQuery, state: FSMContext):
             kb=None,
         )
         await state.set_state(NotaStates.main_menu)
+
     else:
         idx = int(callback.data.split(":")[1])
         await callback.message.edit_reply_markup(reply_markup=None)
@@ -269,7 +302,9 @@ async def cb_cancel_row(callback: CallbackQuery, state: FSMContext):
             kb=None,
         )
         await state.set_state(NotaStates.editing)
+
     await callback.answer()
+
 
 
 @dp.callback_query(F.data.startswith("field:"))
@@ -287,6 +322,7 @@ async def cb_field(callback: CallbackQuery, state: FSMContext):
         edit_idx=idx, edit_field=field, msg_id=callback.message.message_id
     )
     await callback.answer()
+
 
 
 @dp.message(F.reply_to_message, F.text)
@@ -327,11 +363,12 @@ async def handle_field_edit(message, state: FSMContext):
                 bot,
                 message.chat.id,
                 msg_id,
-                escape_md(report, version=2),
+                escape_v2(report, version=2),
                 kb=kb_report(entry["match_results"]),
                 parse_mode=ParseMode.MARKDOWN_V2,
             )
             await state.set_state(NotaStates.editing)
+
             return
     except Exception:
         pass
@@ -340,11 +377,12 @@ async def handle_field_edit(message, state: FSMContext):
         bot,
         message.chat.id,
         msg_id,
-        escape_md(assistant_response, version=2),
+        escape_v2(assistant_response, version=2),
         kb=kb_report(entry["match_results"]),
         parse_mode=ParseMode.MARKDOWN_V2,
     )
     await state.set_state(NotaStates.editing)
+
 
 
 @dp.callback_query(F.data == "confirm:invoice")
@@ -357,7 +395,9 @@ async def cb_confirm(callback: CallbackQuery, state: FSMContext):
         kb=kb_main(),
     )
     await state.set_state(NotaStates.main_menu)
+
     await callback.answer()
+
 
 
 @dp.message(Command("help"))
@@ -375,10 +415,13 @@ async def help_command(message, state: FSMContext):
 @dp.message(Command("cancel"))
 async def cancel_command(message, state: FSMContext):
     await state.set_state(NotaStates.main_menu)
+
     await message.answer(
         "Ready to work. What would you like to do?",
         reply_markup=kb_main(),
     )
+
+
 
 
 @dp.message(F.reply_to_message)
@@ -446,7 +489,7 @@ async def photo_handler(message):
             bot,
             message.chat.id,
             progress_msg_id,
-            escape_md(report, version=2),
+            escape_v2(report, version=2),
             kb=inline_kb,
             parse_mode="MarkdownV2"
         )
@@ -483,6 +526,7 @@ from aiogram import F
 from aiogram.types import InlineKeyboardMarkup, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
+from aiogram.fsm.context import FSMContext
 from app.keyboards import kb_main, kb_upload, kb_help_back, kb_report, kb_field_menu
 
 # FSM States
