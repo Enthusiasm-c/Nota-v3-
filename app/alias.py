@@ -4,21 +4,21 @@ from pathlib import Path
 from typing import Dict, Optional
 
 def read_aliases(path: str = "data/aliases.csv") -> Dict[str, tuple[str, str]]:
-    print(f"DEBUG: read_aliases called with path={path}")
+    # print(f"DEBUG: read_aliases called with path={path}")
     aliases = {}
     if not Path(path).exists():
-        print(f"DEBUG: Aliases file '{path}' does not exist")
+        # print(f"DEBUG: Aliases file '{path}' does not exist")
         return aliases
     with open(path, encoding="utf-8") as f:
         reader = csv.reader(f)
         next(reader, None)  # skip header
         for row in reader:
-            print(f"DEBUG: Read row from aliases: {row}")
+            # print(f"DEBUG: Read row from aliases: {row}")
             if len(row) >= 2:
                 alias, pid = row[0], row[1]
                 alias_l = alias.lower()
                 aliases[alias_l] = (pid, alias)
-    print(f"DEBUG: Final aliases dict: {aliases}")
+    # print(f"DEBUG: Final aliases dict: {aliases}")
     return aliases
 
 def add_alias(alias: str, product_id: str, path: str = "data/aliases.csv") -> bool:
@@ -33,12 +33,12 @@ def add_alias(alias: str, product_id: str, path: str = "data/aliases.csv") -> bo
         if write_header:
             writer.writerow(["alias", "product_id"])
         writer.writerow([alias, product_id])
-        print(f"DEBUG: Added alias '{alias}' for product_id '{product_id}' to '{path}'")
+        # print(f"DEBUG: Added alias '{alias}' for product_id '{product_id}' to '{path}'")
         f.flush()
         os.fsync(f.fileno())
     if Path(path).exists():
         with open(path, encoding="utf-8") as f_check:
-            print("DEBUG: File content after add_alias:", f_check.read())
+            pass
     else:
-        print("DEBUG: File does NOT exist after add_alias!")
+        pass
     return True

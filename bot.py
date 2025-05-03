@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from app.formatter import build_report
 import atexit
 import uuid
 from aiogram import Bot, Dispatcher
