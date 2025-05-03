@@ -14,12 +14,15 @@ def load_units() -> list:
     # Можно заменить на загрузку из файла, если потребуется
     return ["kg", "g", "l", "ml", "pcs", "pack"]
 
-@lru_cache(maxsize=1)
 def load_products(products_path: str = "data/base_products.csv", aliases_path: str = "data/aliases.csv") -> list[Product]:
+    print(f"DEBUG: load_products called with aliases_path={aliases_path}")
     with open(products_path, encoding='utf-8') as f:
         products = list(csv.DictReader(f))
     id_to_product = {p["id"]: p for p in products}
+    # read_aliases теперь возвращает: {alias: (pid, original_alias)}
     aliases = read_aliases(aliases_path)
+    print('DEBUG: Aliases loaded:', aliases)
+    print('DEBUG: id_to_product:', id_to_product)
     # Merge aliases as virtual products
     product_objs = []
     for p in products:
@@ -31,15 +34,18 @@ def load_products(products_path: str = "data/base_products.csv", aliases_path: s
             unit=p.get("unit", ""),
             price_hint=float(p["price_hint"]) if p.get("price_hint") else None
         ))
-    for alias, pid in aliases.items():
+    for alias_l, val in aliases.items():
+        pid, original_alias = val if isinstance(val, tuple) else (val, alias_l)
         if pid in id_to_product:
             prod = id_to_product[pid]
+            print(f'DEBUG: Adding virtual product for alias {alias_l} (pid={pid})')
             product_objs.append(Product(
                 id=prod.get("id", ""),
                 code=prod.get("code", ""),
                 name=prod.get("name", ""),
-                alias=alias,
+                alias=alias_l,  # alias — это именно тот alias, который добавлен
                 unit=prod.get("unit", ""),
                 price_hint=float(prod["price_hint"]) if prod.get("price_hint") else None
             ))
+    print('DEBUG: Loaded products:', [p.dict() if hasattr(p, 'dict') else p for p in product_objs])
     return product_objs

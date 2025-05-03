@@ -15,7 +15,7 @@ def test_matcher_stub():
         positions=[{"name": "Tuna loin", "qty": 1, "unit": "kg"}],
     )
     # Convert Position objects to dicts for matcher
-    positions = [p.dict() if hasattr(p, 'dict') else p for p in parsed.positions]
+    positions = [p.model_dump() if hasattr(p, 'model_dump') else p for p in parsed.positions]
     results = match_positions(positions, load_products("data/sample/base_products.csv"))
     assert len(results) == 1
     assert results[0]["status"] in {"ok", "unknown"}

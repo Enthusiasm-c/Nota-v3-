@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import atexit
+import uuid
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext

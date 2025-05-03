@@ -1,5 +1,5 @@
-def escape_md(text: str) -> str:
-    """Экранирует спецсимволы Telegram MarkdownV2."""
+def escape_md(text: str, version=2) -> str:
+    """Экранирует спецсимволы Telegram MarkdownV2. Аргумент version для совместимости."""
     return re.sub(r'([_\*\[\]\(\)~`>#+\-=|{}.!])', r'\\\1', text)
 
 import re
