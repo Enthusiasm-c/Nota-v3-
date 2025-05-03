@@ -562,6 +562,8 @@ logging.getLogger("aiogram.event").setLevel(logging.DEBUG)
 
 if __name__ == "__main__":
     async def main():
+        global bot, dp
+        bot, dp = create_bot_and_dispatcher()
+        register_handlers(dp, bot)
         await dp.start_polling(bot)
-
     asyncio.run(main())
