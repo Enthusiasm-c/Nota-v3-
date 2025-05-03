@@ -98,7 +98,7 @@ def match_positions(positions: List[Dict], products: List[Dict], threshold: Opti
             product_name_l = product_name.strip().lower() if product_name else ""
             # Строгое сравнение только по нижнему регистру
             # Сравнение name_l с alias_l (оба в нижнем регистре)
-            print(f"DEBUG: Comparing name_l='{name_l}' with alias_l='{alias_l}' (alias_val='{alias_val}')")
+
             if name_l and alias_l and name_l == alias_l:
                 matched_product = best_match
                 status = "ok"

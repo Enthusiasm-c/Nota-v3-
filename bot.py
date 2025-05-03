@@ -180,7 +180,7 @@ async def handle_nlu_text(message, state: FSMContext):
             # For now, just acknowledge
             await safe_edit(
                 bot, chat_id, msg_id,
-                escape_v2("Изменения применены (edit_line)", version=2),
+                escape_v2("Изменения применены (edit_line)"),
                 parse_mode=ParseMode.MARKDOWN_V2
             )
             await state.set_state(NotaStates.editing)
@@ -191,7 +191,7 @@ async def handle_nlu_text(message, state: FSMContext):
     # Otherwise, reply with assistant's text
     await safe_edit(
         bot, chat_id, msg_id,
-        escape_v2(assistant_response, version=2),
+        escape_v2(assistant_response),
         parse_mode=ParseMode.MARKDOWN_V2
     )
     await state.set_state(NotaStates.editing)
@@ -365,7 +365,7 @@ async def handle_field_edit(message, state: FSMContext):
                 bot,
                 message.chat.id,
                 msg_id,
-                escape_v2(report, version=2),
+                escape_v2(report),
                 kb=kb_report(entry["match_results"]),
                 parse_mode=ParseMode.MARKDOWN_V2,
             )
@@ -379,7 +379,7 @@ async def handle_field_edit(message, state: FSMContext):
         bot,
         message.chat.id,
         msg_id,
-        escape_v2(assistant_response, version=2),
+        escape_v2(assistant_response),
         kb=kb_report(entry["match_results"]),
         parse_mode=ParseMode.MARKDOWN_V2,
     )
@@ -486,7 +486,7 @@ async def photo_handler(message):
             bot,
             message.chat.id,
             progress_msg_id,
-            escape_v2(report, version=2),
+            escape_v2(report),
             kb=inline_kb,
             parse_mode="MarkdownV2"
         )
