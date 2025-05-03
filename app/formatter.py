@@ -45,7 +45,9 @@ def build_report(parsed_data, match_results: list) -> str:
     supplier_str = "Unknown supplier" if not supplier else escape_md(str(supplier), version=2)
     date_str = "—" if not date else escape_md(str(date), version=2)
     ok_count = sum(1 for r in match_results if r.get("status") == "ok")
-    need_check_count = sum(1 for r in match_results if r.get("status") != "ok")
+    unit_mismatch_count = sum(1 for r in match_results if r.get("status") == "unit_mismatch")
+    unknown_count = sum(1 for r in match_results if r.get("status") == "unknown")
+    need_check_count = unit_mismatch_count + unknown_count
 
     # Header (bold supplier and date)
     report = (
@@ -76,8 +78,10 @@ def build_report(parsed_data, match_results: list) -> str:
     summary = []
     if ok_count > 0:
         summary.append(f"✅ {ok_count} ok")
-    if need_check_count > 0:
-        summary.append(f"⚠️ {need_check_count} need check")
+    if unit_mismatch_count > 0:
+        summary.append(f"⚖️ {unit_mismatch_count} unit mismatch")
+    if unknown_count > 0:
+        summary.append(f"❓ {unknown_count} not found")
     if summary:
         report += "        ".join(summary)
     return report.strip()
