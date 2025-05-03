@@ -95,6 +95,8 @@ async def safe_edit(bot, chat_id, msg_id, text, kb=None, **kwargs):
 
 
 def register_handlers(dp, bot=None):
+    dp["__unhandled__"] = _dummy
+    logging.getLogger("aiogram.event").setLevel(logging.DEBUG)
     dp.message.register(cmd_start, CommandStart())
     dp.callback_query.register(cb_new_invoice, F.data == "action:new")
     dp.message.register(photo_handler, NotaStates.awaiting_file, F.photo)
@@ -307,7 +309,6 @@ async def cb_cancel_row(callback: CallbackQuery, state: FSMContext):
 
 
 
-@dp.callback_query(F.data.startswith("field:"))
 async def cb_field(callback: CallbackQuery, state: FSMContext):
     _, field, idx = callback.data.split(":")
     idx = int(idx)
@@ -325,7 +326,6 @@ async def cb_field(callback: CallbackQuery, state: FSMContext):
 
 
 
-@dp.message(F.reply_to_message, F.text)
 async def handle_field_edit(message, state: FSMContext):
     global assistant_thread_id
     data = await state.get_data()
@@ -385,7 +385,6 @@ async def handle_field_edit(message, state: FSMContext):
 
 
 
-@dp.callback_query(F.data == "confirm:invoice")
 async def cb_confirm(callback: CallbackQuery, state: FSMContext):
     await safe_edit(
         bot,
@@ -400,7 +399,6 @@ async def cb_confirm(callback: CallbackQuery, state: FSMContext):
 
 
 
-@dp.message(Command("help"))
 async def help_command(message, state: FSMContext):
     await state.set_state(NotaStates.help)
     await message.answer(
@@ -412,7 +410,6 @@ async def help_command(message, state: FSMContext):
     )
 
 
-@dp.message(Command("cancel"))
 async def cancel_command(message, state: FSMContext):
     await state.set_state(NotaStates.main_menu)
 
@@ -424,7 +421,6 @@ async def cancel_command(message, state: FSMContext):
 
 
 
-@dp.message(F.reply_to_message)
 async def handle_edit_reply(message):
     user_id = message.from_user.id
     orig_msg_id = message.reply_to_message.message_id
@@ -444,7 +440,6 @@ async def handle_edit_reply(message):
     await message.reply(f"✏️ Updated line {idx+1}.\n" + report)
 
 
-@dp.message(F.photo)
 async def photo_handler(message):
     try:
         # Step 1: Send progress message
@@ -506,7 +501,6 @@ async def photo_handler(message):
         )
 
 
-@dp.message(F.text & ~F.command)
 async def text_fallback(message):
     await message.answer("📸 Please send an invoice photo (image only).", parse_mode=None)
 
@@ -516,7 +510,7 @@ async def text_fallback(message):
 async def _dummy(update, data):
     pass
 
-dp["__unhandled__"] = _dummy
+
 logging.getLogger("aiogram.event").setLevel(logging.DEBUG)
 
 
@@ -554,7 +548,6 @@ async def safe_edit(bot, chat_id, msg_id, text, kb=None, **kwargs):
     )
 
 
-@dp.message(F.text & ~F.command)
 async def text_fallback(message):
     await message.answer("📸 Please send an invoice photo (image only).", parse_mode=None)
 
@@ -563,7 +556,7 @@ async def _dummy(update, data):
     pass
 
 
-dp["__unhandled__"] = _dummy
+
 logging.getLogger("aiogram.event").setLevel(logging.DEBUG)
 
 
