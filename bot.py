@@ -476,7 +476,7 @@ async def photo_handler(message, state: FSMContext, **kwargs):
         )
 
         # Форматируем сообщение
-        formatted_message = escape_html(full_message)
+        formatted_message = full_message  # Не экранируем HTML отчёт!
 
         # Логируем изменение размера после форматирования
         logger.debug(f"BUGFIX: Formatted message length: {len(formatted_message)}")
@@ -653,8 +653,9 @@ async def handle_nlu_text(message, state: FSMContext):
 
         # Отвечаем новым сообщением
         formatted_response = escape_html(assistant_response)
-
-        # Отправляем ответ ассистента как новое сообщение
+        # Если используем HTML-режим, не экранируем весь текст!
+        # await message.answer(formatted_response, parse_mode=ParseMode.HTML)
+        # Для MarkdownV2 — экранируем
         await message.answer(formatted_response, parse_mode=ParseMode.MARKDOWN_V2)
 
         # Сохраняем состояние редактирования инвойса
@@ -891,8 +892,8 @@ async def handle_field_edit(message, state: FSMContext):
         parsed_data = entry["parsed_data"]
         report, has_errors = build_report(parsed_data, entry["match_results"], escape=False)
 
-        # Применяем форматирование для Markdown
-        formatted_report = escape_html(report)
+        # Для HTML-режима не экранируем весь отчёт!
+        formatted_report = report
 
         # Отправляем новое сообщение с обновленным отчетом
         try:

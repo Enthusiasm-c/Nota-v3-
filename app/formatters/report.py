@@ -1,4 +1,5 @@
 from decimal import Decimal
+import html
 
 # Fixed column widths for the mobile-friendly invoice table
 W_IDX = 3
@@ -19,8 +20,6 @@ def format_idr(val):
     except Exception:
         return "—"
 
-
-import html
 
 def _row(idx, name, qty, unit, price, status, escape=False):
     # Формируем статус с эмодзи и текстом
@@ -105,8 +104,8 @@ def build_report(parsed_data, match_results, escape=True, page=1, page_size=15):
     date = getattr(parsed_data, "date", None)
     if date is None and isinstance(parsed_data, dict):
         date = parsed_data.get("date", None)
-    supplier_str = "Unknown supplier" if not supplier else str(supplier)
-    date_str = "—" if not date else str(date)
+    supplier_str = "Unknown supplier" if not supplier else html.escape(str(supplier))
+    date_str = "—" if not date else html.escape(str(date))
 
     ok_total = 0
     mismatch_total = 0
