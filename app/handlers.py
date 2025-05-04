@@ -3,12 +3,11 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import ForceReply
 
-from app import matcher, alias, data_loader, keyboards
+from app.formatters import report as invoice_report, alias, data_loader, keyboards
 
 
 class InvoiceReviewStates(StatesGroup):
     review = State()
-
 
 
 class EditPosition(StatesGroup):
@@ -23,8 +22,6 @@ router = Router()
 
 
 # --- EDIT button pressed: show choose-field menu ---
-
-
 @router.callback_query(F.data.startswith("edit:"))
 async def handle_edit(call: CallbackQuery, state: FSMContext):
     idx = int(call.data.split(":")[1])
@@ -40,8 +37,8 @@ async def handle_field_choose(call: CallbackQuery, state: FSMContext):
     await state.update_data(edit_pos=idx, edit_field=field, msg_id=call.message.message_id)
     await state.set_state(getattr(EditPosition, f"waiting_{field}"))
     await call.message.edit_text(
-    f"Send new {field} for line {idx+1}:", reply_markup=ForceReply()
-)
+        f"Send new {field} for line {idx+1}:", reply_markup=ForceReply()
+    )
 
 
 # --- Cancel for row: restore Edit button ---
@@ -53,35 +50,104 @@ async def handle_cancel(call: CallbackQuery, state: FSMContext):
             await call.message.edit_reply_markup(reply_markup=None)
         except Exception:
             pass
-        await call.message.edit_text(
-    "Editing cancelled. All keyboards removed."
-)
+        # После отмены редактирования — показать первую страницу отчёта с клавиатурой
+        invoice = data.get("invoice")
+        if invoice:
+            match_results = matcher.match_positions(invoice["positions"], data_loader.load_products())
+            page = 1
+            from app.formatters.report import paginate_rows
+            table_rows = [r for r in match_results]
+            total_rows = len(table_rows)
+            page_size = 15
+            total_pages = (total_rows + page_size - 1) // page_size
+            report = invoice_report.build_report(invoice, match_results, page=page)
+            await call.message.edit_text(
+                report,
+                reply_markup=keyboards.build_invoice_report(invoice["positions"], page=page, total_pages=total_pages)
+            )
+        else:
+            await call.message.edit_text(
+                "Editing cancelled. All keyboards removed."
+            )
         await state.clear()
         return
     idx = int(call.data.split(":")[1])
     await call.message.edit_reply_markup(
-    reply_markup=keyboards.kb_edit(idx)
-)
+        reply_markup=keyboards.kb_edit(idx)
+    )
     await state.clear()
 
 
 # --- UX финального отчёта: обработчики новых кнопок ---
+@router.callback_query(F.data == "inv_page_prev")
+async def handle_page_prev(call: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    invoice = data.get("invoice")
+    page = data.get("invoice_page", 1)
+    if not invoice:
+        await call.answer("Session expired. Please resend the invoice.", show_alert=True)
+        return
+    page = max(1, page - 1)
+    await state.update_data(invoice_page=page)
+    match_results = matcher.match_positions(invoice["positions"], data_loader.load_products())
+    report = invoice_report.build_report(invoice, match_results, page=page)
+    from app.formatters.report import paginate_rows
+    table_rows = [r for r in match_results]
+    total_rows = len(table_rows)
+    page_size = 15
+    total_pages = (total_rows + page_size - 1) // page_size
+    await call.message.edit_text(
+        report,
+        reply_markup=keyboards.build_invoice_report(invoice["positions"], page=page, total_pages=total_pages)
+    )
+
+
+@router.callback_query(F.data == "inv_page_next")
+async def handle_page_next(call: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    invoice = data.get("invoice")
+    page = data.get("invoice_page", 1)
+    if not invoice:
+        await call.answer("Session expired. Please resend the invoice.", show_alert=True)
+        return
+    match_results = matcher.match_positions(invoice["positions"], data_loader.load_products())
+    from app.formatters.report import paginate_rows
+    table_rows = [r for r in match_results]
+    total_rows = len(table_rows)
+    page_size = 15
+    total_pages = (total_rows + page_size - 1) // page_size
+    page = min(total_pages, page + 1)
+    await state.update_data(invoice_page=page)
+    report = invoice_report.build_report(invoice, match_results, page=page)
+    await call.message.edit_text(
+        report,
+        reply_markup=keyboards.build_invoice_report(invoice["positions"], page=page, total_pages=total_pages)
+    )
+
+
 @router.callback_query(F.data == "inv_cancel_edit")
 async def handle_cancel_edit(call: CallbackQuery, state: FSMContext):
     # Вернуться к отчёту без удаления черновика
     data = await state.get_data()
     invoice = data.get("invoice")
+    page = data.get("invoice_page", 1)
     if not invoice:
         await call.answer("Session expired. Please resend the invoice.", show_alert=True)
         return
-    # Показываем отчёт и клавиатуру
-    from app.formatter import build_report
-    report = build_report(invoice, matcher.match_positions(invoice["positions"], data_loader.load_products()))
+    match_results = matcher.match_positions(invoice["positions"], data_loader.load_products())
+    report = invoice_report.build_report(invoice, match_results, page=page)
+    # Подсчёт страниц
+    from app.formatters.report import paginate_rows
+    table_rows = [r for r in match_results]
+    total_rows = len(table_rows)
+    page_size = 15
+    total_pages = (total_rows + page_size - 1) // page_size
     await call.message.edit_text(
-    report,
-    reply_markup=keyboards.build_invoice_report(invoice["positions"])
-)
+        report,
+        reply_markup=keyboards.build_invoice_report(invoice["positions"], page=page, total_pages=total_pages)
+    )
     await state.set_state(InvoiceReviewStates.review)
+
 
 @router.callback_query(F.data == "inv_submit_anyway")
 async def handle_submit_anyway(call: CallbackQuery, state: FSMContext):
@@ -95,14 +161,49 @@ async def handle_submit_anyway(call: CallbackQuery, state: FSMContext):
     from app.export import export_to_syrve
     try:
         await export_to_syrve(invoice)
-        await call.message.answer(
-    "Invoice sent to Syrve!", reply_markup=None
-)
+        # После отправки — показать первую страницу отчёта, если invoice есть
+        data = await state.get_data()
+        invoice = data.get("invoice")
+        if invoice:
+            match_results = matcher.match_positions(invoice["positions"], data_loader.load_products())
+            page = 1
+            from app.formatters.report import paginate_rows
+            table_rows = [r for r in match_results]
+            total_rows = len(table_rows)
+            page_size = 15
+            total_pages = (total_rows + page_size - 1) // page_size
+            report = invoice_report.build_report(invoice, match_results, page=page)
+            await call.message.answer(
+                report,
+                reply_markup=keyboards.build_invoice_report(invoice["positions"], page=page, total_pages=total_pages)
+            )
+        else:
+            await call.message.answer(
+                "Invoice sent to Syrve!", reply_markup=None
+            )
         await state.clear()
     except Exception as e:
-        await call.message.answer(
-    f"Error sending invoice: {e}"
-)
+        # После ошибки — показать первую страницу отчёта, если invoice есть
+        data = await state.get_data()
+        invoice = data.get("invoice")
+        if invoice:
+            match_results = matcher.match_positions(invoice["positions"], data_loader.load_products())
+            page = 1
+            from app.formatters.report import paginate_rows
+            table_rows = [r for r in match_results]
+            total_rows = len(table_rows)
+            page_size = 15
+            total_pages = (total_rows + page_size - 1) // page_size
+            report = invoice_report.build_report(invoice, match_results, page=page)
+            await call.message.answer(
+                report,
+                reply_markup=keyboards.build_invoice_report(invoice["positions"], page=page, total_pages=total_pages)
+            )
+        else:
+            await call.message.answer(
+                f"Error sending invoice: {e}"
+            )
+
 
 @router.callback_query(F.data == "inv_add_missing")
 async def handle_add_missing(call: CallbackQuery, state: FSMContext):
@@ -120,6 +221,7 @@ async def handle_add_missing(call: CallbackQuery, state: FSMContext):
             await call.message.edit_reply_markup(reply_markup=keyboards.kb_edit_fields(idx))
             return
     await call.answer("No unknown positions left.")
+
 
 # --- Field value reply: validate, update, match, redraw ---
 @router.message(EditPosition.waiting_name)
@@ -149,8 +251,8 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
     invoice = data.get("invoice")
     if invoice is None or idx is None or msg_id is None:
         await message.answer(
-    "Session expired. Please resend the invoice."
-)
+            "Session expired. Please resend the invoice."
+        )
         await state.clear()
         return
     value = message.text.strip()
@@ -159,33 +261,69 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
             value = float(value)
         except Exception:
             await message.answer(
-    "Enter a valid number for qty.", reply_markup=ForceReply()
-)
+                "Enter a valid number for qty.", reply_markup=ForceReply()
+            )
             return
     elif field == "price":
         try:
             value = float(value)
         except Exception:
             await message.answer(
-    "Enter a valid number for price.", reply_markup=ForceReply()
-)
+                "Enter a valid number for price.", reply_markup=ForceReply()
+            )
             return
     invoice["positions"][idx][field] = value
     products = data_loader.load_products()
     match = matcher.match_positions([invoice["positions"][idx]], products, return_suggestions=True)[0]
     invoice["positions"][idx]["status"] = match["status"]
-    report = keyboards.build_invoice_report(invoice["positions"]) if hasattr(keyboards, "build_invoice_report") else ""
+    # Для совместимости: всегда показываем первую страницу, если не передан page
+    match_results = matcher.match_positions(invoice["positions"], data_loader.load_products())
+    page = 1
+    from app.formatters.report import paginate_rows
+    table_rows = [r for r in match_results]
+    total_rows = len(table_rows)
+    page_size = 15
+    total_pages = (total_rows + page_size - 1) // page_size
+    report = keyboards.build_invoice_report(invoice["positions"], page=page, total_pages=total_pages)
     if match["status"] == "ok":
-        await message.bot.edit_message_text(f"Updated!\n{report}", message.chat.id, msg_id)
+        # После успешного редактирования сбрасываем страницу на 1
+        await state.update_data(invoice_page=1)
+        match_results = matcher.match_positions(invoice["positions"], data_loader.load_products())
+        page = 1
+        # Подсчёт страниц
+        from app.formatters.report import paginate_rows
+        table_rows = [r for r in match_results]
+        total_rows = len(table_rows)
+        page_size = 15
+        total_pages = (total_rows + page_size - 1) // page_size
+        report = invoice_report.build_report(invoice, match_results, page=page)
+        await message.bot.edit_message_text(
+            f"Updated!\n{report}", message.chat.id, msg_id,
+            reply_markup=keyboards.build_invoice_report(invoice["positions"], page=page, total_pages=total_pages)
+        )
         await message.bot.edit_message_reply_markup(
-    message.chat.id, msg_id, reply_markup=None
-)
+            message.chat.id, msg_id, reply_markup=None
+        )
         await state.clear()
     else:
-        await message.bot.edit_message_text(f"Updated!\n{report}", message.chat.id, msg_id)
+        # Если не ok, оставляем на той же странице (или сбрасываем на 1)
+        await state.update_data(invoice_page=1)
+        match_results = matcher.match_positions(invoice["positions"], data_loader.load_products())
+        page = 1
+        # Подсчёт страниц
+        from app.formatters.report import paginate_rows
+        table_rows = [r for r in match_results]
+        total_rows = len(table_rows)
+        page_size = 15
+        total_pages = (total_rows + page_size - 1) // page_size
+        report = invoice_report.build_report(invoice, match_results, page=page)
+        await message.bot.edit_message_text(
+            f"Updated!\n{report}", message.chat.id, msg_id,
+            reply_markup=keyboards.build_invoice_report(invoice["positions"], page=page, total_pages=total_pages)
+        )
         await message.bot.edit_message_reply_markup(
-    message.chat.id, msg_id, reply_markup=keyboards.kb_edit_fields(idx)
-)
+            message.chat.id, msg_id, reply_markup=keyboards.kb_edit_fields(idx)
+        )
         await state.update_data(edit_pos=idx)
 
 
@@ -218,8 +356,17 @@ async def handle_suggestion(call: CallbackQuery, state: FSMContext):
     await call.message.answer(
         f"Alias '{suggested_name}' saved for product {prod_name}."
     )
+    # Показываем первую страницу отчёта с учётом пагинации
+    match_results = matcher.match_positions(invoice["positions"], data_loader.load_products())
+    page = 1
+    from app.formatters.report import paginate_rows
+    table_rows = [r for r in match_results]
+    total_rows = len(table_rows)
+    page_size = 15
+    total_pages = (total_rows + page_size - 1) // page_size
+    report = invoice_report.build_report(invoice, match_results, page=page)
     await call.message.answer(
-        keyboards.build_invoice_report(invoice["positions"])
+        report,
+        reply_markup=keyboards.build_invoice_report(invoice["positions"], page=page, total_pages=total_pages)
     )
     await state.clear()
-

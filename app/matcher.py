@@ -256,21 +256,10 @@ def match_positions(
         computed_price = None
         computed_line_total = None
         try:
-            if qty is not None and total is not None:
-                q = float(qty)
-                t = float(total)
-                if q != 0:
-                    computed_price = t / q
-                    computed_line_total = t
-                else:
-                    computed_price = None
-                    computed_line_total = None
-            elif price is not None and qty is not None:
-                q = float(qty)
-                p = float(price)
-                computed_price = p
-                computed_line_total = p * q
-            else:
+            if price is None and total is not None and qty not in (None, "", 0, "0"):
+                price = float(total) / float(qty)
+            if price is not None and (total is None or total == "") and qty not in (None, "", 0, "0"):
+                total = float(price) * float(qty)
                 computed_price = None
                 computed_line_total = None
         except Exception:

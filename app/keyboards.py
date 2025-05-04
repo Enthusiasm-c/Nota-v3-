@@ -56,7 +56,7 @@ def kb_report(match_results: list) -> InlineKeyboardMarkup:
 # --- D-2: UX финального отчёта ---
 
 
-def build_invoice_report(match_results: list) -> InlineKeyboardMarkup:
+def build_invoice_report(match_results: list, page: int = 1, total_pages: int = 1) -> InlineKeyboardMarkup:
     """
     Клавиатура финального отчёта:
     [✏️ Ред.1] [✏️ Ред.2] …
@@ -82,14 +82,24 @@ def build_invoice_report(match_results: list) -> InlineKeyboardMarkup:
     back_btn = InlineKeyboardButton(
         text="↩ Back", callback_data="inv_cancel_edit"
     )
+    # Кнопки навигации по страницам
+    nav_buttons = []
+    if total_pages > 1:
+        if page > 1:
+            nav_buttons.append(InlineKeyboardButton(text="←", callback_data="inv_page_prev"))
+        nav_buttons.append(InlineKeyboardButton(text=f"{page}/{total_pages}", callback_data="noop"))
+        if page < total_pages:
+            nav_buttons.append(InlineKeyboardButton(text="→", callback_data="inv_page_next"))
     # Сборка клавиатуры
     keyboard = []
-    # Редактирование по строкам (по 2-3 в ряд)
     for i in range(0, len(edit_buttons), 3):
         keyboard.append(edit_buttons[i:i+3])
+    if nav_buttons:
+        keyboard.append(nav_buttons)
     keyboard.append([add_missing_btn])
     keyboard.append([submit_anyway_btn, back_btn])
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
 
 # Меню выбора поля для редактирования (inline)
 
