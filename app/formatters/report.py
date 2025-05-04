@@ -2,13 +2,13 @@ from decimal import Decimal
 
 # Fixed column widths for the mobile-friendly invoice table
 W_IDX = 3
-W_NAME = 19
-W_QTY = 1  # QTY теперь без отступа
+W_NAME = 14
+W_QTY = 5
 W_UNIT = 4
-W_PRICE = 13
+W_PRICE = 10
 W_STATUS = 2
-FMT_ROW = "{idx:<3} {name:<19}   {qty:>1} {unit:<4} {price:>13} {status}"  # +3 пробела между name и qty
-DIVIDER = "───────────────"  # 15 символов
+FMT_ROW = "{idx:<3} {name:<14} {qty:>5} {unit:<4} {price:>10} {status}"
+DIVIDER = "_______________________________"  # 31 символ
 
 
 def format_idr(val):
@@ -60,13 +60,14 @@ def build_table(rows):
     # Удаляем divider-строки из rows, если они есть
     rows = [r for r in rows if set(r.strip()) != {'─'}]
     # Заголовок всегда без экранирования!
-    header = f"#   NAME{' ' * (W_NAME - 4)}   QTY UNIT{' ' * (W_UNIT - 4)}PRICE{' ' * (W_PRICE - 5)}\n"  # +3 пробела
+    header = "#   NAME         QTY  UNIT PRICE\n"
     table = header
-    table += "───────────────\n"  # 15 символов
+    table += "_______________________________\n"
     body = "\n".join(rows)
     table += body
-    # Markdown V2: тройные обратные кавычки, без языка
-    return f"```\n{table}\n```\n"
+    return f"```
+{table}
+```"
 
 
 def paginate_rows(rows, page_size=15):

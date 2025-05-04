@@ -29,6 +29,7 @@ async def edit_message_text_safe(bot, chat_id, msg_id, text, kb):
 
     try:
         await bot.edit_message_text(
+        parse_mode="MarkdownV2",
             chat_id=chat_id,
             message_id=msg_id,
             text=text,
