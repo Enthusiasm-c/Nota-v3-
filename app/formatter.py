@@ -61,7 +61,7 @@ def _row(
     )
 
 
-def build_table(rows: list[str]) -> str:
+rows: list[str]) -> str:
     print('BUILD_TABLE_DEBUG')
     header = _row("#", "NAME", "QTY", "UNIT", "PRICE", "TOTAL", "STATUS")
     body = "\n".join(rows)
@@ -72,7 +72,9 @@ from typing import Any
 
 
 
-def build_report(
+# build_report удалён — используйте app/formatters/report.py
+# build_table удалён — используйте app/formatters/report.py
+
     parsed_data: dict[str, Any] | Any,
     match_results: list[dict[str, Any]],
     escape: bool = True
