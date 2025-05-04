@@ -1,7 +1,7 @@
 import re
 import logging
 
-MDV2_SPECIALS = r'_\*\[\]\(\)~`>#+\-=|{}.!'"
+MDV2_SPECIALS = r'_\*\[\]\(\)~`>#+\-=|{}.!'
 
 def escape_md(text: str, version=2) -> str:
     r"""
