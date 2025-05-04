@@ -21,76 +21,97 @@ def escape_v2(text: str) -> str:
     if text is None:
         return ""
     
-    # Логирование для отладки
     logger = logging.getLogger("md")
     
     try:
-        # Разделяем текст на части: код и не-код
-        parts = []
+        # Обработка блоков кода и обычного текста отдельно
+        result_parts = []
         is_in_code_block = False
+        
+        # Разбиваем текст на строки для обработки блоков кода
         lines = text.split('\n')
         current_block = []
         
         for line in lines:
-            # Если встретили маркер начала/конца блока кода
-            if line.strip() == '```':
-                # Добавляем текущий блок с соответствующим экранированием
+            stripped_line = line.strip()
+            
+            # Обработка маркеров блоков кода
+            if stripped_line == '```':
+                # Обрабатываем накопленный блок текста
                 if current_block:
-                    joined_block = '\n'.join(current_block)
+                    block_text = '\n'.join(current_block)
+                    # Экранируем только текст вне блоков кода
                     if not is_in_code_block:
-                        # Экранируем текст вне блока кода
-                        joined_block = escape_md(joined_block, version=2)
-                    parts.append(joined_block)
+                        block_text = escape_md(block_text, version=2)
+                    result_parts.append(block_text)
                     current_block = []
                 
-                # Добавляем сам маркер блока кода (экранированный) и меняем флаг
-                parts.append('```')
+                # Добавляем маркер блока кода без экранирования
+                result_parts.append('```')
                 is_in_code_block = not is_in_code_block
             else:
                 current_block.append(line)
         
-        # Добавляем оставшийся блок
+        # Добавляем последний блок, если он есть
         if current_block:
-            joined_block = '\n'.join(current_block)
+            block_text = '\n'.join(current_block)
             if not is_in_code_block:
-                # Экранируем текст вне блока кода
-                joined_block = escape_md(joined_block, version=2)
-            parts.append(joined_block)
+                block_text = escape_md(block_text, version=2)
+            result_parts.append(block_text)
         
-        # Собираем всё вместе
-        result = '\n'.join(parts)
+        # Собираем текст обратно
+        result = '\n'.join(result_parts)
         
-        # Для обратной совместимости с предыдущими вызовами
-        result = result.replace('\\```', '```')
+        # КРИТИЧНО: Проверяем и исправляем проблемные символы, которые часто вызывают ошибки
+        problematic_chars = {
+            '.': '\\.',
+            '#': '\\#',
+            '!': '\\!',
+            '+': '\\+',
+            '=': '\\=',
+            '|': '\\|',
+            '{': '\\{',
+            '}': '\\}',
+            '-': '\\-'
+        }
         
-        # Дополнительная проверка на экранирование всех спецсимволов
-        if '.' in result and '\\.' not in result and not is_in_code_block:
-            logger.warning("Found unescaped dots in the escaped text - manually escaping")
-            result = result.replace('.', '\\.')
+        # Ищем части вне блоков кода для проверки неэкранированных символов
+        parts = result.split('```')
+        for i in range(0, len(parts), 2):  # Чётные индексы - части вне блоков кода
+            if i < len(parts):
+                for char, escaped in problematic_chars.items():
+                    # Проверяем, есть ли символ, но нет его экранированной версии
+                    if char in parts[i] and escaped not in parts[i]:
+                        parts[i] = parts[i].replace(char, escaped)
+                
+                # Исправляем двойное экранирование
+                for char in MDV2_SPECIALS:
+                    double_escape = f'\\\\{char}'
+                    if double_escape in parts[i]:
+                        parts[i] = parts[i].replace(double_escape, f'\\{char}')
         
-        # Проверка на экранирование других распространенных проблемных символов
-        for char in ['#', '!', '+', '=', '|']:
-            if char in result and f'\\{char}' not in result and '```' not in result:
-                logger.warning(f"Found unescaped character '{char}' in text - manually escaping")
-                result = result.replace(char, f'\\{char}')
+        # Собираем текст обратно с блоками кода
+        final_result = ''
+        for i, part in enumerate(parts):
+            final_result += part
+            if i < len(parts) - 1:
+                final_result += '```'  # Добавляем маркеры блоков кода между частями
         
-        # Защита от двойного экранирования
-        for char in MDV2_SPECIALS:
-            double_escape = f'\\\\{char}'
-            if double_escape in result:
-                logger.warning(f"Found double-escaped character '{double_escape}' - fixing")
-                result = result.replace(double_escape, f'\\{char}')
+        # Проверка на потенциальные ошибки и логирование для диагностики
+        if '```' in final_result:
+            code_block_count = final_result.count('```')
+            if code_block_count % 2 != 0:
+                logger.warning(f"Odd number of code block markers ({code_block_count}), formatting may be incorrect")
         
-        return result
-        
+        return final_result
+    
     except Exception as e:
-        # В случае ошибки логируем и возвращаем безопасный текст
-        if logger:
-            logger.error(f"Error in escape_v2: {e}")
+        # При ошибке возвращаем безопасный текст без форматирования
+        logger.error(f"Error in escape_v2: {e}")
         
-        # Безопасное возвращение: убираем все форматирование
+        # Удаляем все специальные символы для безопасности
         safe_text = re.sub(r'[^\w\s]', '', text)
         if len(safe_text) < 10:
-            safe_text = "Error formatting message"
+            safe_text = "Error formatting message. Please try again."
         
         return safe_text
