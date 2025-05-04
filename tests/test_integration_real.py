@@ -24,6 +24,6 @@ def test_full_flow_with_real_data():
     )
     assert parsed2.date == date(2025, 4, 28)
     match_results = matcher.match_positions(parsed.positions, products)
-    report = build_report(parsed, match_results)
+    report, _ = build_report(parsed, match_results)
     assert isinstance(report, str)
     assert "Test Supplier" in report

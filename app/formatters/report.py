@@ -7,7 +7,7 @@ W_QTY = 5
 W_UNIT = 4
 W_PRICE = 10
 W_STATUS = 2
-FMT_ROW = "{idx:<3} {name:<14} {qty:>5} {unit:<4} {price:>10} {status}"
+FMT_ROW = "{idx:<3} {name:<14} {qty:>5} {unit:<4} {price:>10} {status}"  # status теперь всегда виден
 DIVIDER = "_______________________________"  # 31 символ
 
 
@@ -56,18 +56,32 @@ def _row(idx, name, qty, unit, price, status, escape=False):
     )
 
 
-def build_table(rows):
-    # Удаляем divider-строки из rows, если они есть
-    rows = [r for r in rows if set(r.strip()) != {'─'}]
-    # Заголовок всегда без экранирования!
+def build_table(match_results):
+    status_map = {
+        "ok": "✅ ok",
+        "unknown": "❓ not found",
+        "unit_mismatch": "⚠️ unit mismatch"
+    }
+    table_rows = []
+    for idx, item in enumerate(match_results, 1):
+        status_str = status_map.get(item.get("status"), str(item.get("status", "")))
+        price_val = item.get("price", "")
+        price_str = "" if price_val is None else price_val
+        row = FMT_ROW.format(
+            idx=idx,
+            name=item.get("name", ""),
+            qty=item.get("qty", ""),
+            unit=item.get("unit", ""),
+            price=price_str,
+            status=status_str
+        )
+        table_rows.append(row)
     header = "#   NAME         QTY  UNIT PRICE\n"
     table = header
     table += "_______________________________\n"
-    body = "\n".join(rows)
+    body = "\n".join(table_rows)
     table += body
-    return f"```
-{table}
-```"
+    return "```\n{}\n```".format(table)
 
 
 def paginate_rows(rows, page_size=15):
@@ -94,6 +108,7 @@ def build_report(parsed_data, match_results, escape=True, page=1, page_size=15):
     if escape:
         supplier_str = escape_md(supplier_str)
         date_str = escape_md(date_str)
+    # Убедимся, что экранирование не происходит повторно в строках ниже
     # Prepare table rows
     table_rows = []
     ok_total = 0
@@ -118,16 +133,18 @@ def build_report(parsed_data, match_results, escape=True, page=1, page_size=15):
         table_rows.append(_row(idx, name, qty, unit, price, status, escape=escape))
     # Pagination
     pages = paginate_rows(table_rows, page_size)
-    total_pages = len(pages)
-    page = max(1, min(page, total_pages))
-    current_rows = pages[page - 1] if pages else []
-    # Build table for current page
-    table = build_table(current_rows)
+    start = (page - 1) * page_size
+    end = start + page_size
+    rows_to_show = match_results[start:end]
+    table = build_table(rows_to_show)
+
+    # Pagination: total pages
+    total_pages = max(1, (len(match_results) + page_size - 1) // page_size)
 
     # Header and summary
     report = (
-        f"**Supplier:** {supplier_str}\n"
-        f"**Invoice date:** {date_str}\n"
+        f"*Supplier:* {supplier_str}\n"
+        f"*Invoice date:* {date_str}\n"
         f"{DIVIDER}\n"
     )
 

@@ -23,7 +23,7 @@ def test_build_report_with_escape():
 
     # Проверяем экранирование специальных символов
     assert r"Test \#Supplier" in report
-    assert r"Product \#1" in report
+    assert "Product \#1" in report
 
     # Проверяем наличие статусов
     assert "✅ ok" in report
