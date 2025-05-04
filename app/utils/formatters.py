@@ -5,3 +5,11 @@ def format_idr(val):
         return f"{val:,.0f}".replace(",", "\u202f") + " IDR"
     except Exception:
         return "—"
+
+def fmt_num(val):
+    """Format number with narrow space, no currency."""
+    try:
+        val = float(val)
+        return f"{val:,.0f}".replace(",", "\u202f")
+    except Exception:
+        return "—"
