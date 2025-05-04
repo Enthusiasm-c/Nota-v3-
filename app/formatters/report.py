@@ -1,5 +1,5 @@
 from decimal import Decimal
-import html  # Импорт для экранирования HTML-спецсимволов
+from html import escape  # Для экранирования только данных, не тегов
 
 # Fixed column widths for the mobile-friendly invoice table
 W_IDX = 3
@@ -94,7 +94,10 @@ def paginate_rows(rows, page_size=15):
 
 
 def build_header(supplier, date):
-    return f"<b>Supplier:</b> {supplier}<br><b>Invoice date:</b> {date}<br>"
+    return (
+        f"<b>Supplier:</b> {escape(supplier)}<br>"
+        f"<b>Invoice date:</b> {escape(date)}<br><br>"
+    )
 
 from app.utils.formatters import fmt_num, format_idr
 
@@ -129,8 +132,9 @@ def build_report(parsed_data, match_results, escape=True, page=1, page_size=15):
         name = item.get("name", "")
         if len(name) > 19:
             name = name[:18] + "…"
+        name = escape(name)
         qty = item.get("qty", "")
-        unit = item.get("unit", "")
+        unit = escape(item.get("unit", ""))
         total = item.get("line_total", "")
         total_str = fmt_num(total) if total not in (None, "") else "—"
         status = item.get("status", "")
@@ -149,15 +153,13 @@ def build_report(parsed_data, match_results, escape=True, page=1, page_size=15):
 
     # Header block
     header_html = build_header(supplier_str, date_str)
-    # Summary block
     summary_html = (
-        f"<b>✓ Correct:</b> {ok_count}  <b>🚫 Issues:</b> {issues_count}<br>"
+        f"<b>✓ Correct:</b> {ok_count}&nbsp;&nbsp;<b>🚫 Issues:</b> {issues_count}<br>"
         f"<b>💰 Invoice total:</b> {format_idr(invoice_total)}"
     )
-
     html_report = (
-        f"{header_html}<br>"
-        f"<pre>{table}</pre><br>"
+        f"{header_html}"
+        f"<pre>{table}</pre>"
         f"{summary_html}"
     )
     return html_report.strip(), issues_count > 0
