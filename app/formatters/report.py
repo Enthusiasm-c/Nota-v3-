@@ -8,6 +8,7 @@ W_UNIT = 4
 W_TOTAL = 13
 W_STATUS = 2
 FMT_ROW = "{idx:<3} {name:<19} {qty:>8} {unit:<4} {total:>13} {status}"
+DIVIDER = "────────────────────"  # 20 символов
 
 
 def format_idr(val):
@@ -22,9 +23,9 @@ def format_idr(val):
 def _row(idx, name, qty, unit, total, price, status, escape=False):
     # Формируем статус с эмодзи и текстом
     if status == "ok":
-        status_str = "✅ ok"
+        status_str = "ok"
     elif status == "unknown":
-        status_str = "❓ not found"
+        status_str = "❌ not found"
     elif status == "unit_mismatch":
         status_str = "⚠️ unit mismatch"
     else:
@@ -132,12 +133,12 @@ def build_report(parsed_data, match_results, escape=True, page=1, page_size=15):
     report = (
         f"\U0001f4e6 *Supplier:* {supplier_str}\n"
         f"\U0001f4c6 *Invoice date:* {date_str}\n"
-        "────────────────────────────────────────\n"
+        f"{DIVIDER}\n"
     )
     if has_errors:
         report += "⚠️ Обнаружены ошибки — исправьте их перед отправкой!\n"
     report += table
-    report += "────────────────────────────────────────\n"
+    report += f"{DIVIDER}\n"
     if total_pages > 1:
         report += f"Страница {page} из {total_pages}\n"
     ok_count = len([r for r in match_results if r.get('status') == 'ok'])
@@ -148,5 +149,5 @@ def build_report(parsed_data, match_results, escape=True, page=1, page_size=15):
         report += "ok\n"
     else:
         report += "need check\n"
-    report += "────────────────────────────────────────\n"
+    report += f"{DIVIDER}\n"
     return report.strip(), has_errors

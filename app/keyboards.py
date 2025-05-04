@@ -102,6 +102,7 @@ def build_invoice_report(
     submit_btn = None
     if not has_errors:
         submit_btn = InlineKeyboardButton(text="✅ Submit", callback_data="inv_submit")
+    # Если есть ошибки, submit_btn остается None и не добавляется в клавиатуру
     # Пагинация
     nav_buttons = []
     if total_pages > 1:
