@@ -1,5 +1,5 @@
 from app.keyboards import kb_edit
-from app.formatter import build_report
+from app.formatters.report import build_report
 
 
 def test_edit_callback_flow():
@@ -19,6 +19,6 @@ def test_edit_callback_flow():
     assert kb is not None
     # No kb_edit for status ok (by design, not tested here)
     # Report should reflect updated line
-    report = build_report({"supplier": None, "date": "2025-04-28"}, match_results)
+    report, _ = build_report({"supplier": None, "date": "2025-04-28"}, match_results)
     assert "Corrected Item A" in report
     assert "ok" in report

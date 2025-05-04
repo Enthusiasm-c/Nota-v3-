@@ -1,5 +1,6 @@
 import pytest
-from app.formatter import build_report, W_IDX, W_NAME, W_QTY, W_UNIT, W_PRICE, W_STATUS
+from app.formatters.report import build_report
+from app.formatter import W_IDX, W_NAME, W_QTY, W_UNIT, W_PRICE, W_STATUS
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 

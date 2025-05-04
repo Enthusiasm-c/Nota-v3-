@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import re
-from app.formatter import build_report
+from app.formatters.report import build_report
 import atexit
 import uuid
 import json

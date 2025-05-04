@@ -1,5 +1,5 @@
 import pytest
-from app.formatter import build_report
+from app.formatters.report import build_report
 from types import SimpleNamespace
 
 
@@ -19,7 +19,7 @@ def test_build_report_with_escape():
     ]
 
     # Вызываем функцию с escape=True
-    report = build_report(parsed, match_results, escape=True)
+    report, _ = build_report(parsed, match_results, escape=True)
 
     # Проверяем экранирование специальных символов
     assert r"Test \#Supplier" in report
@@ -54,7 +54,7 @@ def test_build_report_without_escape():
     ]
 
     # Вызываем функцию с escape=False
-    report = build_report(parsed, match_results, escape=False)
+    report, _ = build_report(parsed, match_results, escape=False)
 
     # Проверяем отсутствие экранирования специальных символов
     assert "Test #Supplier" in report
@@ -80,7 +80,7 @@ def test_build_report_edge_cases():
     match_results = []
 
     # Вызываем функцию
-    report = build_report(parsed, match_results, escape=True)
+    report, _ = build_report(parsed, match_results, escape=True)
 
     # Проверяем обработку None
     assert "Unknown supplier" in report

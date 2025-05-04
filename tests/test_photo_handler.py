@@ -49,7 +49,7 @@ async def test_photo_ok(monkeypatch, fake_msg):
     def fake_build_report(*args, **kwargs):
         return "OK"
 
-    monkeypatch.setattr("app.formatter.build_report", fake_build_report)
+    monkeypatch.setattr("app.formatters.report.build_report", fake_build_report)
 
     # Patch ParsedData to always have non-empty positions
     class FakeParsedData:

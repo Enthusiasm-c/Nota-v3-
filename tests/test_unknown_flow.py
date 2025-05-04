@@ -1,5 +1,5 @@
 from app.models import ParsedData
-from app.formatter import build_report
+from app.formatters.report import build_report
 from app.keyboards import kb_edit
 
 from datetime import date
@@ -19,7 +19,7 @@ def test_unknown_supplier_triggers_keyboard():
     )
     assert parsed2.date == date(2025, 4, 28)
     match_results = [{"name": "Item A", "qty": 1, "unit": "pcs", "status": "unknown"}]
-    report = build_report(parsed, match_results)
+    report, _ = build_report(parsed, match_results)
     assert "Unknown supplier" in report
     kb = kb_edit(0)
     assert kb is not None
