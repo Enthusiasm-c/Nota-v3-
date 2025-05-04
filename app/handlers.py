@@ -439,7 +439,7 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
         reply_markup = keyboards.build_invoice_report(
             text, has_errors, match_results, page=page, total_pages=total_pages, page_size=page_size
         )
-        text_to_send = f"Updated!\n{text}"
+        text_to_send = f"<b>Updated!</b><br>{text}"
         with open("/tmp/nota_debug.log", "a") as f:
             f.write(f"EDIT_MESSAGE_DEBUG: chat_id={message.chat.id}, msg_id={msg_id}, text_len={len(text_to_send)}, text_preview={text_to_send[:500]!r}, reply_markup={reply_markup}\n")
         await edit_message_text_safe(
@@ -465,7 +465,7 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
         reply_markup = keyboards.build_invoice_report(
             text, has_errors, match_results, page=page, total_pages=total_pages, page_size=page_size
         )
-        text_to_send = f"Updated!\n{text}"
+        text_to_send = f"<b>Updated!</b><br>{text}"
         with open("/tmp/nota_debug.log", "a") as f:
             f.write(f"EDIT_MESSAGE_DEBUG: chat_id={message.chat.id}, msg_id={msg_id}, text_len={len(text_to_send)}, text_preview={text_to_send[:500]!r}, reply_markup={reply_markup}\n")
         await edit_message_text_safe(
