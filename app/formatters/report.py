@@ -128,17 +128,10 @@ def build_report(parsed_data, match_results, escape=True, page=1, page_size=15):
         report += "⚠️ Обнаружены ошибки — исправьте их перед отправкой!\n"
     report += table
     report += "────────────────────────────────────────\n"
-    report += (
-        f"ok: {len([r for r in match_results if r.get('status') == 'ok'])} "
-        f"({format_idr(ok_total)})\n"
-    )
-    report += (
-        f"ошибки: {len([r for r in match_results if r.get('status') in ['unit_mismatch', 'unknown']])} "
-        f"({format_idr(mismatch_total)})\n"
-    )
-    report += f"не найдено: {unknown_count} (—)\n"
+    ok_count = len([r for r in match_results if r.get('status') == 'ok'])
+    errors_count = len([r for r in match_results if r.get('status') in ['unit_mismatch', 'unknown']])
+    report += f"Было успешно определено {ok_count} позиций\n"
+    report += f"Позиции, требующие подтверждения: {errors_count} шт.\n"
     report += "────────────────────────────────────────\n"
-    invoice_total = ok_total + mismatch_total
-    report += f"💰 Invoice total: *{format_idr(invoice_total)} IDR*\n"
     report += f"Страница {page} из {total_pages}\n" if total_pages > 1 else ""
     return report.strip(), has_errors
