@@ -1,5 +1,5 @@
 from decimal import Decimal
-import html
+import html  # Импорт для экранирования HTML-спецсимволов
 
 # Fixed column widths for the mobile-friendly invoice table
 W_IDX = 3
