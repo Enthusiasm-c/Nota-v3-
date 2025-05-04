@@ -13,7 +13,7 @@ from aiogram.filters import Command
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.exceptions import TelegramBadRequest
 from app import ocr, matcher, data_loader
-from app.utils.md import escape_v2
+from app.utils.md import escape_html
 from app.config import settings
 from pathlib import Path
 from aiogram.types import CallbackQuery
@@ -107,7 +107,7 @@ async def safe_edit(bot, chat_id, msg_id, text, kb=None, **kwargs):
     if parse_mode in ("MarkdownV2", ParseMode.MARKDOWN_V2) and not (
         text and text.startswith("\\")
     ):
-        text = escape_v2(text)
+        text = escape_html(text)
 
     try:
         # First attempt: with full formatting
@@ -476,7 +476,7 @@ async def photo_handler(message, state: FSMContext, **kwargs):
         )
 
         # Форматируем сообщение
-        formatted_message = escape_v2(full_message)
+        formatted_message = escape_html(full_message)
 
         # Логируем изменение размера после форматирования
         logger.debug(f"BUGFIX: Formatted message length: {len(formatted_message)}")
@@ -652,7 +652,7 @@ async def handle_nlu_text(message, state: FSMContext):
             pass
 
         # Отвечаем новым сообщением
-        formatted_response = escape_v2(assistant_response)
+        formatted_response = escape_html(assistant_response)
 
         # Отправляем ответ ассистента как новое сообщение
         await message.answer(formatted_response, parse_mode=ParseMode.MARKDOWN_V2)
@@ -892,7 +892,7 @@ async def handle_field_edit(message, state: FSMContext):
         report, has_errors = build_report(parsed_data, entry["match_results"], escape=False)
 
         # Применяем форматирование для Markdown
-        formatted_report = escape_v2(report)
+        formatted_report = escape_html(report)
 
         # Отправляем новое сообщение с обновленным отчетом
         try:

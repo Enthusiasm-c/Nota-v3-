@@ -25,15 +25,11 @@ def test_build_report_with_escape():
     assert "✓" in report
     assert "🚫" in report
 
-    # Проверяем таблицу
+    # Проверяем HTML-выход
     assert "<pre>" in report
-
-    # Проверяем Supplier и Invoice date
-    assert "Supplier" in report
-    assert "Invoice date" in report
-
-    # Проверяем корректные данные
-    assert "Test #Supplier" in report
+    assert "Supplier:" in report
+    assert "Invoice date:" in report
+    assert html.escape("Test #Supplier") in report
     assert "2025-05-04" in report
 
     # Проверяем summary
@@ -63,14 +59,10 @@ def test_build_report_without_escape():
     assert "✓" in report
     assert "🚫" in report
 
-    # Проверяем таблицу
+    # Проверяем HTML-выход
     assert "<pre>" in report
-
-    # Проверяем Supplier и Invoice date
-    assert "Supplier" in report
-    assert "Invoice date" in report
-
-    # Проверяем корректные данные
+    assert "Supplier:" in report
+    assert "Invoice date:" in report
     assert "Test #Supplier" in report
     assert "2025-05-04" in report
 
@@ -94,6 +86,7 @@ def test_build_report_edge_cases():
 
     # Нет позиций
     assert "<pre>" in report
+
     # Проверяем summary
     assert "Correct:" in report
     assert "Issues:" in report
