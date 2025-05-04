@@ -27,11 +27,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Set logging levels for different modules
-logging.getLogger("aiogram").setLevel(logging.WARNING)  # Reduce aiogram logs
+logging.getLogger("aiogram").setLevel(logging.DEBUG)    # Повысим уровень логов aiogram для отладки
+logging.getLogger("aiogram.event").setLevel(logging.DEBUG)  # Логи событий aiogram
 logging.getLogger("httpx").setLevel(logging.WARNING)    # Reduce httpx logs
 logging.getLogger("aiohttp").setLevel(logging.WARNING)  # Reduce aiohttp logs
 logging.getLogger("openai").setLevel(logging.WARNING)   # Reduce OpenAI client logs
-logging.getLogger("bot").setLevel(logging.INFO)         # Bot logs at INFO level
+logging.getLogger("bot").setLevel(logging.DEBUG)        # Bot logs at DEBUG level для отладки
 logging.getLogger("urllib3").setLevel(logging.WARNING)  # Reduce urllib3 logs
 logging.getLogger("asyncio").setLevel(logging.WARNING)  # Reduce asyncio logs
 logging.getLogger("matplotlib").setLevel(logging.WARNING)  # Reduce matplotlib logs
@@ -438,96 +439,102 @@ async def photo_handler(message, state: FSMContext, **kwargs):
         # Обновляем статус стадии
         update_stage("report", kwargs, update_progress_message)
         
-        # Отправляем полный отчет и подсказку в одном сообщении,
-        # чтобы избежать "мигания" сообщения при редактировании
+        # Полностью отказываемся от редактирования сообщений, так как оно нестабильно
+        # Вместо этого всегда отправляем новое сообщение
+        
+        # Лог: Подготовка отчета
+        logger.debug("BUGFIX: Starting report preparation")
+        
+        # Формируем полный отчет с подсказкой в одном сообщении
         full_message = report
         
         # Добавляем подсказку о редактировании непосредственно в отчет
         if edit_needed:
             full_message += "\n\n⚠️ Некоторые позиции не удалось определить. Используйте кнопки «Ред.» для корректировки."
         
-        # Простой отчет без форматирования (для запасного варианта)
-        simple_message = re.sub(r'[^a-zA-Z0-9\s,.;:()]', ' ', full_message)
+        # Лог: размер и характеристики отчета
+        logger.debug(f"BUGFIX: Full message prepared, length: {len(full_message)}, "
+                    f"has code blocks: {'```' in full_message}")
         
-        # Применяем escape_v2 для корректной обработки форматирования
+        # Форматируем сообщение
         formatted_message = escape_v2(full_message)
         
-        # Логируем основную информацию перед отправкой
-        logger.info(f"Report ready: {len(match_results)} positions")
+        # Логируем изменение размера после форматирования
+        logger.debug(f"BUGFIX: Formatted message length: {len(formatted_message)}")
         
-        # Отображаем финальный отчет, используя несколько уровней отказоустойчивости
-        success = False
-        
-        # Первая попытка: с MarkdownV2
+        # Пробуем удалить текущее сообщение о прогрессе
         try:
-            success = await safe_edit(
-                bot,
-                message.chat.id,
-                progress_msg_id,
-                formatted_message,
-                kb=inline_kb,
-                parse_mode="MarkdownV2"
-            )
-        except Exception:
-            pass
-            
-        # Вторая попытка: с обычным текстом
-        if not success:
-            try:
-                logger.info("Trying plain text report")
-                success = await safe_edit(
-                    bot,
-                    message.chat.id,
-                    progress_msg_id,
-                    simple_message,  # Используем упрощенный безопасный отчет
-                    kb=inline_kb,
-                    parse_mode=None
-                )
-            except Exception:
-                pass
+            logger.debug(f"BUGFIX: Attempting to delete progress message {progress_msg_id}")
+            await bot.delete_message(message.chat.id, progress_msg_id)
+            logger.debug("BUGFIX: Successfully deleted progress message")
+        except Exception as e:
+            logger.debug(f"BUGFIX: Could not delete progress message: {str(e)}")
         
-        # Третья попытка: максимально простое сообщение без форматирования
-        if not success:
+        # Отправляем новое сообщение с форматированным отчетом
+        try:
+            logger.debug("BUGFIX: Sending new message with formatted report and MarkdownV2")
+            result = await message.answer(
+                formatted_message,
+                reply_markup=inline_kb,
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+            logger.debug(f"BUGFIX: Successfully sent formatted report, new message ID: {result.message_id}")
+            # Сохраняем ID нового сообщения для дальнейшего доступа
+            # Это важно для редактирования позиций позже
+            entry = user_matches[(user_id, progress_msg_id)]
+            new_key = (user_id, result.message_id)
+            user_matches[new_key] = entry
+            # Удаляем старую запись, так как сообщение больше не существует
+            logger.debug(f"BUGFIX: Updating user_matches with new message ID {result.message_id}")
+            del user_matches[(user_id, progress_msg_id)]
+            success = True
+            
+        except Exception as format_err:
+            logger.debug(f"BUGFIX: Error sending formatted report: {str(format_err)}")
+            
+            # Запасной вариант: отправка простого текстового отчета
             try:
-                # Очень простое сообщение, которое точно должно пройти
-                ultrasimple_msg = "Отчет готов. Найдено позиций: " + str(len(match_results))
-                
-                success = await safe_edit(
-                    bot,
-                    message.chat.id,
-                    progress_msg_id,
-                    ultrasimple_msg,
-                    kb=inline_kb,
-                    parse_mode=None
-                )
-            except Exception:
-                pass
-                
-        # Четвертая попытка: создаем новое сообщение вместо редактирования существующего
-        if not success:
-            try:
-                # Удаляем старое сообщение
-                try:
-                    await bot.delete_message(message.chat.id, progress_msg_id)
-                except Exception:
-                    pass
-                
-                # Отправляем новое сообщение с кнопками
-                await message.answer(
-                    "Результаты анализа инвойса:",
+                logger.debug("BUGFIX: Attempting to send plain text report")
+                simple_message = re.sub(r'[^a-zA-Z0-9\s,.;:()]', ' ', full_message)
+                result = await message.answer(
+                    simple_message,
                     reply_markup=inline_kb,
                     parse_mode=None
                 )
-                
-                # Отправляем краткую информацию о позициях в отдельном сообщении
-                summary = f"📋 Найдено {len(match_results)} позиций:\n"
-                summary += f"✅ {sum(1 for p in match_results if p.get('status') == 'ok')} распознано успешно\n"
-                summary += f"⚠️ {sum(1 for p in match_results if p.get('status') != 'ok')} требуют проверки"
-                
-                await message.answer(summary, parse_mode=None)
+                logger.debug(f"BUGFIX: Successfully sent plain report, new message ID: {result.message_id}")
+                # Обновляем ID сообщения в справочнике
+                entry = user_matches[(user_id, progress_msg_id)]
+                new_key = (user_id, result.message_id)
+                user_matches[new_key] = entry
+                del user_matches[(user_id, progress_msg_id)]
                 success = True
-            except Exception as final_err:
-                logger.error(f"All report display attempts failed: {type(final_err).__name__}")
+                
+            except Exception as plain_err:
+                logger.debug(f"BUGFIX: Error sending plain report: {str(plain_err)}")
+                
+                # Последний вариант: отправка простого сообщения
+                try:
+                    logger.debug("BUGFIX: Sending ultra-simple message")
+                    # Очень простое сообщение с минимумом информации
+                    ultrasimple_msg = f"📋 Найдено {len(match_results)} позиций:\n"
+                    ultrasimple_msg += f"✅ {sum(1 for p in match_results if p.get('status') == 'ok')} распознано успешно\n"
+                    ultrasimple_msg += f"⚠️ {sum(1 for p in match_results if p.get('status') != 'ok')} требуют проверки"
+                    
+                    result = await message.answer(
+                        ultrasimple_msg,
+                        reply_markup=inline_kb,
+                        parse_mode=None
+                    )
+                    logger.debug(f"BUGFIX: Successfully sent summary message, new message ID: {result.message_id}")
+                    # Обновляем ID сообщения в справочнике
+                    entry = user_matches[(user_id, progress_msg_id)]
+                    new_key = (user_id, result.message_id)
+                    user_matches[new_key] = entry
+                    del user_matches[(user_id, progress_msg_id)]
+                    success = True
+                    
+                except Exception as final_err:
+                    logger.error(f"BUGFIX: All message attempts failed: {str(final_err)}")
         
         # Обновляем состояние пользователя
         await state.set_state(NotaStates.editing)
@@ -828,18 +835,36 @@ async def handle_field_edit(message, state: FSMContext):
                 # Применяем escape_v2 для корректной обработки блоков кода
                 formatted_report = escape_v2(report)
                 
-                # Используем функцию safe_edit для обновления отчета
-                success = await safe_edit(
-                    bot,
-                    message.chat.id,
-                    msg_id,
-                    formatted_report,
-                    kb=kb_report(entry["match_results"]),
-                    parse_mode=ParseMode.MARKDOWN_V2,
-                )
+                # BUGFIX: Отправляем новое сообщение вместо редактирования существующего
+                logger.debug(f"BUGFIX: Sending new report after field edit, old msg_id was {msg_id}")
                 
-                # Если не удалось обновить отчет, показать краткое сообщение об успешном обновлении
-                if not success:
+                try:
+                    # Отправляем новое сообщение с обновленным отчетом
+                    result = await message.answer(
+                        formatted_report,
+                        reply_markup=kb_report(entry["match_results"]),
+                        parse_mode=ParseMode.MARKDOWN_V2
+                    )
+                    
+                    # Фиксируем ID нового сообщения
+                    new_msg_id = result.message_id
+                    logger.debug(f"BUGFIX: Successfully sent new report, new message ID: {new_msg_id}")
+                    
+                    # Обновляем ссылки в user_matches
+                    chat_id = message.chat.id
+                    
+                    # Копируем данные в новую запись с новым ID сообщения
+                    new_key = (user_id, new_msg_id)
+                    user_matches[new_key] = entry.copy()
+                    
+                    # Удаляем старую запись, так как сообщение устарело
+                    logger.debug(f"BUGFIX: Updating user_matches, replacing key {(user_id, msg_id)} with {new_key}")
+                    if (user_id, msg_id) in user_matches:
+                        del user_matches[(user_id, msg_id)]
+                    
+                except Exception as e:
+                    logger.debug(f"BUGFIX: Error sending formatted report: {str(e)}")
+                    # Отправляем простое подтверждение редактирования
                     await message.answer(
                         f"✅ Поле {field} обновлено. Позиция {idx+1} изменена.",
                         parse_mode=None
