@@ -324,14 +324,25 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
         page_size = 15
         total_pages = (total_rows + page_size - 1) // page_size
         report = invoice_report.build_report(invoice, match_results, page=page)
-        await message.bot.edit_message_text(
-            f"Updated!\n{report}",
-            message.chat.id,
-            msg_id,
-            reply_markup=keyboards.build_invoice_report(
-                invoice["positions"], page=page, total_pages=total_pages
-            ),
+        # Подробное логирование перед отправкой
+        text_to_send = f"Updated!\n{report}"
+        reply_markup = keyboards.build_invoice_report(
+            invoice["positions"], page=page, total_pages=total_pages
         )
+        print(f"EDIT_MESSAGE_DEBUG: chat_id={message.chat.id}, msg_id={msg_id}, text_len={len(text_to_send)}, text_preview={text_to_send[:500]!r}, reply_markup={reply_markup}")
+        try:
+            await message.bot.edit_message_text(
+                text_to_send,
+                message.chat.id,
+                msg_id,
+                reply_markup=reply_markup,
+            )
+        except Exception as e:
+            import traceback
+            print(f"EDIT_MESSAGE_ERROR: {e}")
+            if hasattr(e, 'description'):
+                print(f"EDIT_MESSAGE_ERROR_DESCRIPTION: {e.description}")
+            traceback.print_exc()
         await message.bot.edit_message_reply_markup(
             message.chat.id, msg_id, reply_markup=None
         )
@@ -348,14 +359,25 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
         page_size = 15
         total_pages = (total_rows + page_size - 1) // page_size
         report = invoice_report.build_report(invoice, match_results, page=page)
-        await message.bot.edit_message_text(
-            f"Updated!\n{report}",
-            message.chat.id,
-            msg_id,
-            reply_markup=keyboards.build_invoice_report(
-                invoice["positions"], page=page, total_pages=total_pages
-            ),
+        # Подробное логирование перед отправкой
+        text_to_send = f"Updated!\n{report}"
+        reply_markup = keyboards.build_invoice_report(
+            invoice["positions"], page=page, total_pages=total_pages
         )
+        print(f"EDIT_MESSAGE_DEBUG: chat_id={message.chat.id}, msg_id={msg_id}, text_len={len(text_to_send)}, text_preview={text_to_send[:500]!r}, reply_markup={reply_markup}")
+        try:
+            await message.bot.edit_message_text(
+                text_to_send,
+                message.chat.id,
+                msg_id,
+                reply_markup=reply_markup,
+            )
+        except Exception as e:
+            import traceback
+            print(f"EDIT_MESSAGE_ERROR: {e}")
+            if hasattr(e, 'description'):
+                print(f"EDIT_MESSAGE_ERROR_DESCRIPTION: {e.description}")
+            traceback.print_exc()
         await message.bot.edit_message_reply_markup(
             message.chat.id, msg_id, reply_markup=keyboards.kb_edit_fields(idx)
         )
