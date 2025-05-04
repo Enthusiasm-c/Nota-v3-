@@ -100,15 +100,29 @@ async def safe_edit(bot, chat_id, msg_id, text, kb=None, **kwargs):
     parse_mode = kwargs.get("parse_mode")
     logger = logging.getLogger("bot")
     
-    # Log minimal information at INFO level
-    text_length = len(text) if text else 0
+    # DIAGNOSTIC: Подробное логирование для отладки
+    logger.warning(f"DIAGNOSTICS - safe_edit called for message {msg_id} in chat {chat_id}")
+    logger.warning(f"DIAGNOSTICS - parse_mode: {parse_mode}, text length: {len(text) if text else 0}")
     
     # Apply escape_v2 only if not already escaped and using MarkdownV2
     if parse_mode in ("MarkdownV2", ParseMode.MARKDOWN_V2) and not (text and text.startswith("\\")):
+        # DIAGNOSTIC: Логируем до экранирования
+        before_len = len(text) if text else 0
         text = escape_v2(text)
+        after_len = len(text) if text else 0
+        logger.warning(f"DIAGNOSTICS - Text escaped from {before_len} to {after_len} chars")
+    
+    # DIAGNOSTIC: Проверяем, есть ли сообщение
+    try:
+        logger.warning(f"DIAGNOSTICS - Checking if message {msg_id} exists")
+        message = await bot.get_message(chat_id=chat_id, message_id=msg_id)
+        logger.warning(f"DIAGNOSTICS - Message exists: {bool(message)}")
+    except Exception as check_err:
+        logger.warning(f"DIAGNOSTICS - Error checking message: {str(check_err)}")
     
     try:
         # First attempt: with full formatting
+        logger.warning(f"DIAGNOSTICS - Attempt 1: Editing with parse_mode={parse_mode}")
         await bot.edit_message_text(
             chat_id=chat_id,
             message_id=msg_id,
@@ -116,35 +130,46 @@ async def safe_edit(bot, chat_id, msg_id, text, kb=None, **kwargs):
             reply_markup=kb,
             **kwargs
         )
-        logger.info(f"Successfully edited message {msg_id}")
+        logger.warning(f"DIAGNOSTICS - Successfully edited message {msg_id}")
+        return True
         
     except Exception as e:
-        logger.warning(f"Error editing message: {type(e).__name__}")
+        logger.warning(f"DIAGNOSTICS - Error editing message: {type(e).__name__}: {str(e)}")
         
         if isinstance(e, TelegramBadRequest) and (
             "can't parse entities" in str(e) or "parse_mode" in str(e)
         ):
-            logger.warning("MarkdownV2 edit failed, retrying without parse_mode")
+            logger.warning("DIAGNOSTICS - MarkdownV2 edit failed, retrying without parse_mode")
             
             try:
                 # Second attempt: without formatting
+                logger.warning(f"DIAGNOSTICS - Attempt 2: Editing without parse_mode")
+                
+                # Создаем копию kwargs без parse_mode
+                clean_kwargs = {k: v for k, v in kwargs.items() if k != "parse_mode"}
+                logger.warning(f"DIAGNOSTICS - Clean kwargs: {clean_kwargs}")
+                
                 await bot.edit_message_text(
                     chat_id=chat_id,
                     message_id=msg_id,
                     text=text,
                     reply_markup=kb,
-                    **{k: v for k, v in kwargs.items() if k != "parse_mode"}
+                    **clean_kwargs
                 )
-                logger.info("Message sent without formatting")
+                logger.warning("DIAGNOSTICS - Message sent without formatting")
+                return True
                 
             except Exception as retry_error:
-                logger.error(f"Failed to edit message without parse_mode: {type(retry_error).__name__}")
+                logger.error(f"DIAGNOSTICS - Failed to edit message without parse_mode: {type(retry_error).__name__}: {str(retry_error)}")
                 
                 # Third attempt: clean text from all special characters
                 try:
-                    clean_text = re.sub(r'[^\w\s]', '', text)
+                    logger.warning(f"DIAGNOSTICS - Attempt 3: Sending ultra-clean text")
+                    clean_text = re.sub(r'[^\w\s]', ' ', text)
                     if len(clean_text) < 10:  # If text became too short
                         clean_text = "Failed to render message with special characters. Please try again."
+                    
+                    logger.warning(f"DIAGNOSTICS - Clean text length: {len(clean_text)}")
                         
                     await bot.edit_message_text(
                         chat_id=chat_id,
@@ -152,14 +177,17 @@ async def safe_edit(bot, chat_id, msg_id, text, kb=None, **kwargs):
                         text=clean_text,
                         reply_markup=kb
                     )
-                    logger.info("Sent fallback plain text message")
+                    logger.warning("DIAGNOSTICS - Sent fallback plain text message")
+                    return True
                     
                 except Exception as last_error:
-                    logger.error(f"All attempts to edit message failed: {type(last_error).__name__}")
+                    logger.error(f"DIAGNOSTICS - All attempts to edit message failed: {type(last_error).__name__}: {str(last_error)}")
                     # No further actions, just log the error
+                    return False
         else:
-            logger.error(f"Unexpected error editing message: {type(e).__name__}")
-            raise
+            logger.error(f"DIAGNOSTICS - Unexpected error editing message: {type(e).__name__}: {str(e)}")
+            # Не выбрасываем исключение, просто возвращаем False
+            return False
 
 
 from app.utils.api_decorators import with_async_retry_backoff, ErrorType
@@ -444,14 +472,41 @@ async def photo_handler(message, state: FSMContext, **kwargs):
         if edit_needed:
             full_message += "\n\n⚠️ Некоторые позиции не удалось определить. Используйте кнопки «Ред.» для корректировки."
         
+        # Добавляем дополнительное детальное логирование для диагностики
+        logger.warning(f"DIAGNOSTICS - Full message contains {full_message.count('```')} ``` markers")
+        logger.warning(f"DIAGNOSTICS - Full message length: {len(full_message)}")
+        
+        # Принудительно удаляем все потенциально проблемные символы
+        # Простой отчет без любого форматирования
+        simple_message = re.sub(r'[^a-zA-Z0-9\s,.;:()]', ' ', full_message)
+        logger.warning(f"DIAGNOSTICS - Created simplified message length: {len(simple_message)}")
+        
         # Применяем escape_v2 для корректной обработки форматирования
         formatted_message = escape_v2(full_message)
         
         # Логируем основную информацию перед отправкой
-        logger.info(f"Report ready: {len(report)} chars, {len(match_results)} positions")
+        logger.warning(f"DIAGNOSTICS - Report ready: {len(report)} chars, {len(match_results)} positions, formatted length: {len(formatted_message)}")
         
         # Отображаем финальный отчет, используя несколько уровней отказоустойчивости
         success = False
+        
+        # НОВЫЙ МЕТОД: предварительное тестовое сообщение
+        try:
+            # Отправляем отдельное тестовое сообщение, чтобы убедиться, что бот работает
+            test_msg = await message.answer(
+                "Подготовка отчета... Один момент.",
+                parse_mode=None
+            )
+            logger.warning(f"DIAGNOSTICS - Test message sent successfully")
+            
+            # Удаляем тестовое сообщение после небольшой задержки
+            try:
+                await asyncio.sleep(1)
+                await bot.delete_message(message.chat.id, test_msg.message_id)
+            except:
+                pass
+        except Exception as test_err:
+            logger.error(f"CRITICAL - Cannot send even test message: {str(test_err)}")
         
         # Первая попытка: с MarkdownV2
         try:
@@ -463,52 +518,82 @@ async def photo_handler(message, state: FSMContext, **kwargs):
                 kb=inline_kb,
                 parse_mode="MarkdownV2"
             )
+            logger.warning("DIAGNOSTICS - MarkdownV2 message sent successfully")
             success = True
         except Exception as e:
-            logger.warning(f"Failed to send formatted report: {type(e).__name__}")
+            logger.warning(f"DIAGNOSTICS - Failed to send formatted report: {type(e).__name__}: {str(e)}")
             
         # Вторая попытка: с обычным текстом
         if not success:
             try:
-                logger.info("Trying plain text report")
+                logger.warning("DIAGNOSTICS - Trying plain text report")
                 await safe_edit(
                     bot,
                     message.chat.id,
                     progress_msg_id,
-                    full_message,  # Неформатированный полный отчет
+                    simple_message,  # Используем упрощенный безопасный отчет
                     kb=inline_kb,
                     parse_mode=None
                 )
+                logger.warning("DIAGNOSTICS - Plain text message sent successfully")
                 success = True
             except Exception as plain_err:
-                logger.error(f"Failed to send plain text report: {type(plain_err).__name__}")
+                logger.error(f"DIAGNOSTICS - Failed to send plain text report: {type(plain_err).__name__}: {str(plain_err)}")
         
-        # Третья попытка: создаем новое сообщение вместо редактирования существующего
+        # Третья попытка: максимально простое сообщение без форматирования
         if not success:
             try:
+                logger.warning("DIAGNOSTICS - Trying ultrasimple message format")
+                # Очень простое сообщение, которое точно должно пройти
+                ultrasimple_msg = "Отчет готов. Найдено позиций: " + str(len(match_results))
+                
+                await safe_edit(
+                    bot,
+                    message.chat.id,
+                    progress_msg_id,
+                    ultrasimple_msg,
+                    kb=inline_kb,
+                    parse_mode=None
+                )
+                logger.warning("DIAGNOSTICS - Ultrasimple message sent successfully")
+                success = True
+            except Exception as ultra_err:
+                logger.error(f"DIAGNOSTICS - Failed to send even ultrasimple message: {str(ultra_err)}")
+                
+        # Четвертая попытка: создаем новое сообщение вместо редактирования существующего
+        if not success:
+            try:
+                logger.warning("DIAGNOSTICS - Trying to send new message instead of editing")
                 # Удаляем старое сообщение
                 try:
                     await bot.delete_message(message.chat.id, progress_msg_id)
-                except:
-                    pass
+                    logger.warning("DIAGNOSTICS - Successfully deleted progress message")
+                except Exception as del_err:
+                    logger.error(f"DIAGNOSTICS - Could not delete progress message: {str(del_err)}")
                 
                 # Отправляем новое сообщение
-                await message.answer(
+                new_msg = await message.answer(
                     "Результаты анализа инвойса:",
                     reply_markup=inline_kb,
                     parse_mode=None
                 )
+                logger.warning(f"DIAGNOSTICS - New message sent with ID: {new_msg.message_id}")
                 
                 # Отправляем краткую информацию о позициях в отдельном сообщении
                 summary = f"📋 Найдено {len(match_results)} позиций:\n"
                 summary += f"✅ {sum(1 for p in match_results if p.get('status') == 'ok')} распознано успешно\n"
                 summary += f"⚠️ {sum(1 for p in match_results if p.get('status') != 'ok')} требуют проверки"
                 
-                await message.answer(summary, parse_mode=None)
+                summary_msg = await message.answer(summary, parse_mode=None)
+                logger.warning(f"DIAGNOSTICS - Summary message sent with ID: {summary_msg.message_id}")
                 
                 success = True
             except Exception as final_err:
-                logger.error(f"All report display attempts failed: {type(final_err).__name__}")
+                logger.error(f"DIAGNOSTICS - All report display attempts failed: {str(final_err)}")
+                
+        # Пятая попытка: если совсем ничего не помогло, просто логируем проблему
+        if not success:
+            logger.error("CRITICAL - Unable to display message by any method! Check Telegram API status.")
         
         # Обновляем состояние пользователя
         await state.set_state(NotaStates.editing)
