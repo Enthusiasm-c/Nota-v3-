@@ -1,64 +1,21 @@
 import pytest
-from app.utils.md import escape_v2, escape_md
+from app.utils.md import escape_html
 
 
-@pytest.mark.parametrize(
-    "raw,expected",
-    [
-        ("- price_per_kg *bold* _it_", r"\- price\_per\_kg \*bold\* \_it\_"),
-        ("abc `def` ghi", r"abc \`def\` ghi"),
-        ("[link](url)", r"\[link\]\(url\)"),
-        ("sk-xxx", r"sk\-xxx"),
-        ("#hashtag", r"\#hashtag"),  # Добавляем тест для # символа
-    ],
-)
-def test_escape_md_basic(raw, expected):
-    formatted = escape_md(raw)
-    # All special chars must be escaped
-    for char in ["-", "_", "*", "`", "[", "]", "(", ")", "#"]:
-        assert char not in formatted or f"\\{char}" in formatted
-    # Check expected substring
-    assert expected in formatted
+def test_escape_html_basic():
+    import html
+    cases = [
+        ("<b>bold</b>", "&lt;b&gt;bold&lt;/b&gt;"),
+        ("Fish & Chips", "Fish &amp; Chips"),
+        ("'quote' and \"double\"", "&#x27;quote&#x27; and &quot;double&quot;"),
+        ("<script>alert('xss')</script>", "&lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt;"),
+        ("#hashtag!", "#hashtag!"),  # HTML escape не трогает # или !
+    ]
+    for raw, expected in cases:
+        assert escape_html(raw) == expected
+        # Проверяем, что результат совпадает с html.escape
+        assert escape_html(raw) == html.escape(raw)
 
-
-def test_escape_v2_with_code_blocks():
-    """Проверяет экранирование с сохранением блоков кода"""
-    input_text = """Текст *с форматированием* и #хэштегами
-```
-Блок кода с #символами, которые не должны экранироваться!
-function test() { return 2 + 2; }
-```
-И ещё *форматированный* текст с [ссылкой](https://example.com)"""
-
-    result = escape_v2(input_text)
-
-    # Проверяем, что форматирование экранировано
-    assert r"\*с форматированием\*" in result
-    assert r"\#хэштегами" in result
-    assert r"\*форматированный\*" in result
-    assert r"\[ссылкой\]\(https://example\.com\)" in result
-
-    # Проверяем, что в блоке кода НЕТ экранирования
-    assert "Блок кода с #символами" in result  # # без экранирования
-    assert "function test() { return 2 + 2; }" in result
-
-
-def test_escape_v2_multiple_code_blocks():
-    """Проверяет экранирование с несколькими блоками кода"""
-    input_text = """Текст с *форматированием*
-```
-Первый блок кода #1
-```
-Текст между блоками с #хэштегом
-```
-Второй блок кода #2
-```
-Финальный *текст* с форматированием"""
-
-    result = escape_v2(input_text)
-
-    # Проверяем экранирование вне блоков кода
-    assert r"\*форматированием\*" in result
     assert r"\#хэштегом" in result
     assert r"\*текст\*" in result
 

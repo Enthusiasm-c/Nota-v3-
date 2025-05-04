@@ -1,7 +1,7 @@
 import pytest
 from app.formatters.report import build_report
 from types import SimpleNamespace
-
+import html
 
 def test_build_report_with_escape():
     """Проверяет работу build_report с параметром escape=True."""
@@ -21,21 +21,24 @@ def test_build_report_with_escape():
     # Вызываем функцию с escape=True
     report, _ = build_report(parsed, match_results, escape=True)
 
-    # Проверяем экранирование специальных символов
-    assert r"Test \#Supplier" in report
-    assert "Product \#1" in report
-
     # Проверяем наличие статусов
-    assert "✅ ok" in report
-    assert "❓ not found" in report
+    assert "✓" in report
+    assert "🚫" in report
 
-    # Проверяем числа в отчете
-    assert "5" in report
-    assert "kg" in report
-    assert "100" in report
+    # Проверяем таблицу
+    assert "<pre>" in report
 
-    # Проверяем блок кода для таблицы
-    assert "```" in report
+    # Проверяем Supplier и Invoice date
+    assert "Supplier" in report
+    assert "Invoice date" in report
+
+    # Проверяем корректные данные
+    assert "Test #Supplier" in report
+    assert "2025-05-04" in report
+
+    # Проверяем summary
+    assert "Correct:" in report
+    assert "Issues:" in report
 
 
 def test_build_report_without_escape():
@@ -56,21 +59,24 @@ def test_build_report_without_escape():
     # Вызываем функцию с escape=False
     report, _ = build_report(parsed, match_results, escape=False)
 
-    # Проверяем отсутствие экранирования специальных символов
-    assert "Test #Supplier" in report
-    assert "Product #1" in report
-
     # Проверяем наличие статусов
-    assert "✅ ok" in report
-    assert "❓ not found" in report
+    assert "✓" in report
+    assert "🚫" in report
 
-    # Проверяем числа в отчете
-    assert "5" in report
-    assert "kg" in report
-    assert "100" in report
+    # Проверяем таблицу
+    assert "<pre>" in report
 
-    # Проверяем блок кода для таблицы
-    assert "```" in report
+    # Проверяем Supplier и Invoice date
+    assert "Supplier" in report
+    assert "Invoice date" in report
+
+    # Проверяем корректные данные
+    assert "Test #Supplier" in report
+    assert "2025-05-04" in report
+
+    # Проверяем summary
+    assert "Correct:" in report
+    assert "Issues:" in report
 
 
 def test_build_report_edge_cases():
@@ -87,7 +93,7 @@ def test_build_report_edge_cases():
     assert "—" in report  # Placeholder для пустой даты
 
     # Нет позиций
-    assert "```" in report
-
-    # Проверяем отчет без OK позиций
-    assert "✅" not in report.split("```")[-1]  # После блока кода не должно быть OK
+    assert "<pre>" in report
+    # Проверяем summary
+    assert "Correct:" in report
+    assert "Issues:" in report

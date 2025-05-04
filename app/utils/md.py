@@ -1,82 +1,15 @@
 import re
 import logging
+import html
 
 MDV2_SPECIALS = r"_\*\[\]\(\)~`>#+\-=|{}.!"
 
 
-def escape_md(text: str, version=2) -> str:
-    r"""
-    Экранирует спецсимволы Telegram MarkdownV2.
-    Аргумент version для совместимости.
-    """
-    # Экранируем все спецсимволы из константы
-    return re.sub(r"([" + MDV2_SPECIALS + r"])", r"\\\1", text)
-
-
-def escape_v2(text: str) -> str:
-    r"""
-    Экранирует все спецсимволы Markdown V2,
-    сохраняя блоки кода нетронутыми.
-    Для безопасной отправки в Telegram.
-    """
+def escape_html(text: str) -> str:
+    """Экранирует спецсимволы для HTML (используется для Telegram HTML parse_mode)."""
     if text is None:
         return ""
-
-    logger = logging.getLogger("md")
-
-    try:
-        # Обработка блоков кода и обычного текста отдельно
-        result_parts = []
-        is_in_code_block = False
-
-        # Разбиваем текст на строки для обработки блоков кода
-        lines = text.split("\n")
-        current_block = []
-
-        for line in lines:
-            stripped_line = line.strip()
-
-            # Обработка маркеров блоков кода
-            if stripped_line == "```":
-                # Обрабатываем накопленный блок текста
-                if current_block:
-                    block_text = "\n".join(current_block)
-                    # Экранируем только текст вне блоков кода
-                    if not is_in_code_block:
-                        block_text = escape_md(block_text, version=2)
-                    result_parts.append(block_text)
-                    current_block = []
-
-                # Добавляем маркер блока кода без экранирования
-                result_parts.append("```")
-                is_in_code_block = not is_in_code_block
-            else:
-                current_block.append(line)
-
-        # Добавляем последний блок, если он есть
-        if current_block:
-            block_text = "\n".join(current_block)
-            if not is_in_code_block:
-                block_text = escape_md(block_text, version=2)
-            result_parts.append(block_text)
-
-        # Собираем текст обратно
-        result = "\n".join(result_parts)
-
-        # КРИТИЧНО: Проверяем и исправляем проблемные символы, которые часто вызывают ошибки
-        problematic_chars = {
-            ".": "\\.",
-            "#": "\\#",
-            "!": "\\!",
-            "+": "\\+",
-            "=": "\\=",
-            "|": "\\|",
-            "{": "\\{",
-            "}": "\\}",
-            "-": "\\-",
-        }
-
-        # Ищем части вне блоков кода для проверки неэкранированных символов
+    return html.escape(text)
         parts = result.split("```")
         for i in range(0, len(parts), 2):  # Чётные индексы - части вне блоков кода
             if i < len(parts):

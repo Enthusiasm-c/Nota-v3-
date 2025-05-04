@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock
 @pytest.mark.asyncio
 async def test_formatter_no_bad_chars():
     """
-    Формирует отчёт build_report и отправляет его через send_message(parse_mode=MarkdownV2).
-    Проверяет, что Telegram не ругается на спецсимволы (#, !, | ...).
+    Формирует отчёт build_report и отправляет его через send_message(parse_mode=HTML).
+    Проверяет, что Telegram не ругается на спецсимволы (#, !, | ...), а отчёт формируется в HTML.
     """
 
     # Фейковый бот
@@ -38,27 +38,25 @@ async def test_formatter_no_bad_chars():
     ]
     text = build_report(parsed, match_results)
     # Попытка отправки (имитируем Telegram API)
-    await bot.send_message(42, text, parse_mode="MarkdownV2")
+    await bot.send_message(42, text, parse_mode="HTML")
     # Проверяем, что сообщение ушло и parse_mode был верный
     assert bot.sent, "Message was not sent"
     chat_id, sent_text, parse_mode = bot.sent[0]
-    assert parse_mode == "MarkdownV2"
-    # Проверяем, что спецсимволы экранированы или внутри code block
-    assert "```" in sent_text, "Table must be in code block"
+    assert parse_mode == "HTML"
+    # Проверяем, что отчёт в HTML (<pre>), а не в Markdown code block
+    assert "<pre>" in sent_text, "Table must be in <pre> HTML block"
     assert "#  NAME" in sent_text, "Header must be present and not cause error"
+    # Проверяем, что спецсимволы экранированы
+    import html
+    assert html.escape('#ООО "Тест+!"') in sent_text
+    assert html.escape('#Кефир (1л)') in sent_text
+    assert html.escape('Молоко!') in sent_text
+    assert html.escape('Творог|') in sent_text
     # (Тест не падает, если нет TelegramBadRequest)
 
-    # Проверяем, что нет языка после трёх кавычек
-    for line in sent_text.splitlines():
-        if line.strip().startswith("```"):
-            assert line.strip() == "```", "Code block must not have language tag!"
-            break
-    # Проверяем, что все строки таблицы имеют нужную длину колонок
-    in_table = False
-    for line in sent_text.splitlines():
-        if line.strip() == "```":
-            if in_table:
-                break
+    # Проверяем, что нет Markdown code block
+    assert "```" not in sent_text, "Should not use Markdown code block in HTML mode"
+
             in_table = True
             continue
         if in_table and line.strip() and not line.startswith("─"):
