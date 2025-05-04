@@ -73,9 +73,10 @@ async def handle_cancel(call: CallbackQuery, state: FSMContext):
                 reply_markup=keyboards.build_invoice_report(
                     text, has_errors, match_results, page=page, total_pages=total_pages
                 ),
+                parse_mode="HTML"
             )
         else:
-            await call.message.edit_text("Editing cancelled. All keyboards removed.")
+            await call.message.edit_text("Editing cancelled. All keyboards removed.", parse_mode="HTML")
         await state.clear()
         return
     idx = int(call.data.split(":")[1])
@@ -137,6 +138,7 @@ async def handle_page_next(call: CallbackQuery, state: FSMContext):
         reply_markup=keyboards.build_invoice_report(
             text, has_errors, match_results, page=page, total_pages=total_pages
         ),
+        parse_mode="HTML"
     )
 
 
@@ -199,6 +201,7 @@ async def handle_submit(call: CallbackQuery, state: FSMContext):
     await call.message.edit_text(
         "Вы уверены, что хотите отправить инвойс?",
         reply_markup=confirm_kb,
+        parse_mode="HTML"
     )
 
 

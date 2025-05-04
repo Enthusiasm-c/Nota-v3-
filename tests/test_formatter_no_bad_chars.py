@@ -1,6 +1,5 @@
 import pytest
 from app.formatters.report import build_report
-from app.formatters.report import W_IDX, W_NAME, W_QTY, W_UNIT, W_PRICE, W_STATUS
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -36,7 +35,7 @@ async def test_formatter_no_bad_chars():
         },
         {"name": "Творог|", "qty": 1, "unit": "кг", "price": 200, "status": "unknown"},
     ]
-    text = build_report(parsed, match_results)
+    text, _ = build_report(parsed, match_results)
     # Попытка отправки (имитируем Telegram API)
     await bot.send_message(42, text, parse_mode="HTML")
     # Проверяем, что сообщение ушло и parse_mode был верный
