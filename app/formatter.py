@@ -61,23 +61,12 @@ def _row(
     )
 
 
-rows: list[str]) -> str:
-    print('BUILD_TABLE_DEBUG')
-    header = _row("#", "NAME", "QTY", "UNIT", "PRICE", "TOTAL", "STATUS")
-    body = "\n".join(rows)
-    return f"```\n{header}\n{body}\n```"
+# build_table удалён — используйте app/formatters/report.py
 
 
 from typing import Any
 
-
-
-# build_report удалён — используйте app/formatters/report.py
-# build_table удалён — используйте app/formatters/report.py
-
-    parsed_data: dict[str, Any] | Any,
-    match_results: list[dict[str, Any]],
-    escape: bool = True
+# build_report и build_table удалены — используйте app/formatters/report.py
 ) -> str:
     """
     Формирует отчет по инвойсу в формате MarkdownV2.
