@@ -3,7 +3,9 @@ import logging
 from app.formatter import build_report
 import atexit
 import uuid
-from aiogram import Bot, Dispatcher
+import json
+import time
+from aiogram import Bot, Dispatcher, types
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command
@@ -45,7 +47,7 @@ def create_bot_and_dispatcher():
 # Глобальные bot и dp убраны для тестируемости.
 bot = None
 dp = None
-
+# assistant_thread_id убран из глобальных переменных и перенесен в FSMContext
 
 
 class NotaStates(StatesGroup):
@@ -96,6 +98,79 @@ async def safe_edit(bot, chat_id, msg_id, text, kb=None, **kwargs):
             raise
 
 
+from app.utils.api_decorators import with_async_retry_backoff, ErrorType
+
+@with_async_retry_backoff(max_retries=2, initial_backoff=1.0, backoff_factor=2.0)
+async def ask_assistant(thread_id, message):
+    """
+    Send a message to the OpenAI Assistant and get the response.
+    Использует декоратор with_async_retry_backoff для автоматической обработки ошибок и повторных попыток.
+    
+    Args:
+        thread_id: ID потока в OpenAI Assistant
+        message: Сообщение для обработки
+        
+    Returns:
+        str: Ответ от ассистента или сообщение об ошибке
+    """
+    from app.config import get_chat_client
+    client = get_chat_client()
+    if not client or not settings.OPENAI_ASSISTANT_ID:
+        logging.error("Assistant unavailable: missing client or assistant ID")
+        return "Sorry, the assistant is unavailable at the moment. Please try again later."
+    
+    # Add the user's message to the thread
+    client.beta.threads.messages.create(
+        thread_id=thread_id,
+        role="user",
+        content=message
+    )
+    
+    # Run the assistant on the thread
+    run = client.beta.threads.runs.create(
+        thread_id=thread_id,
+        assistant_id=settings.OPENAI_ASSISTANT_ID
+    )
+
+    # Wait for the run to complete (with timeout)
+    start_time = time.time()
+    timeout = 30  # 30 seconds timeout
+    while True:
+        if time.time() - start_time > timeout:
+            # Timeout error - raise exception to trigger retry in decorator
+            raise RuntimeError("The assistant took too long to respond.")
+        
+        run_status = client.beta.threads.runs.retrieve(
+            thread_id=thread_id,
+            run_id=run.id
+        )
+        
+        if run_status.status == "completed":
+            # Success path
+            # Get the latest message from the assistant
+            messages = client.beta.threads.messages.list(
+                thread_id=thread_id
+            )
+            
+            # Return the content of the last message from the assistant
+            for msg in messages.data:
+                if msg.role == "assistant":
+                    # Get the text content from the message
+                    if hasattr(msg, "content") and msg.content:
+                        for content_part in msg.content:
+                            if hasattr(content_part, "text") and content_part.text:
+                                return content_part.text.value
+                    return "Assistant responded with no text content."
+            
+            return "No response from the assistant."
+            
+        elif run_status.status in ["failed", "cancelled", "expired"]:
+            # Fatal error in run - raise exception to trigger retry in decorator
+            raise RuntimeError(f"Assistant response failed with status: {run_status.status}")
+        
+        await asyncio.sleep(1)  # Poll every second
+
+
 def register_handlers(dp, bot=None):
     dp["__unhandled__"] = _dummy
     logging.getLogger("aiogram.event").setLevel(logging.DEBUG)
@@ -125,16 +200,27 @@ __all__ = ["create_bot_and_dispatcher", "register_handlers"]
 
 
 async def cmd_start(message, state: FSMContext):
-    global assistant_thread_id
-    # Create a new thread for Assistant if not exists
-    if assistant_thread_id is None:
+    # Получаем текущие данные состояния пользователя
+    user_data = await state.get_data()
+    
+    # Проверяем, есть ли уже thread_id в состоянии
+    if "assistant_thread_id" not in user_data:
+        # Создаем новый поток для пользователя если нет
         from openai import OpenAI
-        client = OpenAI(api_key=settings.OPENAI_CHAT_KEY)
+        from app.config import get_chat_client
+        
+        client = get_chat_client()
+        if not client:
+            client = OpenAI(api_key=settings.OPENAI_CHAT_KEY)
+            
         thread = client.beta.threads.create()
-        assistant_thread_id = thread.id
+        # Сохраняем thread_id в состоянии пользователя
+        await state.update_data(assistant_thread_id=thread.id)
+        logger.info(f"Created new assistant thread for user {message.from_user.id}")
+    
     await state.set_state(NotaStates.lang)
     await message.answer(
-        "Hi! I’m Nota AI Bot. Choose interface language.",
+        "Hi! I'm Nota AI Bot. Choose interface language.",
         reply_markup=kb_main(),
     )
 
@@ -154,47 +240,248 @@ async def cb_new_invoice(callback: CallbackQuery, state: FSMContext):
 
 
 
-async def photo_handler(message, state: FSMContext):
-    # TODO: Реализовать обработку фото (оставлено для совместимости)
-    pass
+from app.utils.api_decorators import with_progress_stages, update_stage
+
+# Определение стадий для обработки фото
+PHOTO_STAGES = {
+    "download": "Получение изображения",
+    "ocr": "Распознавание текста инвойса",  
+    "matching": "Сопоставление позиций",
+    "report": "Формирование отчета"
+}
+
+@with_progress_stages(stages=PHOTO_STAGES)
+async def photo_handler(message, state: FSMContext, **kwargs):
+    """
+    Обрабатывает загруженные фото инвойсов с продвинутой обработкой ошибок.
+    Использует декоратор with_progress_stages для отслеживания этапов выполнения.
+    
+    Ход работы:
+    1. Отображает индикатор прогресса
+    2. Загружает и анализирует фото через OCR
+    3. Сопоставляет найденные позиции с базой продуктов
+    4. Формирует отчет и отображает его с кнопками редактирования
+    """
+    # Данные для отладки
+    user_id = message.from_user.id
+    photo_id = message.photo[-1].file_id if message.photo else None
+    
+    # Получаем _stages и _req_id из контекста декоратора
+    stages = kwargs.get('_stages', {})
+    stages_names = kwargs.get('_stages_names', {})
+    req_id = kwargs.get('_req_id', uuid.uuid4().hex[:8])
+    
+    # Шаг 1: Показываем пользователю, что обрабатываем запрос
+    progress_msg = await message.answer(
+        "🔄 Загрузка и анализ фото...",
+        parse_mode=None
+    )
+    progress_msg_id = progress_msg.message_id
+    
+    # Функция для обновления сообщения о прогрессе
+    async def update_progress_message(stage=None, stage_name=None, error_message=None):
+        """Вспомогательная функция для обновления сообщения о прогрессе"""
+        if error_message:
+            await safe_edit(
+                bot, message.chat.id, progress_msg_id,
+                f"⚠️ {error_message}",
+                parse_mode=None
+            )
+        elif stage and stage_name:
+            await safe_edit(
+                bot, message.chat.id, progress_msg_id,
+                f"🔄 {stage_name}...",
+                parse_mode=None
+            )
+    
+    # Передаем функцию обновления прогресса
+    kwargs['_update_progress'] = update_progress_message
+    
+    try:
+        # Шаг 2: Загрузка фото
+        # Получаем информацию о файле
+        file = await bot.get_file(message.photo[-1].file_id)
+        
+        # Загружаем содержимое файла
+        img_bytes = await bot.download_file(file.file_path)
+        
+        # Обновляем статус стадии
+        update_stage("download", kwargs, update_progress_message)
+        logger.info(f"[{req_id}] Downloaded photo from user {user_id}, size {len(img_bytes.getvalue())} bytes")
+        
+        # Шаг 3: OCR изображения
+        # Запуск OCR в отдельном потоке
+        ocr_result = await asyncio.to_thread(ocr.call_openai_ocr, img_bytes.getvalue())
+        
+        # Обновляем статус стадии
+        update_stage("ocr", kwargs, update_progress_message)
+        logger.info(f"[{req_id}] OCR successful for user {user_id}, found {len(ocr_result.positions)} positions")
+        
+        # Шаг 4: Сопоставление с продуктами
+        # Загрузка базы продуктов
+        products = data_loader.load_products("data/base_products.csv")
+        
+        # Сопоставляем позиции
+        match_results = matcher.match_positions(ocr_result.positions, products)
+        
+        # Сохраняем данные в user_matches для доступа в других обработчиках
+        user_matches[(user_id, progress_msg_id)] = {
+            "parsed_data": ocr_result,
+            "match_results": match_results,
+            "photo_id": photo_id,
+            "req_id": req_id
+        }
+        
+        # Обновляем статус стадии
+        update_stage("matching", kwargs, update_progress_message)
+        logger.info(f"[{req_id}] Matching complete for user {user_id}")
+        
+        # Шаг 5: Формирование отчета
+        # Создаем отчет
+        report = build_report(ocr_result, match_results)
+        
+        # Строим клавиатуру для редактирования
+        keyboard_rows = []
+        edit_needed = False
+        
+        for idx, pos in enumerate(match_results):
+            if pos["status"] != "ok":
+                edit_needed = True
+                keyboard_rows.append([
+                    InlineKeyboardButton(text=f"✏️ Ред. {idx+1}: {pos['name'][:15]}", callback_data=f"edit:{idx}")
+                ])
+        
+        if keyboard_rows:
+            keyboard_rows.append([
+                InlineKeyboardButton(
+                    text="✅ Подтвердить", callback_data="confirm:invoice"
+                ),
+                InlineKeyboardButton(
+                    text="🚫 Отмена", callback_data="cancel:all"
+                )
+            ])
+            inline_kb = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
+        else:
+            # Если все позиции OK, добавляем только кнопку подтверждения
+            inline_kb = InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(
+                    text="✅ Подтвердить", callback_data="confirm:invoice"
+                )
+            ]])
+        
+        # Обновляем статус стадии
+        update_stage("report", kwargs, update_progress_message)
+        
+        # Отображаем финальный отчет
+        await safe_edit(
+            bot,
+            message.chat.id,
+            progress_msg_id,
+            escape_v2(report),
+            kb=inline_kb,
+            parse_mode="MarkdownV2"
+        )
+        
+        # Добавляем подсказку при необходимости редактирования
+        if edit_needed:
+            await message.answer(
+                "⚠️ Некоторые позиции не удалось определить. Используйте кнопки «Ред.» для корректировки.",
+                parse_mode=None
+            )
+        
+        # Обновляем состояние пользователя
+        await state.set_state(NotaStates.editing)
+        logger.info(f"[{req_id}] Invoice processing complete for user {user_id}")
+            
+    except Exception as e:
+        # Обработка исключений делегируется декоратору with_progress_stages
+        # Он автоматически определит, на какой стадии произошла ошибка
+        # и вернет пользователю дружественное сообщение
+        
+        # Удаляем сообщение о прогрессе, так как будет показано сообщение об ошибке
+        try:
+            await bot.delete_message(message.chat.id, progress_msg_id)
+        except Exception:
+            pass
+            
+        # Пробрасываем ошибку дальше для обработки декоратором
+        raise
 
 
 async def handle_nlu_text(message, state: FSMContext):
-    global assistant_thread_id
     text = message.text
     chat_id = message.chat.id
     msg_id = message.message_id
-    if assistant_thread_id is None:
-        from openai import OpenAI
-        client = OpenAI(api_key=settings.OPENAI_CHAT_KEY)
-        thread = client.beta.threads.create()
-        assistant_thread_id = thread.id
-    # Pass user message to Assistant
-    assistant_response = ask_assistant(assistant_thread_id, text)
-    # Try to extract JSON-tool-call edit_line
-    import json
+    
+    # Send "thinking" status
+    processing_msg = await message.answer("🤔 Processing your request...")
+    
     try:
-        data = json.loads(assistant_response)
-        if isinstance(data, dict) and data.get('tool_call') == 'edit_line':
-            # Apply edit_line logic here (update local state, etc.)
-            # For now, just acknowledge
-            await safe_edit(
-                bot, chat_id, msg_id,
-                escape_v2("Изменения применены (edit_line)"),
-                parse_mode=ParseMode.MARKDOWN_V2
-            )
-            await state.set_state(NotaStates.editing)
-
-            return
-    except Exception:
-        pass
-    # Otherwise, reply with assistant's text
-    await safe_edit(
-        bot, chat_id, msg_id,
-        escape_v2(assistant_response),
-        parse_mode=ParseMode.MARKDOWN_V2
-    )
-    await state.set_state(NotaStates.editing)
+        # Получаем данные состояния пользователя
+        user_data = await state.get_data()
+        
+        # Проверяем, есть ли thread_id в состоянии
+        if "assistant_thread_id" not in user_data:
+            # Создаем новый поток для ассистента
+            from openai import OpenAI
+            from app.config import get_chat_client
+            
+            client = get_chat_client()
+            if not client:
+                client = OpenAI(api_key=settings.OPENAI_CHAT_KEY)
+                
+            thread = client.beta.threads.create()
+            # Сохраняем thread_id в состоянии пользователя
+            await state.update_data(assistant_thread_id=thread.id)
+            assistant_thread_id = thread.id
+            logger.info(f"Created new assistant thread for user {message.from_user.id}")
+        else:
+            # Используем существующий thread_id
+            assistant_thread_id = user_data["assistant_thread_id"]
+            
+        # Pass user message to Assistant with timeout handling
+        assistant_response = await ask_assistant(assistant_thread_id, text)
+        
+        # Try to extract JSON-tool-call edit_line
+        try:
+            data = json.loads(assistant_response)
+            if isinstance(data, dict) and data.get('tool_call') == 'edit_line':
+                # Apply edit_line logic here (update local state, etc.)
+                # For now, just acknowledge
+                await safe_edit(
+                    bot, chat_id, msg_id,
+                    escape_v2("Изменения применены (edit_line)"),
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
+                await state.set_state(NotaStates.editing)
+                await bot.delete_message(chat_id, processing_msg.message_id)
+                return
+        except json.JSONDecodeError:
+            # Not JSON data, continue with text response
+            pass
+            
+        # Otherwise, reply with assistant's text
+        await safe_edit(
+            bot, chat_id, msg_id,
+            escape_v2(assistant_response),
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+        await state.set_state(NotaStates.editing)
+        
+    except Exception as e:
+        logger.error(f"Assistant error: {e}", exc_info=True)
+        await safe_edit(
+            bot, chat_id, msg_id,
+            escape_v2(f"Sorry, I couldn't process that request. Error: {str(e)}"),
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+        
+    finally:
+        # Clean up processing message
+        try:
+            await bot.delete_message(chat_id, processing_msg.message_id)
+        except Exception:
+            pass
 
 
 
@@ -328,62 +615,102 @@ async def cb_field(callback: CallbackQuery, state: FSMContext):
 
 
 
+from app.utils.api_decorators import with_async_retry_backoff
+
+@with_async_retry_backoff(max_retries=2, initial_backoff=1.0, backoff_factor=2.0)
 async def handle_field_edit(message, state: FSMContext):
-    global assistant_thread_id
+    """
+    Обрабатывает редактирование полей инвойса с использованием ассистента.
+    Использует декоратор with_async_retry_backoff для автоматической обработки ошибок.
+    """
     data = await state.get_data()
     idx = data.get("edit_idx")
     field = data.get("edit_field")
     msg_id = data.get("msg_id")
     if idx is None or field is None or msg_id is None:
+        logger.warning("Missing required field edit data in state")
         return
+    
     user_id = message.from_user.id
     key = (user_id, msg_id)
     if key not in user_matches:
+        logger.warning(f"No matches found for user {user_id}, message {msg_id}")
         return
+    
     entry = user_matches[key]
-    # Send user input to Assistant for dialog edit
     text = message.text.strip()
-    if assistant_thread_id is None:
+    
+    # Получаем thread_id из состояния
+    user_data = await state.get_data()
+    
+    if "assistant_thread_id" not in user_data:
+        # Создаем новый поток если не существует
         from openai import OpenAI
-        client = OpenAI(api_key=settings.OPENAI_CHAT_KEY)
+        from app.config import get_chat_client
+        
+        client = get_chat_client()
+        if not client:
+            client = OpenAI(api_key=settings.OPENAI_CHAT_KEY)
+            
         thread = client.beta.threads.create()
+        await state.update_data(assistant_thread_id=thread.id)
         assistant_thread_id = thread.id
-    assistant_response = ask_assistant(assistant_thread_id, text)
-    import json
+        logger.info(f"Created new assistant thread for field edit (user {user_id})")
+    else:
+        assistant_thread_id = user_data["assistant_thread_id"]
+    
+    # Показываем пользователю, что обрабатываем запрос
+    processing_msg = await message.answer("🔄 Processing edit...")
+    
     try:
-        data = json.loads(assistant_response)
-        if isinstance(data, dict) and data.get('tool_call') == 'edit_line':
-            # Apply edit_line: update invoice data
-            for k, v in data.get('fields', {}).items():
-                entry["match_results"][idx][k] = v
-            # Re-run matcher for this line
-            products = data_loader.load_products("data/base_products.csv")
-            entry["match_results"][idx] = matcher.match_positions([entry["match_results"][idx]], products)[0]
-            parsed_data = entry["parsed_data"]
-            report = build_report(parsed_data, entry["match_results"])
-            await safe_edit(
-                bot,
-                message.chat.id,
-                msg_id,
-                escape_v2(report),
-                kb=kb_report(entry["match_results"]),
-                parse_mode=ParseMode.MARKDOWN_V2,
-            )
-            await state.set_state(NotaStates.editing)
-
-            return
-    except Exception:
-        pass
-    # Otherwise, reply with assistant's text
-    await safe_edit(
-        bot,
-        message.chat.id,
-        msg_id,
-        escape_v2(assistant_response),
-        kb=kb_report(entry["match_results"]),
-        parse_mode=ParseMode.MARKDOWN_V2,
-    )
-    await state.set_state(NotaStates.editing)
+        # Отправляем запрос ассистенту с использованием нового декоратора
+        assistant_response = await ask_assistant(thread_id=assistant_thread_id, message=text)
+        
+        # Пробуем распарсить как JSON для tool_call
+        try:
+            data = json.loads(assistant_response)
+            if isinstance(data, dict) and data.get('tool_call') == 'edit_line':
+                # Обновляем данные инвойса
+                for k, v in data.get('fields', {}).items():
+                    entry["match_results"][idx][k] = v
+                
+                # Запускаем матчер заново для обновленной строки
+                products = data_loader.load_products("data/base_products.csv")
+                entry["match_results"][idx] = matcher.match_positions([entry["match_results"][idx]], products)[0]
+                parsed_data = entry["parsed_data"]
+                report = build_report(parsed_data, entry["match_results"])
+                
+                await safe_edit(
+                    bot,
+                    message.chat.id,
+                    msg_id,
+                    escape_v2(report),
+                    kb=kb_report(entry["match_results"]),
+                    parse_mode=ParseMode.MARKDOWN_V2,
+                )
+                await state.set_state(NotaStates.editing)
+                return
+        except json.JSONDecodeError:
+            # Не JSON, продолжаем как с обычным текстом
+            pass
+            
+        # Отвечаем текстом от ассистента
+        await safe_edit(
+            bot,
+            message.chat.id,
+            msg_id,
+            escape_v2(assistant_response),
+            kb=kb_report(entry["match_results"]),
+            parse_mode=ParseMode.MARKDOWN_V2,
+        )
+        await state.set_state(NotaStates.editing)
+        
+    finally:
+        # Удаляем сообщение о загрузке
+        try:
+            await bot.delete_message(message.chat.id, processing_msg.message_id)
+        except Exception:
+            pass
 
 
 
@@ -442,73 +769,11 @@ async def handle_edit_reply(message):
     await message.reply(f"✏️ Updated line {idx+1}.\n" + report)
 
 
-async def photo_handler(message):
-    try:
-        # Step 1: Send progress message
-        progress_msg = await message.answer(
-            "🔄 Analysing invoice photo…",
-            parse_mode=None
-        )
-        progress_msg_id = progress_msg.message_id
-        user_id = message.from_user.id
-        # Download photo bytes
-        file = await bot.get_file(message.photo[-1].file_id)
-        img_bytes = await bot.download_file(file.file_path)
-        # Step 2: OCR (no progress cycling)
-        ocr_result = await asyncio.to_thread(ocr.call_openai_ocr, img_bytes.getvalue())
-        # Step 3: Matcher
-        products = data_loader.load_products("data/base_products.csv")
-        match_results = matcher.match_positions(ocr_result.positions, products)
-        user_matches[(user_id, progress_msg_id)] = {
-            "parsed_data": ocr_result,
-            "match_results": match_results
-        }
-        # Step 4: Final report (single message)
-        report = build_report(ocr_result, match_results)
-        # Build inline keyboard: one Edit button per not-ok row, plus global Cancel
-        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-        keyboard_rows = []
-        for idx, pos in enumerate(match_results):
-            if pos["status"] != "ok":
-                keyboard_rows.append([
-                    InlineKeyboardButton(text="✏️ Edit", callback_data=f"edit:{idx}")
-                ])
-        if keyboard_rows:
-            keyboard_rows.append([
-                InlineKeyboardButton(
-                    text="🚫 Cancel edit", callback_data="cancel:all"
-                )
-            ])
-            inline_kb = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
-        else:
-            inline_kb = None
-        await safe_edit(
-            bot,
-            message.chat.id,
-            progress_msg_id,
-            escape_v2(report),
-            kb=inline_kb,
-            parse_mode="MarkdownV2"
-        )
-    except Exception:
-        err_id = uuid.uuid4().hex[:8]
-        logger = logging.getLogger("bot")
-        logger.exception(f"Photo failed <{err_id}>")
-        await message.answer(
-            (
-                f"⚠️ OCR failed. Logged as {err_id}. "
-                "Please retake the photo or send it to the developer."
-            ),
-            parse_mode=None,
-        )
-
-
 async def text_fallback(message):
     await message.answer("📸 Please send an invoice photo (image only).", parse_mode=None)
 
 
 # Silence unhandled update logs
-
 async def _dummy(update, data):
     pass
 
@@ -519,47 +784,18 @@ logging.getLogger("aiogram.event").setLevel(logging.DEBUG)
 from aiogram.filters import CommandStart
 from aiogram.enums import ParseMode
 from aiogram import F
-from aiogram.types import InlineKeyboardMarkup, CallbackQuery
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import StatesGroup, State
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from app.keyboards import kb_main, kb_upload, kb_help_back, kb_report, kb_field_menu
 
-# FSM States
-class NotaStates(StatesGroup):
-    lang = State()
-    main_menu = State()
-    awaiting_file = State()
-    progress = State()
-    editing = State()
-    help = State()
-
+# Remove duplicate NotaStates class
 # In-memory store for user sessions: {user_id: {msg_id: {...}}}
 user_matches = {}
 
-# --- Safe edit function ---
-async def safe_edit(bot, chat_id, msg_id, text, kb=None, **kwargs):
-    if kb is not None and not isinstance(kb, InlineKeyboardMarkup):
-        kb = None
-    await bot.edit_message_text(
-        chat_id=chat_id,
-        message_id=msg_id,
-        text=text,
-        reply_markup=kb,
-        **kwargs
-    )
-
+# Removed duplicate safe_edit function
 
 async def text_fallback(message):
     await message.answer("📸 Please send an invoice photo (image only).", parse_mode=None)
-
-
-async def _dummy(update, data):
-    pass
-
-
-
-logging.getLogger("aiogram.event").setLevel(logging.DEBUG)
 
 
 if __name__ == "__main__":

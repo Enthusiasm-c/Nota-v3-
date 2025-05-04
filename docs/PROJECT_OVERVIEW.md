@@ -110,19 +110,22 @@ Formatter-->>Syrve API: POST /invoice
 
 ---
 
-## 3 • Current Status (after Sprint 0)
+## 3 • Current Status (after Sprint 2 - Обновлено 2025-05-04)
 
-Module	State	Notes
-Skeleton bot (aiogram 3)	Done	
-OCR stub (USE_OPENAI_OCR=0)	Done	
-Pydantic models (ParsedData, Position)	Done	
-Matcher (exact+fuzzy name+unit)	Done	
-Formatter (Markdown report RU/EN)	Done	
-Data 🤖 base_suppliers.csv, base_products.csv	Done	
-aliases.csv (empty)	Done	
-CI (GitHub Actions) + tests	Done	
-Docs (this file)	Now!	
-Deploy to DO / systemd	Planned (Sprint 4)	
+| Module | State | Notes |
+|--------|-------|-------|
+| Skeleton bot (aiogram 3) | Done | |
+| OCR with OpenAI Vision | Done | Real OCR implementation with Vision API |
+| API Error Handling | Done | Robust error handling with retries and user feedback |
+| Progress Tracking | Done | Multi-stage operations with user-friendly progress indicators |
+| Pydantic models (ParsedData, Position) | Done | |
+| Matcher (exact+fuzzy name+unit) | Done | Enhanced with better normalization and thresholds |
+| Formatter (Markdown report RU/EN) | Done | |
+| Data 🤖 base_suppliers.csv, base_products.csv | Done | |
+| aliases.csv (self-learning) | Done | Growing with user corrections |
+| CI (GitHub Actions) + tests | Done | Including tests for API error handling |
+| Docs (this file + API error handling) | Done | Comprehensive documentation on error handling system |
+| Deploy to DO / systemd | Planned (Sprint 4) |	
 
 
 
@@ -141,22 +144,31 @@ S-05	Multi-tenant, i18n, price anomaly alerts, dashboard (Grafana/Metabase).
 
 ⸻
 
-5 • Directory Layout
+5 • Directory Layout (Обновлено 2025-05-04)
 
 .
 ├── bot.py                 # entry-point
 ├── app/
 │   ├── config.py          # pydantic-settings
-│   ├── ocr.py             # GPT-4o (stub/real)
-│   ├── matcher.py
-│   ├── formatter.py
-│   ├── data_loader.py
+│   ├── ocr.py             # GPT-4o Vision API integration
+│   ├── matcher.py         # Fuzzy matching with aliases
+│   ├── formatter.py       # Report generation
+│   ├── data_loader.py     # CSV data loading
 │   ├── models.py          # ParsedData, Position
-│   └── keyboards.py       # inline UI (future)
+│   ├── ocr_prompt.py      # OCR prompt builder
+│   ├── assistant.py       # OpenAI Assistant API client
+│   └── utils/
+│       ├── __init__.py
+│       ├── api_decorators.py  # API error handling decorators
+│       └── md.py          # Markdown utilities
 ├── data/
 │   ├── base_suppliers.csv
 │   ├── base_products.csv
 │   └── aliases.csv        # grows over time
+├── docs/
+│   ├── project_overview.md  # this file
+│   ├── api_error_handling.md  # API error handling documentation
+│   └── CHANGELOG.md       # Change history
 ## Sprint 2: Real OCR Integration
 
 ### Features
@@ -369,7 +381,62 @@ Admin	Maintains product DB & thresholds	SSH deploy, views Grafana dashboard (aft
 
 ⸻
 
-15 • Future Enhancements
+15 • API Error Handling System (Добавлено 2025-05-04)
+
+Для обеспечения надежной работы бота при взаимодействии с внешними API (в первую очередь OpenAI Vision и Assistant API) 
+была реализована комплексная система обработки ошибок API с использованием декораторов. Система разработана
+с помощью Claude Code и обеспечивает следующие возможности:
+
+### Компоненты системы обработки ошибок API
+
+1. **Декораторы и утилиты** (`app/utils/api_decorators.py`):
+   - `with_retry_backoff` - декоратор для синхронных функций, добавляющий автоматические повторные попытки
+   - `with_async_retry_backoff` - декоратор для асинхронных функций с экспоненциальной задержкой
+   - `with_progress_stages` - декоратор для отслеживания прогресса многоэтапных операций
+   - `ErrorType` - классификация типов ошибок API для консистентной обработки
+   - `classify_error` - функция для определения типа ошибки и формирования понятного сообщения
+
+2. **Применение в ключевых функциях**:
+   - `call_openai_ocr` в `app/ocr.py` - обработка ошибок при взаимодействии с Vision API
+   - `ask_assistant` в `bot.py` - обработка ошибок при работе с Assistant API
+   - `photo_handler` в `bot.py` - многоэтапная обработка с отслеживанием прогресса
+   - `handle_field_edit` в `bot.py` - обработка ошибок при редактировании полей
+
+3. **Классификация ошибок**:
+   - `TIMEOUT` - превышение времени ожидания ответа
+   - `RATE_LIMIT` - ограничение частоты запросов к API
+   - `VALIDATION` - ошибки валидации входных/выходных данных
+   - `AUTHENTICATION` - проблемы с авторизацией (неверные ключи API)
+   - `SERVER` - ошибки на стороне сервера (5xx)
+   - `CLIENT` - ошибки клиента (4xx)
+   - `NETWORK` - проблемы с сетевым соединением
+   - `UNKNOWN` - неизвестные ошибки
+
+4. **Стратегии повторных попыток**:
+   - Экспоненциальная задержка (увеличивается с каждой попыткой)
+   - Разные стратегии для разных типов ошибок (например, без повторов для ошибок аутентификации)
+   - Настраиваемое количество попыток и задержка
+
+5. **Отслеживание прогресса**:
+   - Отображение пользователю текущего этапа выполнения операции
+   - Детальное логирование каждого этапа
+   - Точная идентификация этапа, на котором произошла ошибка
+
+### Преимущества
+
+- **Надежность** - бот продолжает работать даже при временных проблемах с API
+- **Пользовательский опыт** - понятные сообщения об ошибках и индикация прогресса
+- **Отладка** - подробное логирование для быстрого выявления проблем
+- **Стандартизация** - единый подход к обработке ошибок во всем коде
+- **Тестируемость** - модульные тесты для всех компонентов системы
+
+### Документация
+
+Подробная документация по системе обработки ошибок API доступна в `docs/api_error_handling.md`.
+
+⸻
+
+16 • Future Enhancements
 	•	Price variance alerts (> ±10 % vs last 3 deliveries).
 	•	Multi-language UI (RU/EN/ID).
 	•	OAuth login for web dashboard (FastAPI + Next.js).
@@ -377,5 +444,5 @@ Admin	Maintains product DB & thresholds	SSH deploy, views Grafana dashboard (aft
 
 ⸻
 
-Last updated: 2025-05-02 (UTC+08).
-Maintainers: Denis @Enthusiasm-c & ChatGPT (assistant).
+Last updated: 2025-05-04 (UTC+08).
+Maintainers: Denis @Enthusiasm-c & Claude (Claude Code assistant).

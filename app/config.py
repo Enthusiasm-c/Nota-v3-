@@ -8,11 +8,20 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str = ""
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o"
-    MATCH_THRESHOLD: float = 0.75
+    
+    # Fuzzy matching configuration
+    MATCH_THRESHOLD: float = 0.75        # Default match threshold (0-1.0)
+    MATCH_EXACT_BONUS: float = 0.05      # Bonus for substring matches (0-1.0)
+    MATCH_LENGTH_PENALTY: float = 0.1    # Penalty weight for length differences (0-1.0)
+    MATCH_MIN_SCORE: float = 0.5         # Minimum score to show in suggestions (0-1.0)
+    
+    # OpenAI API configuration
     USE_OPENAI_OCR: bool = False
     OPENAI_OCR_KEY: str = os.getenv("OPENAI_OCR_KEY", "")
     OPENAI_CHAT_KEY: str = os.getenv("OPENAI_CHAT_KEY", "")
     OPENAI_ASSISTANT_ID: str = os.getenv("OPENAI_ASSISTANT_ID", "")
+    
+    # Business logic configuration
     OWN_COMPANY_ALIASES: list[str] = [
         "Bali Veg Ltd", "Nota AI Cafe"
     ]
@@ -27,27 +36,63 @@ class Settings(BaseSettings):
 settings = Settings()
 
 
-# OpenAI clients (None if keys missing)
-ocr_client = None
-chat_client = None
-
-try:
-    import openai
-    if settings.OPENAI_OCR_KEY:
-        ocr_client = openai.OpenAI(api_key=settings.OPENAI_OCR_KEY)
-    else:
-        logging.error("OPENAI_OCR_KEY not set; OCR unavailable")
-    if settings.OPENAI_CHAT_KEY:
-        chat_client = openai.OpenAI(api_key=settings.OPENAI_CHAT_KEY)
-    else:
-        logging.error("OPENAI_CHAT_KEY not set; Chat unavailable")
-except ImportError:
-    logging.error("openai package not installed; OCR/Chat unavailable")
-
+# Кэш для клиентов OpenAI - инициализируются при первом использовании
+_ocr_client = None
+_chat_client = None
 
 def get_ocr_client():
-    return ocr_client
+    """
+    Получает клиент OpenAI для OCR с ленивой инициализацией.
+    Инициализирует клиент только при первом вызове.
+    
+    Returns:
+        openai.OpenAI: Инициализированный клиент или None при ошибке
+    """
+    global _ocr_client
+    
+    if _ocr_client is not None:
+        return _ocr_client
+    
+    try:
+        import openai
+        if settings.OPENAI_OCR_KEY:
+            _ocr_client = openai.OpenAI(api_key=settings.OPENAI_OCR_KEY)
+            return _ocr_client
+        else:
+            logging.error("OPENAI_OCR_KEY not set; OCR unavailable")
+            return None
+    except ImportError:
+        logging.error("openai package not installed; OCR unavailable")
+        return None
+    except Exception as e:
+        logging.error(f"Error initializing OCR client: {e}")
+        return None
 
 
 def get_chat_client():
-    return chat_client
+    """
+    Получает клиент OpenAI для чата с ленивой инициализацией.
+    Инициализирует клиент только при первом вызове.
+    
+    Returns:
+        openai.OpenAI: Инициализированный клиент или None при ошибке
+    """
+    global _chat_client
+    
+    if _chat_client is not None:
+        return _chat_client
+    
+    try:
+        import openai
+        if settings.OPENAI_CHAT_KEY:
+            _chat_client = openai.OpenAI(api_key=settings.OPENAI_CHAT_KEY)
+            return _chat_client
+        else:
+            logging.error("OPENAI_CHAT_KEY not set; Chat unavailable")
+            return None
+    except ImportError:
+        logging.error("openai package not installed; Chat unavailable")
+        return None
+    except Exception as e:
+        logging.error(f"Error initializing Chat client: {e}")
+        return None
