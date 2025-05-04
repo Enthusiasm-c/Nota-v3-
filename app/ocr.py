@@ -4,7 +4,7 @@ import json
 import logging
 from pathlib import Path
 from app.models import ParsedData
-from app.config import settings
+from app.config import settings, get_ocr_client
 from app.ocr_prompt import build_prompt
 
 import types
