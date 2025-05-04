@@ -125,10 +125,12 @@ def build_invoice_report(
     if add_missing_btn:
         keyboard.append([add_missing_btn])
     btn_row = [back_btn]
-    if submit_btn:
+    # Кнопка 'Подтвердить' только если нет ошибок
+    if submit_btn and not has_errors:
         btn_row.append(submit_btn)
     keyboard.append(btn_row)
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
+    # NB: Если есть ошибки — только кнопка 'Отмена' и кнопки редактирования
 
 
 # Меню выбора поля для редактирования (inline)

@@ -66,11 +66,11 @@ async def handle_cancel(call: CallbackQuery, state: FSMContext):
             total_rows = len(table_rows)
             page_size = 15
             total_pages = (total_rows + page_size - 1) // page_size
-            report = invoice_report.build_report(invoice, match_results, page=page)
+            text, has_errors = invoice_report.build_report(invoice, match_results, page=page)
             await call.message.edit_text(
-                report,
+                text,
                 reply_markup=keyboards.build_invoice_report(
-                    invoice["positions"], page=page, total_pages=total_pages
+                    text, has_errors, match_results, page=page, total_pages=total_pages
                 ),
             )
         else:
@@ -98,7 +98,7 @@ async def handle_page_prev(call: CallbackQuery, state: FSMContext):
     match_results = matcher.match_positions(
         invoice["positions"], data_loader.load_products()
     )
-    report = invoice_report.build_report(invoice, match_results, page=page)
+    text, has_errors = invoice_report.build_report(invoice, match_results, page=page)
     table_rows = [r for r in match_results]
     total_rows = len(table_rows)
     page_size = 15
@@ -106,7 +106,7 @@ async def handle_page_prev(call: CallbackQuery, state: FSMContext):
     await call.message.edit_text(
         report,
         reply_markup=keyboards.build_invoice_report(
-            invoice["positions"], page=page, total_pages=total_pages
+            text, has_errors, match_results, page=page, total_pages=total_pages
         ),
     )
 
@@ -130,11 +130,11 @@ async def handle_page_next(call: CallbackQuery, state: FSMContext):
     total_pages = (total_rows + page_size - 1) // page_size
     page = min(total_pages, page + 1)
     await state.update_data(invoice_page=page)
-    report = invoice_report.build_report(invoice, match_results, page=page)
+    text, has_errors = invoice_report.build_report(invoice, match_results, page=page)
     await call.message.edit_text(
-        report,
+        text,
         reply_markup=keyboards.build_invoice_report(
-            invoice["positions"], page=page, total_pages=total_pages
+            text, has_errors, match_results, page=page, total_pages=total_pages
         ),
     )
 
@@ -153,7 +153,7 @@ async def handle_cancel_edit(call: CallbackQuery, state: FSMContext):
     match_results = matcher.match_positions(
         invoice["positions"], data_loader.load_products()
     )
-    report = invoice_report.build_report(invoice, match_results, page=page)
+    text, has_errors = invoice_report.build_report(invoice, match_results, page=page)
     table_rows = [r for r in match_results]
     total_rows = len(table_rows)
     page_size = 15
@@ -161,7 +161,7 @@ async def handle_cancel_edit(call: CallbackQuery, state: FSMContext):
     await call.message.edit_text(
         report,
         reply_markup=keyboards.build_invoice_report(
-            invoice["positions"], page=page, total_pages=total_pages
+            text, has_errors, match_results, page=page, total_pages=total_pages
         ),
     )
     await state.set_state(InvoiceReviewStates.review)
@@ -304,7 +304,7 @@ async def handle_submit_anyway(call: CallbackQuery, state: FSMContext):
             total_rows = len(table_rows)
             page_size = 15
             total_pages = (total_rows + page_size - 1) // page_size
-            report = invoice_report.build_report(invoice, match_results, page=page)
+            text, has_errors = invoice_report.build_report(invoice, match_results, page=page)
             await call.message.answer(
                 report,
                 reply_markup=keyboards.build_invoice_report(
@@ -327,7 +327,7 @@ async def handle_submit_anyway(call: CallbackQuery, state: FSMContext):
             total_rows = len(table_rows)
             page_size = 15
             total_pages = (total_rows + page_size - 1) // page_size
-            report = invoice_report.build_report(invoice, match_results, page=page)
+            text, has_errors = invoice_report.build_report(invoice, match_results, page=page)
             await call.message.answer(
                 report,
                 reply_markup=keyboards.build_invoice_report(
@@ -525,11 +525,11 @@ async def handle_suggestion(call: CallbackQuery, state: FSMContext):
     total_rows = len(table_rows)
     page_size = 15
     total_pages = (total_rows + page_size - 1) // page_size
-    report = invoice_report.build_report(invoice, match_results, page=page)
+    text, has_errors = invoice_report.build_report(invoice, match_results, page=page)
     await call.message.answer(
-        report,
+        text,
         reply_markup=keyboards.build_invoice_report(
-            invoice["positions"], page=page, total_pages=total_pages
+            text, has_errors, match_results, page=page, total_pages=total_pages
         ),
     )
     await state.clear()
