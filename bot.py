@@ -107,7 +107,7 @@ async def safe_edit(bot, chat_id, msg_id, text, kb=None, **kwargs):
     logger.debug(f"Message text preview: {debug_text}")
     
     # Применяем экранирование только если еще не применено
-    if parse_mode in ("MarkdownV2", ParseMode.MARKDOWN_V2) and not text.startswith(r"\"):
+    if parse_mode in ("MarkdownV2", ParseMode.MARKDOWN_V2) and not (text and text.startswith("\\")):
         logger.debug("Applying escape_v2 to text")
         text = escape_v2(text)
     
