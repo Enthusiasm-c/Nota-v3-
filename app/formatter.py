@@ -67,37 +67,6 @@ def _row(
 from typing import Any
 
 # build_report и build_table удалены — используйте app/formatters/report.py
-) -> str:
-    """
-    Формирует отчет по инвойсу в формате MarkdownV2.
-    Args:
-        parsed_data: Данные инвойса (объект ParsedData или словарь)
-        match_results: Результаты сопоставления позиций
-        escape: Нужно ли экранировать специальные символы Markdown
-
-    Returns:
-        str: Форматированный отчет для отправки в Telegram
-    """
-    import logging
-
-    logger = logging.getLogger(__name__)
-    try:
-        # Support both dict and ParsedData object
-        supplier = getattr(parsed_data, "supplier", None)
-        if supplier is None and isinstance(parsed_data, dict):
-            supplier = parsed_data.get("supplier", None)
-        date = getattr(parsed_data, "date", None)
-        if date is None and isinstance(parsed_data, dict):
-            date = parsed_data.get("date", None)
-
-        # В зависимости от параметра escape, экранируем или нет
-        if escape:
-            supplier_str = (
-                "Unknown supplier"
-                if not supplier
-                else escape_md(str(supplier), version=2)
-            )
-            date_str = "—" if not date else escape_md(str(date), version=2)
         else:
             supplier_str = (
                 "Unknown supplier" if not supplier else str(supplier)
