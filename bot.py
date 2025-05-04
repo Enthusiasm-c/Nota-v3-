@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 from app.formatter import build_report
 import atexit
 import uuid
@@ -19,8 +20,16 @@ from aiogram.types import CallbackQuery
 import shutil
 
 # Setup logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
+
+# Устанавливаем уровни логирования для разных модулей
+logging.getLogger("aiogram").setLevel(logging.INFO)  # Уменьшаем лог aiogram
+logging.getLogger("httpx").setLevel(logging.INFO)    # Уменьшаем лог httpx
+logging.getLogger("bot").setLevel(logging.DEBUG)     # Подробный лог для нашего бота
 
 # Create tmp dir if not exists
 TMP_DIR = Path("tmp")
@@ -68,12 +77,42 @@ def is_inline_kb(kb):
 
 
 async def safe_edit(bot, chat_id, msg_id, text, kb=None, **kwargs):
+    """
+    Безопасное редактирование сообщения с обработкой ошибок форматирования.
+    В случае ошибки с parse_mode пытается отправить сообщение без форматирования.
+    
+    Args:
+        bot: Экземпляр бота
+        chat_id: ID чата
+        msg_id: ID сообщения для редактирования
+        text: Текст сообщения
+        kb: Клавиатура (опционально)
+        **kwargs: Дополнительные параметры для edit_message_text
+    """
     if not is_inline_kb(kb):
         kb = None
+        
     parse_mode = kwargs.get("parse_mode")
-    if parse_mode in ("MarkdownV2", ParseMode.MARKDOWN_V2):
+    logger = logging.getLogger("bot")
+    
+    # Логируем начало операции
+    logger.debug(f"Attempting to edit message {msg_id} in chat {chat_id}, parse_mode={parse_mode}")
+    
+    # Логируем длину текста для отладки
+    text_length = len(text) if text else 0
+    logger.debug(f"Message text length: {text_length} chars")
+    
+    # Если текст слишком длинный, обрезаем для лога
+    debug_text = text[:100] + "..." if text and len(text) > 100 else text
+    logger.debug(f"Message text preview: {debug_text}")
+    
+    # Применяем экранирование только если еще не применено
+    if parse_mode in ("MarkdownV2", ParseMode.MARKDOWN_V2) and not text.startswith(r"\"):
+        logger.debug("Applying escape_v2 to text")
         text = escape_v2(text)
+    
     try:
+        logger.debug("Calling bot.edit_message_text")
         await bot.edit_message_text(
             chat_id=chat_id,
             message_id=msg_id,
@@ -81,21 +120,49 @@ async def safe_edit(bot, chat_id, msg_id, text, kb=None, **kwargs):
             reply_markup=kb,
             **kwargs
         )
+        logger.debug("Successfully edited message")
+        
     except Exception as e:
-        logger = logging.getLogger("bot")
+        logger.warning(f"Error editing message: {type(e).__name__}: {e}")
+        
         if isinstance(e, TelegramBadRequest) and (
             "can't parse entities" in str(e) or "parse_mode" in str(e)
         ):
-            logger.warning(
-                f"MarkdownV2 edit failed, retrying without parse_mode: {e}")
-            await bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=msg_id,
-                text=text,
-                reply_markup=kb,
-                **{k: v for k, v in kwargs.items() if k != "parse_mode"}
-            )
+            logger.warning(f"MarkdownV2 edit failed, retrying without parse_mode: {e}")
+            
+            try:
+                # Пробуем отправить без форматирования
+                await bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=msg_id,
+                    text=text,
+                    reply_markup=kb,
+                    **{k: v for k, v in kwargs.items() if k != "parse_mode"}
+                )
+                logger.debug("Successfully edited message without parse_mode")
+                
+            except Exception as retry_error:
+                logger.error(f"Failed to edit message even without parse_mode: {retry_error}")
+                
+                # Последняя попытка - очистить текст от всех специальных символов
+                try:
+                    clean_text = re.sub(r'[^\w\s]', '', text)
+                    if len(clean_text) < 10:  # Если текст стал слишком коротким
+                        clean_text = "Failed to render message with special characters. Please see log."
+                        
+                    await bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=msg_id,
+                        text=clean_text,
+                        reply_markup=kb
+                    )
+                    logger.debug("Sent fallback plain text message")
+                    
+                except Exception as last_error:
+                    logger.error(f"All attempts to edit message failed: {last_error}")
+                    # Здесь уже ничего не делаем, просто логируем ошибку
         else:
+            logger.error(f"Unexpected error editing message: {e}")
             raise
 
 
@@ -376,15 +443,49 @@ async def photo_handler(message, state: FSMContext, **kwargs):
         # Применяем escape_v2 для корректной обработки блоков кода
         formatted_report = escape_v2(report)
         
+        # Логируем детали перед отправкой отчета
+        logger.info(f"Report length: {len(report)} chars, formatted: {len(formatted_report)} chars")
+        logger.debug(f"Report sample: {report[:100]}...")
+        
+        # Проверяем отчет на наличие неэкранированных специальных символов
+        special_chars = ['.', '#', '!', '*', '_', '-', '+', '=', '|', '{', '}']
+        for char in special_chars:
+            if f"\\{char}" not in formatted_report and char in formatted_report:
+                logger.warning(f"Potentially unescaped character '{char}' in formatted report")
+        
         # Отображаем финальный отчет
-        await safe_edit(
-            bot,
-            message.chat.id,
-            progress_msg_id,
-            formatted_report,
-            kb=inline_kb,
-            parse_mode="MarkdownV2"
-        )
+        try:
+            logger.info(f"Sending formatted report with MarkdownV2")
+            await safe_edit(
+                bot,
+                message.chat.id,
+                progress_msg_id,
+                formatted_report,
+                kb=inline_kb,
+                parse_mode="MarkdownV2"
+            )
+            logger.info(f"Report successfully sent")
+        except Exception as e:
+            logger.error(f"Failed to send report: {e}")
+            # Пробуем отправить отчет как обычный текст без форматирования
+            try:
+                logger.info(f"Sending report as plain text (fallback)")
+                await safe_edit(
+                    bot,
+                    message.chat.id,
+                    progress_msg_id,
+                    report,  # Используем неформатированный отчет
+                    kb=inline_kb,
+                    parse_mode=None
+                )
+                logger.info(f"Plain text report sent successfully")
+            except Exception as plain_err:
+                logger.error(f"Failed to send even plain text report: {plain_err}")
+                # Если и это не получилось, отправляем сообщение об ошибке
+                try:
+                    await message.answer("Не удалось отобразить отчет. Пожалуйста, попробуйте еще раз.")
+                except:
+                    pass
         
         # Добавляем подсказку при необходимости редактирования
         if edit_needed:
