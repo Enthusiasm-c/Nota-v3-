@@ -161,29 +161,3 @@ def build_report(parsed_data, match_results, escape=True, page=1, page_size=15):
         f"{summary_html}"
     )
     return html_report.strip(), issues_count > 0
-
-            has_errors = True
-        elif status in ("unknown", "ignored", "error"):
-            unknown_count += 1
-            has_errors = True
-
-    start = (page - 1) * page_size
-    end = start + page_size
-    rows_to_show = match_results[start:end]
-    table = build_table(rows_to_show)
-    total_pages = max(1, (len(match_results) + page_size - 1) // page_size)
-
-    ok_count = len([r for r in match_results if r.get('status') == 'ok'])
-    issues_count = len([r for r in match_results if r.get('status') in ['unit_mismatch', 'unknown', 'ignored', 'error']])
-    page_info = f"Page {page} / {total_pages}" if total_pages > 1 else ""
-
-    html_report = (
-        f"<b>Supplier:</b> {supplier_str}\n"
-        f"<b>Invoice date:</b> {date_str}\n"
-        f"<pre>"
-        f"{table}\n"
-        f"</pre>"
-        f"<b>✓ Correct:</b> {ok_count}    <b>🚫 Issues:</b> {issues_count}\n"
-        f"{page_info}"
-    )
-    return html_report.strip(), has_errors
