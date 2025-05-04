@@ -62,10 +62,10 @@ def _row(
 
 
 def build_table(rows: list[str]) -> str:
+    print('BUILD_TABLE_DEBUG')
     header = _row("#", "NAME", "QTY", "UNIT", "PRICE", "TOTAL", "STATUS")
-    divider = "─" * len(header)
     body = "\n".join(rows)
-    return f"```\n{header}\n{divider}\n{body}\n```"
+    return f"```\n{header}\n{body}\n```"
 
 
 from typing import Any
@@ -129,7 +129,7 @@ def build_report(
             f"\U0001f4c6 *Invoice date:* {date_str}\n"
         )
         # Первый разделитель
-        report += "────────────────────────────────────────\n"
+
         # Формируем строки таблицы
         rows = []
         ok_total: float = 0.0
@@ -156,17 +156,15 @@ def build_report(
             elif status == "unknown":
                 status_str = "❓ not found"
             rows.append(_row(idx, name, qty, unit, price, line_total, status_str))
-        # Divider после заголовка (до блока кода)
-        header = _row("#", "NAME", "QTY", "UNIT", "PRICE", "TOTAL", "STATUS")
-        divider = "─" * len(header)
-        report += f"{divider}\n"
         # Таблица внутри блока кода
         report += "```\n"
-        report += f"{header}\n{divider}\n"
+        report += _row("#", "NAME", "QTY", "UNIT", "PRICE", "TOTAL", "STATUS") + "\n"
+        report += "────────────────────────────────────────\n"
         if rows:
             report += "\n".join(rows) + "\n"
-            report += f"{divider}\n"
         report += "```\n"
+        # Divider после таблицы
+        report += "────────────────────────────────────────\n"
         # После блока кода divider НЕ добавляем, сразу summary
         report += "░░ Сводка ░░\n"
         if ok_count > 0:
@@ -177,8 +175,8 @@ def build_report(
             )
         if unknown_count > 0:
             report += f"❓ not-found: {unknown_count} (—)\n"
-        # Третий divider — только после summary
-        report += "──────────────────────\n"
+        # Divider после summary
+        report += "────────────────────────────────────────\n"
         invoice_total: float = ok_total + mismatch_total
         # Итоговая строка
         summary_status = ""

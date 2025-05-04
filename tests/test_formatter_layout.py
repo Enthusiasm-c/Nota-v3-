@@ -35,6 +35,9 @@ def test_report_layout_strict():
     assert re.search(r"─{10,}", report)
     # Проверяем, что ровно две строки-делителя (любая длина, но только строки)
     divider_lines = [line for line in report.splitlines() if set(line) == {"─"}]
+    print(f"DIVIDER_LINES_DEBUG: {divider_lines}")
+    table_block = report.split("```", 2)[1]
+    print(f"TABLE_BLOCK_DEBUG:\n{table_block}")
     assert len(divider_lines) == 3, f"divider_lines: {divider_lines}"
     # Проверяем code block для таблицы
     assert "#  NAME" in report

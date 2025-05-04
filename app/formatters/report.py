@@ -41,6 +41,9 @@ def _row(idx, name, qty, unit, price, total, status):
 
 
 def build_table(rows):
+    # Удаляем divider-строки из rows, если они есть
+    rows = [r for r in rows if set(r.strip()) != {'─'}]
+    print('BUILD_TABLE_ROWS_DEBUG:', rows)
     header = FMT_ROW.format(
         idx="#",
         name="NAME",
@@ -50,9 +53,8 @@ def build_table(rows):
         total="TOTAL",
         status="",
     )
-    divider = "─" * len(header)
     body = "\n".join(rows)
-    table = f"{header}\n{divider}\n{body}"
+    table = f"{header}\n{body}"
     return f"\n```\n{table}\n```\n"
 
 
@@ -114,7 +116,7 @@ def build_report(parsed_data, match_results, escape=True, page=1, page_size=15):
         "────────────────────────────────────────\n"
     )
     report += table
-    report += "────────────────────────────────────────\n"
+
     report += "░░ Сводка ░░\n"
     report += (
         f"✅ ok: {len([r for r in match_results if r.get('status') == 'ok'])} "
@@ -125,6 +127,7 @@ def build_report(parsed_data, match_results, escape=True, page=1, page_size=15):
         f"({format_idr(mismatch_total)})\n"
     )
     report += f"❓ not-found: {unknown_count} (—)\n"
+    # Оставляем только один разделитель в конце
     report += "──────────────────────\n"
     invoice_total = ok_total + mismatch_total
     report += f"💰 Invoice total: *{format_idr(invoice_total)}*\n"
