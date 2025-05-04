@@ -1,5 +1,6 @@
 from decimal import Decimal
 from html import escape  # Для экранирования только данных, не тегов
+from app.utils.formatters import fmt_num
 
 # Fixed column widths for the mobile-friendly invoice table
 W_IDX = 3
