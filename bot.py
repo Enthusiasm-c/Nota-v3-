@@ -551,7 +551,6 @@ async def photo_handler(message, state: FSMContext, **kwargs):
 async def handle_nlu_text(message, state: FSMContext):
     text = message.text
     chat_id = message.chat.id
-    msg_id = message.message_id
     
     # Send "thinking" status
     processing_msg = await message.answer("🤔 Processing your request...")
@@ -579,19 +578,18 @@ async def handle_nlu_text(message, state: FSMContext):
             # Используем существующий thread_id
             assistant_thread_id = user_data["assistant_thread_id"]
             
-        # Pass user message to Assistant with timeout handling
+        # Получаем ответ от ассистента
         assistant_response = await ask_assistant(assistant_thread_id, text)
         
-        # Try to extract JSON-tool-call edit_line
+        # Проверяем на JSON-команду
         try:
             data = json.loads(assistant_response)
             if isinstance(data, dict) and data.get('tool_call') == 'edit_line':
                 # Apply edit_line logic here (update local state, etc.)
-                # For now, just acknowledge
-                await safe_edit(
-                    bot, chat_id, msg_id,
-                    escape_v2("Изменения применены (edit_line)"),
-                    parse_mode=ParseMode.MARKDOWN_V2
+                # For now, just acknowledge with NEW message (не редактируем старое)
+                await message.answer(
+                    "✅ Изменения применены (edit_line)",
+                    parse_mode=None
                 )
                 await state.set_state(NotaStates.editing)
                 await bot.delete_message(chat_id, processing_msg.message_id)
@@ -600,20 +598,23 @@ async def handle_nlu_text(message, state: FSMContext):
             # Not JSON data, continue with text response
             pass
             
-        # Otherwise, reply with assistant's text
-        await safe_edit(
-            bot, chat_id, msg_id,
-            escape_v2(assistant_response),
+        # Отвечаем новым сообщением вместо редактирования старого
+        formatted_response = escape_v2(assistant_response)
+        
+        # Отправляем ответ ассистента как новое сообщение
+        await message.answer(
+            formatted_response,
             parse_mode=ParseMode.MARKDOWN_V2
         )
+        
         await state.set_state(NotaStates.editing)
         
     except Exception as e:
-        logger.error(f"Assistant error: {e}", exc_info=True)
-        await safe_edit(
-            bot, chat_id, msg_id,
-            escape_v2(f"Sorry, I couldn't process that request. Error: {str(e)}"),
-            parse_mode=ParseMode.MARKDOWN_V2
+        logger.error(f"Assistant error: {e}")
+        # Отправляем ошибку как новое сообщение
+        await message.answer(
+            f"Извините, не удалось обработать запрос. Ошибка: {str(e)}",
+            parse_mode=None
         )
         
     finally:
@@ -769,12 +770,14 @@ async def handle_field_edit(message, state: FSMContext):
     msg_id = data.get("msg_id")
     if idx is None or field is None or msg_id is None:
         logger.warning("Missing required field edit data in state")
+        await message.answer("Ошибка: данные редактирования не найдены.")
         return
     
     user_id = message.from_user.id
     key = (user_id, msg_id)
     if key not in user_matches:
         logger.warning(f"No matches found for user {user_id}, message {msg_id}")
+        await message.answer("Ошибка: данные инвойса не найдены.")
         return
     
     entry = user_matches[key]
@@ -800,7 +803,7 @@ async def handle_field_edit(message, state: FSMContext):
         assistant_thread_id = user_data["assistant_thread_id"]
     
     # Показываем пользователю, что обрабатываем запрос
-    processing_msg = await message.answer("🔄 Processing edit...")
+    processing_msg = await message.answer("🔄 Обработка изменений...")
     
     try:
         # Отправляем запрос ассистенту с использованием нового декоратора
@@ -825,7 +828,8 @@ async def handle_field_edit(message, state: FSMContext):
                 # Применяем escape_v2 для корректной обработки блоков кода
                 formatted_report = escape_v2(report)
                 
-                await safe_edit(
+                # Используем функцию safe_edit для обновления отчета
+                success = await safe_edit(
                     bot,
                     message.chat.id,
                     msg_id,
@@ -833,22 +837,33 @@ async def handle_field_edit(message, state: FSMContext):
                     kb=kb_report(entry["match_results"]),
                     parse_mode=ParseMode.MARKDOWN_V2,
                 )
+                
+                # Если не удалось обновить отчет, показать краткое сообщение об успешном обновлении
+                if not success:
+                    await message.answer(
+                        f"✅ Поле {field} обновлено. Позиция {idx+1} изменена.",
+                        parse_mode=None
+                    )
+                
                 await state.set_state(NotaStates.editing)
                 return
         except json.JSONDecodeError:
             # Не JSON, продолжаем как с обычным текстом
             pass
             
-        # Отвечаем текстом от ассистента
-        await safe_edit(
-            bot,
-            message.chat.id,
-            msg_id,
+        # Отвечаем новым сообщением с текстом от ассистента вместо редактирования
+        await message.answer(
             escape_v2(assistant_response),
-            kb=kb_report(entry["match_results"]),
-            parse_mode=ParseMode.MARKDOWN_V2,
+            parse_mode=ParseMode.MARKDOWN_V2
         )
+        
         await state.set_state(NotaStates.editing)
+        
+    except Exception as e:
+        logger.error(f"Error handling field edit: {e}")
+        await message.answer(
+            f"Ошибка при обработке изменений. Пожалуйста, попробуйте еще раз."
+        )
         
     finally:
         # Удаляем сообщение о загрузке
