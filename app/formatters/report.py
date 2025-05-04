@@ -7,7 +7,7 @@ W_QTY = 1  # QTY теперь без отступа
 W_UNIT = 4
 W_PRICE = 13
 W_STATUS = 2
-FMT_ROW = "{idx:<3} {name:<19} {qty:>1} {unit:<4} {price:>13} {status}"
+FMT_ROW = "{idx:<3} {name:<19}   {qty:>1} {unit:<4} {price:>13} {status}"  # +3 пробела между name и qty
 DIVIDER = "───────────────"  # 15 символов
 
 
@@ -60,7 +60,7 @@ def build_table(rows):
     # Удаляем divider-строки из rows, если они есть
     rows = [r for r in rows if set(r.strip()) != {'─'}]
     # Заголовок всегда без экранирования!
-    header = f"#   NAME{' ' * (W_NAME - 4)} QTY UNIT{' ' * (W_UNIT - 4)}PRICE{' ' * (W_PRICE - 5)}\n"
+    header = f"#   NAME{' ' * (W_NAME - 4)}   QTY UNIT{' ' * (W_UNIT - 4)}PRICE{' ' * (W_PRICE - 5)}\n"  # +3 пробела
     table = header
     table += "───────────────\n"  # 15 символов
     body = "\n".join(rows)
