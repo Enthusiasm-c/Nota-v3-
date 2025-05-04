@@ -1,6 +1,14 @@
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import (
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    ReplyKeyboardMarkup,
+    KeyboardButton,
+)
+
 
 # Главное меню (inline)
+
+
 def kb_main(lang: str = "en") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -10,6 +18,8 @@ def kb_main(lang: str = "en") -> InlineKeyboardMarkup:
     )
 
 # Клавиатура для загрузки файла (reply)
+
+
 def kb_upload() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="/cancel")]],
@@ -18,6 +28,8 @@ def kb_upload() -> ReplyKeyboardMarkup:
     )
 
 # Клавиатура помощи (reply)
+
+
 def kb_help_back() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="Back")]],
@@ -26,6 +38,8 @@ def kb_help_back() -> ReplyKeyboardMarkup:
     )
 
 # Клавиатура отчёта (inline)
+
+
 def kb_report(match_results: list) -> InlineKeyboardMarkup:
     # СТАРАЯ версия для совместимости
     edit_buttons = [
@@ -40,6 +54,8 @@ def kb_report(match_results: list) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=base_buttons)
 
 # --- D-2: UX финального отчёта ---
+
+
 def build_invoice_report(match_results: list) -> InlineKeyboardMarkup:
     """
     Клавиатура финального отчёта:
@@ -49,15 +65,23 @@ def build_invoice_report(match_results: list) -> InlineKeyboardMarkup:
     """
     # Кнопки редактирования для каждой строки
     edit_buttons = [
-        InlineKeyboardButton(text=f"✏️ Ред.{i+1}", callback_data=f"edit:{i}")
+        InlineKeyboardButton(
+            text=f"✏️ Ред.{i+1}", callback_data=f"edit:{i}"
+        )
         for i, _ in enumerate(match_results)
     ]
     # Кнопка Add missing
-    add_missing_btn = InlineKeyboardButton(text="➕ Add missing", callback_data="inv_add_missing")
+    add_missing_btn = InlineKeyboardButton(
+        text="➕ Add missing", callback_data="inv_add_missing"
+    )
     # Кнопка Submit anyway
-    submit_anyway_btn = InlineKeyboardButton(text="✅ Submit anyway", callback_data="inv_submit_anyway")
+    submit_anyway_btn = InlineKeyboardButton(
+        text="✅ Submit anyway", callback_data="inv_submit_anyway"
+    )
     # Кнопка Back
-    back_btn = InlineKeyboardButton(text="↩ Back", callback_data="inv_cancel_edit")
+    back_btn = InlineKeyboardButton(
+        text="↩ Back", callback_data="inv_cancel_edit"
+    )
     # Сборка клавиатуры
     keyboard = []
     # Редактирование по строкам (по 2-3 в ряд)
@@ -68,6 +92,8 @@ def build_invoice_report(match_results: list) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 # Меню выбора поля для редактирования (inline)
+
+
 def kb_field_menu(idx: int = None) -> InlineKeyboardMarkup:
     # Универсальный вариант: если idx=None, то просто field:name и т.д.
     suffix = f":{idx}" if idx is not None else ""
@@ -84,27 +110,42 @@ def kb_field_menu(idx: int = None) -> InlineKeyboardMarkup:
     )
 
 # Оставляем для совместимости (по одной строке)
+
+
 def kb_edit(idx: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[[InlineKeyboardButton(text="✏️ Edit", callback_data=f"edit:{idx}")]]
     )
 
+
+
 def kb_edit_fields(idx: int) -> InlineKeyboardMarkup:
     return kb_field_menu(idx)
 
 # Кнопка Set supplier (inline)
+
+
 def kb_set_supplier() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="✏️ Set supplier", callback_data="set_supplier")]]
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✏️ Set supplier", callback_data="set_supplier")]
+        ]
     )
 
 # Авто-кнопки unit (inline)
+
+
 def kb_unit_buttons() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=unit, callback_data=f"unit:{unit}") for unit in ["kg", "g", "l", "ml", "pcs"]]
+            [
+                InlineKeyboardButton(text=unit, callback_data=f"unit:{unit}")
+                for unit in ["kg", "g", "l", "ml", "pcs"]
+            ]
         ]
     )
+
+
 
 def kb_cancel_all() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
