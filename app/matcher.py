@@ -310,6 +310,43 @@ def match_positions(positions: List[Dict], products: List[Dict], threshold: Opti
                 result_id = getattr(matched_product, "id", None)
         else:
             result_id = None
+        # --- D-2: UX финального отчёта ---
+        # Определяем price и line_total
+        # 1. Пробуем взять total из позиции
+        total = None
+        price = None
+        if isinstance(pos, dict):
+            total = pos.get("total")
+            price = pos.get("price")
+        else:
+            total = getattr(pos, "total", None)
+            price = getattr(pos, "price", None)
+        # Если есть qty и total, вычисляем price
+        computed_price = None
+        computed_line_total = None
+        try:
+            if qty is not None and total is not None:
+                # qty и total должны быть числами
+                q = float(qty)
+                t = float(total)
+                if q != 0:
+                    computed_price = t / q
+                    computed_line_total = t
+                else:
+                    computed_price = None
+                    computed_line_total = None
+            elif price is not None and qty is not None:
+                q = float(qty)
+                p = float(price)
+                computed_price = p
+                computed_line_total = p * q
+            else:
+                computed_price = None
+                computed_line_total = None
+        except Exception:
+            computed_price = None
+            computed_line_total = None
+
         result = {
             "name": canonical_name,
             "qty": qty,
@@ -317,6 +354,8 @@ def match_positions(positions: List[Dict], products: List[Dict], threshold: Opti
             "status": status,
             "product_id": result_id,
             "score": best_score if best_score else None,
+            "price": computed_price,
+            "line_total": computed_line_total,
         }
         if return_suggestions and status == "unknown":
             # Top-5 fuzzy suggestions for unknown

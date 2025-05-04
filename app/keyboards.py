@@ -27,18 +27,45 @@ def kb_help_back() -> ReplyKeyboardMarkup:
 
 # Клавиатура отчёта (inline)
 def kb_report(match_results: list) -> InlineKeyboardMarkup:
-    # Кнопки Edit только для проблемных строк
+    # СТАРАЯ версия для совместимости
     edit_buttons = [
         [InlineKeyboardButton(text=f"✏️ Edit line {i+1}", callback_data=f"edit:{i}")]
         for i, r in enumerate(match_results) if r.get("status") != "ok"
     ]
-    # Confirm + Cancel всегда
     base_buttons = [
         [InlineKeyboardButton(text="✅ Confirm", callback_data="confirm:invoice")],
         *edit_buttons,
         [InlineKeyboardButton(text="🚫 Cancel", callback_data="cancel:all")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=base_buttons)
+
+# --- D-2: UX финального отчёта ---
+def build_invoice_report(match_results: list) -> InlineKeyboardMarkup:
+    """
+    Клавиатура финального отчёта:
+    [✏️ Ред.1] [✏️ Ред.2] …
+    [➕ Add missing]
+    [✅ Submit anyway] [↩ Back]
+    """
+    # Кнопки редактирования для каждой строки
+    edit_buttons = [
+        InlineKeyboardButton(text=f"✏️ Ред.{i+1}", callback_data=f"edit:{i}")
+        for i, _ in enumerate(match_results)
+    ]
+    # Кнопка Add missing
+    add_missing_btn = InlineKeyboardButton(text="➕ Add missing", callback_data="inv_add_missing")
+    # Кнопка Submit anyway
+    submit_anyway_btn = InlineKeyboardButton(text="✅ Submit anyway", callback_data="inv_submit_anyway")
+    # Кнопка Back
+    back_btn = InlineKeyboardButton(text="↩ Back", callback_data="inv_cancel_edit")
+    # Сборка клавиатуры
+    keyboard = []
+    # Редактирование по строкам (по 2-3 в ряд)
+    for i in range(0, len(edit_buttons), 3):
+        keyboard.append(edit_buttons[i:i+3])
+    keyboard.append([add_missing_btn])
+    keyboard.append([submit_anyway_btn, back_btn])
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 # Меню выбора поля для редактирования (inline)
 def kb_field_menu(idx: int = None) -> InlineKeyboardMarkup:

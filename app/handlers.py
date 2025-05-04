@@ -6,6 +6,9 @@ from aiogram.utils.markdown import escape_md
 from app import matcher, alias, data_loader, keyboards
 
 
+class InvoiceReviewStates(StatesGroup):
+    review = State()
+
 class EditPosition(StatesGroup):
     waiting_field = State()
     waiting_name = State()
@@ -51,6 +54,55 @@ async def handle_cancel(call: CallbackQuery, state: FSMContext):
     await call.message.edit_reply_markup(reply_markup=keyboards.kb_edit(idx))
     await state.clear()
 
+
+# --- UX финального отчёта: обработчики новых кнопок ---
+@router.callback_query(F.data == "inv_cancel_edit")
+async def handle_cancel_edit(call: CallbackQuery, state: FSMContext):
+    # Вернуться к отчёту без удаления черновика
+    data = await state.get_data()
+    invoice = data.get("invoice")
+    if not invoice:
+        await call.answer("Session expired. Please resend the invoice.", show_alert=True)
+        return
+    # Показываем отчёт и клавиатуру
+    from app.formatter import build_report
+    report = build_report(invoice, matcher.match_positions(invoice["positions"], data_loader.load_products()))
+    await call.message.edit_text(report, reply_markup=keyboards.build_invoice_report(invoice["positions"]))
+    await state.set_state(InvoiceReviewStates.review)
+
+@router.callback_query(F.data == "inv_submit_anyway")
+async def handle_submit_anyway(call: CallbackQuery, state: FSMContext):
+    # Отправить инвойс в Syrve даже если есть unknown
+    data = await state.get_data()
+    invoice = data.get("invoice")
+    if not invoice:
+        await call.answer("Session expired. Please resend the invoice.", show_alert=True)
+        return
+    # Импортируем экспорт и вызываем
+    from app.export import export_to_syrve
+    try:
+        await export_to_syrve(invoice)
+        await call.message.answer("Invoice sent to Syrve!", reply_markup=None)
+        await state.clear()
+    except Exception as e:
+        await call.message.answer(f"Error sending invoice: {e}")
+
+@router.callback_query(F.data == "inv_add_missing")
+async def handle_add_missing(call: CallbackQuery, state: FSMContext):
+    # Переход к поиску по базе (как при unknown)
+    data = await state.get_data()
+    invoice = data.get("invoice")
+    if not invoice:
+        await call.answer("Session expired. Please resend the invoice.", show_alert=True)
+        return
+    # Найти первую unknown
+    positions = invoice["positions"]
+    for idx, pos in enumerate(positions):
+        if pos.get("status") == "unknown":
+            await state.update_data(edit_pos=idx, msg_id=call.message.message_id)
+            await call.message.edit_reply_markup(reply_markup=keyboards.kb_edit_fields(idx))
+            return
+    await call.answer("No unknown positions left.")
 
 # --- Field value reply: validate, update, match, redraw ---
 @router.message(EditPosition.waiting_name)
