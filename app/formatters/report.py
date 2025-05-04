@@ -98,8 +98,8 @@ def paginate_rows(rows, page_size=15):
 
 def build_header(supplier, date):
     return (
-        f"<b>Supplier:</b> {escape(supplier)}<br>"
-        f"<b>Invoice date:</b> {escape(date)}<br><br>"
+        f"<b>Supplier:</b> {escape(str(supplier))}<br>"
+        f"<b>Invoice date:</b> {escape(str(date))}<br><br>"
     )
 
 def build_table(rows):
