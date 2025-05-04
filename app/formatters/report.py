@@ -20,7 +20,7 @@ def format_idr(val):
         return "—"
 
 
-def _row(idx, name, qty, unit, total, price, status, escape=False):
+def _row(idx, name, qty, unit, price, status, escape=False):
     # Формируем статус с эмодзи и текстом
     if status == "ok":
         status_str = "✔️"
@@ -138,6 +138,5 @@ def build_report(parsed_data, match_results, escape=True, page=1, page_size=15):
     errors_count = len([r for r in match_results if r.get('status') in ['unit_mismatch', 'unknown']])
     report += f"Было успешно определено {ok_count} позиций\n"
     report += f"Позиции, требующие подтверждения: {errors_count} шт.\n"
-
     report += f"{DIVIDER}\n"
     return report.strip(), has_errors

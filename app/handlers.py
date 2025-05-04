@@ -6,6 +6,7 @@ from aiogram.types import ForceReply
 
 from app.formatters import report as invoice_report, alias, data_loader, keyboards
 from app import matcher
+from app.bot_utils import edit_message_text_safe
 
 
 class InvoiceReviewStates(StatesGroup):
@@ -438,20 +439,13 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
         text_to_send = f"Updated!\n{text}"
         with open("/tmp/nota_debug.log", "a") as f:
             f.write(f"EDIT_MESSAGE_DEBUG: chat_id={message.chat.id}, msg_id={msg_id}, text_len={len(text_to_send)}, text_preview={text_to_send[:500]!r}, reply_markup={reply_markup}\n")
-        try:
-            await message.bot.edit_message_text(
-                text_to_send,
-                message.chat.id,
-                msg_id,
-                reply_markup=reply_markup,
-            )
-        except Exception as e:
-            import traceback
-            with open("/tmp/nota_debug.log", "a") as f:
-                f.write(f"EDIT_MESSAGE_ERROR: {e}\n")
-                if hasattr(e, 'description'):
-                    f.write(f"EDIT_MESSAGE_ERROR_DESCRIPTION: {e.description}\n")
-                f.write(traceback.format_exc() + "\n")
+        await edit_message_text_safe(
+            bot=message.bot,
+            chat_id=message.chat.id,
+            msg_id=msg_id,
+            text=text_to_send,
+            kb=reply_markup,
+        )
         await message.bot.edit_message_reply_markup(
             message.chat.id, msg_id, reply_markup=None
         )
@@ -471,20 +465,13 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
         text_to_send = f"Updated!\n{text}"
         with open("/tmp/nota_debug.log", "a") as f:
             f.write(f"EDIT_MESSAGE_DEBUG: chat_id={message.chat.id}, msg_id={msg_id}, text_len={len(text_to_send)}, text_preview={text_to_send[:500]!r}, reply_markup={reply_markup}\n")
-        try:
-            await message.bot.edit_message_text(
-                text_to_send,
-                message.chat.id,
-                msg_id,
-                reply_markup=reply_markup,
-            )
-        except Exception as e:
-            import traceback
-            with open("/tmp/nota_debug.log", "a") as f:
-                f.write(f"EDIT_MESSAGE_ERROR: {e}\n")
-                if hasattr(e, 'description'):
-                    f.write(f"EDIT_MESSAGE_ERROR_DESCRIPTION: {e.description}\n")
-                f.write(traceback.format_exc() + "\n")
+        await edit_message_text_safe(
+            bot=message.bot,
+            chat_id=message.chat.id,
+            msg_id=msg_id,
+            text=text_to_send,
+            kb=reply_markup,
+        )
         await message.bot.edit_message_reply_markup(
             message.chat.id, msg_id, reply_markup=keyboards.kb_edit_fields(idx)
         )
