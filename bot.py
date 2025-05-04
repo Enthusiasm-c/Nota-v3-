@@ -556,15 +556,32 @@ async def photo_handler(message, state: FSMContext, **kwargs):
 
 
 async def handle_nlu_text(message, state: FSMContext):
+    """
+    Обрабатывает все текстовые сообщения в зависимости от текущего состояния.
+    Это может быть:
+    1. Редактирование поля в инвойсе (если editing_mode='field_edit')
+    2. Обычный диалог с ассистентом
+    """
     text = message.text
     chat_id = message.chat.id
+    user_id = message.from_user.id
     
-    # Send "thinking" status
-    processing_msg = await message.answer("🤔 Processing your request...")
+    # Получаем данные состояния пользователя для определения режима
+    user_data = await state.get_data()
+    
+    # Проверяем, находимся ли мы в режиме редактирования поля
+    if user_data.get("editing_mode") == "field_edit":
+        logger.debug(f"BUGFIX: Handling message as field edit for user {user_id}")
+        # Вызываем обработчик редактирования поля напрямую
+        await handle_field_edit(message, state)
+        return
+    
+    # Если не в режиме редактирования, считаем запрос обычным диалогом с ассистентом
+    # Отправляем индикатор обработки
+    processing_msg = await message.answer("🤔 Обрабатываю ваш запрос...")
     
     try:
-        # Получаем данные состояния пользователя
-        user_data = await state.get_data()
+        logger.debug(f"BUGFIX: Processing text message as assistant dialog for user {user_id}")
         
         # Проверяем, есть ли thread_id в состоянии
         if "assistant_thread_id" not in user_data:
@@ -580,7 +597,7 @@ async def handle_nlu_text(message, state: FSMContext):
             # Сохраняем thread_id в состоянии пользователя
             await state.update_data(assistant_thread_id=thread.id)
             assistant_thread_id = thread.id
-            logger.info(f"Created new assistant thread for user {message.from_user.id}")
+            logger.info(f"Created new assistant thread for user {user_id}")
         else:
             # Используем существующий thread_id
             assistant_thread_id = user_data["assistant_thread_id"]
@@ -593,19 +610,18 @@ async def handle_nlu_text(message, state: FSMContext):
             data = json.loads(assistant_response)
             if isinstance(data, dict) and data.get('tool_call') == 'edit_line':
                 # Apply edit_line logic here (update local state, etc.)
-                # For now, just acknowledge with NEW message (не редактируем старое)
+                # For now, just acknowledge with NEW message
                 await message.answer(
                     "✅ Изменения применены (edit_line)",
                     parse_mode=None
                 )
                 await state.set_state(NotaStates.editing)
-                await bot.delete_message(chat_id, processing_msg.message_id)
                 return
         except json.JSONDecodeError:
             # Not JSON data, continue with text response
             pass
             
-        # Отвечаем новым сообщением вместо редактирования старого
+        # Отвечаем новым сообщением
         formatted_response = escape_v2(assistant_response)
         
         # Отправляем ответ ассистента как новое сообщение
@@ -614,18 +630,19 @@ async def handle_nlu_text(message, state: FSMContext):
             parse_mode=ParseMode.MARKDOWN_V2
         )
         
+        # Сохраняем состояние редактирования инвойса
         await state.set_state(NotaStates.editing)
         
     except Exception as e:
-        logger.error(f"Assistant error: {e}")
+        logger.error(f"Assistant error: {str(e)}")
         # Отправляем ошибку как новое сообщение
         await message.answer(
-            f"Извините, не удалось обработать запрос. Ошибка: {str(e)}",
+            f"Извините, не удалось обработать запрос. Пожалуйста, попробуйте еще раз.",
             parse_mode=None
         )
         
     finally:
-        # Clean up processing message
+        # Удаляем сообщение о загрузке
         try:
             await bot.delete_message(chat_id, processing_msg.message_id)
         except Exception:
@@ -747,18 +764,34 @@ async def cb_cancel_row(callback: CallbackQuery, state: FSMContext):
 
 
 async def cb_field(callback: CallbackQuery, state: FSMContext):
+    # Разбираем данные из callback
     _, field, idx = callback.data.split(":")
     idx = int(idx)
-    # prompt force-reply
-    await callback.message.bot.send_message(
+    
+    # Логируем для диагностики
+    logger.debug(f"BUGFIX: Field edit callback received for field {field}, idx {idx}, message_id {callback.message.message_id}")
+    
+    # Запрашиваем новое значение с force_reply
+    reply_msg = await callback.message.bot.send_message(
         callback.from_user.id,
-        f"Enter new value for {field} (line {idx+1}):",
+        f"Введите новое значение для {field} (строка {idx+1}):",
         reply_markup={"force_reply": True},
     )
-    # Store context in FSM
+    
+    # Логируем ID созданного сообщения
+    logger.debug(f"BUGFIX: Force reply message created with ID {reply_msg.message_id}")
+    
+    # Сохраняем контекст в FSM для последующей обработки
     await state.update_data(
-        edit_idx=idx, edit_field=field, msg_id=callback.message.message_id
+        edit_idx=idx, 
+        edit_field=field, 
+        msg_id=callback.message.message_id,
+        # Важно: отмечаем, что мы находимся в процессе редактирования поля
+        # Это поможет правильно маршрутизировать ответ пользователя
+        editing_mode="field_edit"
     )
+    
+    # Отвечаем на callback чтобы убрать индикатор загрузки
     await callback.answer()
 
 
@@ -771,121 +804,101 @@ async def handle_field_edit(message, state: FSMContext):
     Обрабатывает редактирование полей инвойса с использованием ассистента.
     Использует декоратор with_async_retry_backoff для автоматической обработки ошибок.
     """
+    logger.debug(f"BUGFIX: Starting field edit handler for user {message.from_user.id}")
+    
+    # Получаем данные из состояния
     data = await state.get_data()
     idx = data.get("edit_idx")
     field = data.get("edit_field")
     msg_id = data.get("msg_id")
+    
+    # ВАЖНО: очищаем режим редактирования, чтобы следующие сообщения обрабатывались как обычные
+    await state.update_data(editing_mode=None)
+    logger.debug(f"BUGFIX: Cleared editing_mode in state")
+    
     if idx is None or field is None or msg_id is None:
-        logger.warning("Missing required field edit data in state")
+        logger.warning(f"Missing required field edit data in state: idx={idx}, field={field}, msg_id={msg_id}")
         await message.answer("Ошибка: данные редактирования не найдены.")
         return
     
     user_id = message.from_user.id
     key = (user_id, msg_id)
+    
+    logger.debug(f"BUGFIX: Looking for invoice data with key {key}")
     if key not in user_matches:
         logger.warning(f"No matches found for user {user_id}, message {msg_id}")
-        await message.answer("Ошибка: данные инвойса не найдены.")
-        return
+        
+        # Проверяем, может быть есть данные с другими message_id для этого пользователя
+        alt_keys = [k for k in user_matches.keys() if k[0] == user_id]
+        if alt_keys:
+            logger.debug(f"BUGFIX: Found alternative keys for user: {alt_keys}")
+            # Используем самый свежий ключ (предполагаем, что с наибольшим message_id)
+            key = max(alt_keys, key=lambda k: k[1])
+            logger.debug(f"BUGFIX: Using alternative key {key}")
+        else:
+            await message.answer("Ошибка: данные инвойса не найдены.")
+            return
     
     entry = user_matches[key]
     text = message.text.strip()
-    
-    # Получаем thread_id из состояния
-    user_data = await state.get_data()
-    
-    if "assistant_thread_id" not in user_data:
-        # Создаем новый поток если не существует
-        from openai import OpenAI
-        from app.config import get_chat_client
-        
-        client = get_chat_client()
-        if not client:
-            client = OpenAI(api_key=settings.OPENAI_CHAT_KEY)
-            
-        thread = client.beta.threads.create()
-        await state.update_data(assistant_thread_id=thread.id)
-        assistant_thread_id = thread.id
-        logger.info(f"Created new assistant thread for field edit (user {user_id})")
-    else:
-        assistant_thread_id = user_data["assistant_thread_id"]
     
     # Показываем пользователю, что обрабатываем запрос
     processing_msg = await message.answer("🔄 Обработка изменений...")
     
     try:
-        # Отправляем запрос ассистенту с использованием нового декоратора
-        assistant_response = await ask_assistant(thread_id=assistant_thread_id, message=text)
+        logger.debug(f"BUGFIX: Processing field edit, text: '{text[:30]}...' (truncated)")
         
-        # Пробуем распарсить как JSON для tool_call
+        # Обновляем напрямую данные в инвойсе (упрощенный вариант без использования ассистента)
+        # Это гарантирует, что мы сможем обработать запрос без сетевых вызовов
+        
+        # Обновляем поле напрямую
+        old_value = entry["match_results"][idx].get(field, "")
+        entry["match_results"][idx][field] = text
+        logger.debug(f"BUGFIX: Updated {field} from '{old_value}' to '{text}'")
+        
+        # Запускаем матчер заново для обновленной строки, если нужно
+        if field in ["name", "qty", "unit"]:
+            products = data_loader.load_products("data/base_products.csv")
+            entry["match_results"][idx] = matcher.match_positions([entry["match_results"][idx]], products)[0]
+            logger.debug(f"BUGFIX: Re-matched item, new status: {entry['match_results'][idx].get('status')}")
+        
+        # Создаем отчет
+        parsed_data = entry["parsed_data"]
+        report = build_report(parsed_data, entry["match_results"], escape=False)
+        
+        # Применяем форматирование для Markdown
+        formatted_report = escape_v2(report)
+        
+        # Отправляем новое сообщение с обновленным отчетом
         try:
-            data = json.loads(assistant_response)
-            if isinstance(data, dict) and data.get('tool_call') == 'edit_line':
-                # Обновляем данные инвойса
-                for k, v in data.get('fields', {}).items():
-                    entry["match_results"][idx][k] = v
-                
-                # Запускаем матчер заново для обновленной строки
-                products = data_loader.load_products("data/base_products.csv")
-                entry["match_results"][idx] = matcher.match_positions([entry["match_results"][idx]], products)[0]
-                parsed_data = entry["parsed_data"]
-                
-                # Создаем отчет без экранирования в самой функции
-                report = build_report(parsed_data, entry["match_results"], escape=False)
-                
-                # Применяем escape_v2 для корректной обработки блоков кода
-                formatted_report = escape_v2(report)
-                
-                # BUGFIX: Отправляем новое сообщение вместо редактирования существующего
-                logger.debug(f"BUGFIX: Sending new report after field edit, old msg_id was {msg_id}")
-                
-                try:
-                    # Отправляем новое сообщение с обновленным отчетом
-                    result = await message.answer(
-                        formatted_report,
-                        reply_markup=kb_report(entry["match_results"]),
-                        parse_mode=ParseMode.MARKDOWN_V2
-                    )
-                    
-                    # Фиксируем ID нового сообщения
-                    new_msg_id = result.message_id
-                    logger.debug(f"BUGFIX: Successfully sent new report, new message ID: {new_msg_id}")
-                    
-                    # Обновляем ссылки в user_matches
-                    chat_id = message.chat.id
-                    
-                    # Копируем данные в новую запись с новым ID сообщения
-                    new_key = (user_id, new_msg_id)
-                    user_matches[new_key] = entry.copy()
-                    
-                    # Удаляем старую запись, так как сообщение устарело
-                    logger.debug(f"BUGFIX: Updating user_matches, replacing key {(user_id, msg_id)} with {new_key}")
-                    if (user_id, msg_id) in user_matches:
-                        del user_matches[(user_id, msg_id)]
-                    
-                except Exception as e:
-                    logger.debug(f"BUGFIX: Error sending formatted report: {str(e)}")
-                    # Отправляем простое подтверждение редактирования
-                    await message.answer(
-                        f"✅ Поле {field} обновлено. Позиция {idx+1} изменена.",
-                        parse_mode=None
-                    )
-                
-                await state.set_state(NotaStates.editing)
-                return
-        except json.JSONDecodeError:
-            # Не JSON, продолжаем как с обычным текстом
-            pass
+            logger.debug(f"BUGFIX: Sending new report")
+            result = await message.answer(
+                formatted_report,
+                reply_markup=kb_report(entry["match_results"]),
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
             
-        # Отвечаем новым сообщением с текстом от ассистента вместо редактирования
-        await message.answer(
-            escape_v2(assistant_response),
-            parse_mode=ParseMode.MARKDOWN_V2
-        )
-        
-        await state.set_state(NotaStates.editing)
+            # Обновляем ссылки в user_matches с новым ID сообщения
+            new_msg_id = result.message_id
+            new_key = (user_id, new_msg_id)
+            user_matches[new_key] = entry.copy()
+            
+            # Удаляем старую запись
+            if key in user_matches and key != new_key:
+                del user_matches[key]
+            
+            logger.debug(f"BUGFIX: Created new report with message_id {new_msg_id}")
+                
+        except Exception as e:
+            logger.error(f"BUGFIX: Error sending new report: {str(e)}")
+            # Отправляем простое подтверждение
+            await message.answer(
+                f"✅ Поле '{field}' обновлено на '{text}'. Позиция {idx+1} изменена.",
+                parse_mode=None
+            )
         
     except Exception as e:
-        logger.error(f"Error handling field edit: {e}")
+        logger.error(f"Error handling field edit: {str(e)}")
         await message.answer(
             f"Ошибка при обработке изменений. Пожалуйста, попробуйте еще раз."
         )
@@ -896,19 +909,29 @@ async def handle_field_edit(message, state: FSMContext):
             await bot.delete_message(message.chat.id, processing_msg.message_id)
         except Exception:
             pass
+        
+        # Возвращаемся в режим редактирования инвойса
+        await state.set_state(NotaStates.editing)
 
 
 
 async def cb_confirm(callback: CallbackQuery, state: FSMContext):
-    await safe_edit(
-        bot,
-        callback.message.chat.id,
-        callback.message.message_id,
+    # Вместо редактирования - отправляем новое сообщение
+    chat_id = callback.message.chat.id
+    
+    # Логируем для отладки
+    logger.debug(f"BUGFIX: Confirming invoice in chat {chat_id}")
+    
+    # Отправляем сообщение о подтверждении
+    await callback.message.answer(
         "✅ Invoice #123 saved to Syrve. Thank you!",
-        kb=kb_main(),
+        reply_markup=kb_main()
     )
+    
+    # Обновляем состояние пользователя
     await state.set_state(NotaStates.main_menu)
-
+    
+    # Отвечаем на callback, чтобы убрать индикатор загрузки
     await callback.answer()
 
 
