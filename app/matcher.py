@@ -1,12 +1,12 @@
 import logging
-from typing import List, Dict, Optional, Tuple, Sequence, Hashable, Callable, Any
-import re
+from typing import (
+    List, Dict, Optional, Tuple, Sequence, Hashable, Callable, Any
+)
 from app.config import settings
-from app.models import Position, Product
-from app.utils.md import escape_md
 
 try:
-    from Levenshtein import ratio as _levenshtein_ratio, distance as _levenshtein_distance
+    from Levenshtein import ratio as _levenshtein_ratio
+    from Levenshtein import distance as _levenshtein_distance
 
     def levenshtein_ratio(
         s1: Sequence[Hashable],
@@ -56,10 +56,14 @@ except ImportError:
         b = "".join(map(str, s2))
         if a == b:
             return 0
-        if len(a) == 0:
-            return len(b)
+        if len(a) > 20:
+            a = a[:17] + "..."
+        if len(b) > 20:
+            b = b[:17] + "..."
         if len(b) == 0:
             return len(a)
+        if len(a) == 0:
+            return len(b)
         matrix = [[0 for _ in range(len(b) + 1)] for _ in range(len(a) + 1)]
         for i in range(len(a) + 1):
             matrix[i][0] = i
@@ -226,11 +230,19 @@ def match_positions(
 
             threshold_value = settings.MATCH_THRESHOLD
 
-            if name_l and alias_l and name_l == alias_l:
+            if (
+                name_l
+                and alias_l
+                and name_l == alias_l
+            ):
                 matched_product = best_match
                 status = "ok"
                 canonical_name = product_name
-            elif name_l and product_name_l and name_l == product_name_l:
+            elif (
+                name_l
+                and product_name_l
+                and name_l == product_name_l
+            ):
                 matched_product = best_match
                 status = "ok"
                 canonical_name = product_name
@@ -278,22 +290,29 @@ def match_positions(
             total = getattr(pos, "total", None)
             price = getattr(pos, "price", None)
 
-        computed_price = None
-        computed_line_total = None
+        # Привести qty, total, price к float если возможно
         try:
-            if price is None and total is not None and qty not in (None, "", 0, "0"):
-                price = float(total) / float(qty)
-            if (
-                price is not None
-                and (total is None or total == "")
-                and qty not in (None, "", 0, "0")
-            ):
-                total = float(price) * float(qty)
-                computed_price = None
-                computed_line_total = None
+            qty_f = float(qty)
         except Exception:
-            computed_price = None
-            computed_line_total = None
+            qty_f = None
+        try:
+            total_f = float(total)
+        except Exception:
+            total_f = None
+        try:
+            price_f = float(price)
+        except Exception:
+            price_f = None
+
+        # price = total/qty если price нет, но есть total и qty
+        if price_f is None and total_f is not None and qty_f not in (None, 0):
+            price_f = total_f / qty_f
+        # line_total = price*qty если line_total нет, но есть price и qty
+        line_total_f = None
+        if price_f is not None and qty_f not in (None, 0):
+            line_total_f = price_f * qty_f
+        elif total_f is not None:
+            line_total_f = total_f
 
         result = {
             "name": canonical_name,
@@ -302,14 +321,21 @@ def match_positions(
             "status": status,
             "product_id": result_id,
             "score": best_score if best_score else None,
-            "price": computed_price,
-            "line_total": computed_line_total,
+            "price": price_f,
+            "line_total": line_total_f,
         }
 
-        if return_suggestions and status == "unknown":
-            fuzzy_scores.sort(reverse=True, key=lambda x: x[0])
+        if (
+            return_suggestions
+            and status == "unknown"
+        ):
+            fuzzy_scores.sort(
+                reverse=True, key=lambda x: x[0]
+            )
             result["suggestions"] = [
-                p for s, p in fuzzy_scores[:5] if s > settings.MATCH_MIN_SCORE
+                p
+                for s, p in fuzzy_scores[:5]
+                if s > settings.MATCH_MIN_SCORE
             ]
 
         results.append(result)

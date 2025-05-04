@@ -1,4 +1,5 @@
 from aiogram import Router, CallbackQuery, Message, F
+import re
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import ForceReply
@@ -166,6 +167,116 @@ async def handle_cancel_edit(call: CallbackQuery, state: FSMContext):
     await state.set_state(InvoiceReviewStates.review)
 
 
+@router.callback_query(F.data == "inv_submit")
+async def handle_submit(call: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    invoice = data.get("invoice")
+    if not invoice:
+        await call.answer("Session expired. Please resend the invoice.", show_alert=True)
+        return
+    match_results = matcher.match_positions(invoice["positions"], data_loader.load_products())
+    text, has_errors = invoice_report.build_report(invoice, match_results)
+    if has_errors:
+        await call.answer("⚠️ Исправьте ошибки перед отправкой.", show_alert=True)
+        return
+    # Подтверждение перед отправкой
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    confirm_kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Да, отправить",
+                    callback_data="inv_submit_confirm"
+                ),
+                InlineKeyboardButton(
+                    text="Нет, вернуться",
+                    callback_data="inv_submit_cancel"
+                ),
+            ]
+        ]
+    )
+    await call.message.edit_text(
+        "Вы уверены, что хотите отправить инвойс?",
+        reply_markup=confirm_kb,
+    )
+
+
+
+@router.callback_query(F.data == "inv_submit_confirm")
+async def handle_submit_confirm(call: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    invoice = data.get("invoice")
+    if not invoice:
+        await call.answer("Session expired. Please resend the invoice.", show_alert=True)
+        return
+    # Здесь — экспорт/отправка в Syrve или другой сервис
+    await call.message.edit_text("Инвойс успешно отправлен!")
+    await state.clear()
+
+
+
+@router.callback_query(F.data == "inv_submit_cancel")
+async def handle_submit_cancel(call: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    invoice = data.get("invoice")
+    page = data.get("invoice_page", 1)
+    if not invoice:
+        await call.answer("Session expired. Please resend the invoice.", show_alert=True)
+        return
+    match_results = matcher.match_positions(
+        invoice["positions"],
+        data_loader.load_products()
+    )
+    text, has_errors = invoice_report.build_report(
+        invoice, match_results, page=page
+    )
+    table_rows = [r for r in match_results]
+    total_rows = len(table_rows)
+    page_size = 15
+    total_pages = (total_rows + page_size - 1) // page_size
+    await call.message.edit_text(
+        text,
+        reply_markup=keyboards.build_invoice_report(
+            text,
+            has_errors,
+            match_results,
+            page=page,
+            total_pages=total_pages,
+            page_size=page_size
+        ),
+    )
+    await state.set_state(InvoiceReviewStates.review)
+
+
+
+
+
+@router.callback_query(F.data.regexp(r"^page_(\\d+)$"))
+async def handle_page_n(call: CallbackQuery, state: FSMContext):
+    page = int(re.match(r"^page_(\\d+)$", call.data).group(1))
+    data = await state.get_data()
+    invoice = data.get("invoice")
+    if not invoice:
+        await call.answer("Session expired. Please resend the invoice.", show_alert=True)
+        return
+    match_results = matcher.match_positions(invoice["positions"], data_loader.load_products())
+    text, has_errors = invoice_report.build_report(invoice, match_results, page=page)
+    page_size = 15
+    total_rows = len(match_results)
+    total_pages = (total_rows + page_size - 1) // page_size
+    await call.message.edit_text(
+        text,
+        reply_markup=keyboards.build_invoice_report(
+            text,
+            has_errors,
+            match_results,
+            page=page,
+            total_pages=total_pages,
+            page_size=page_size
+        ),
+    )
+
+
 @router.callback_query(F.data == "inv_submit_anyway")
 async def handle_submit_anyway(call: CallbackQuery, state: FSMContext):
     # Отправить инвойс в Syrve даже если есть unknown
@@ -285,7 +396,7 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
             value = float(value)
         except Exception:
             await message.answer(
-                "Enter a valid number for qty.", reply_markup=ForceReply()
+                "⚠️ Введите корректное число для qty.", reply_markup=ForceReply()
             )
             return
     elif field == "price":
@@ -293,7 +404,7 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
             value = float(value)
         except Exception:
             await message.answer(
-                "Enter a valid number for price.", reply_markup=ForceReply()
+                "⚠️ Введите корректное число для price.", reply_markup=ForceReply()
             )
             return
     invoice["positions"][idx][field] = value
@@ -311,25 +422,22 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
     total_rows = len(table_rows)
     page_size = 15
     total_pages = (total_rows + page_size - 1) // page_size
-    report = invoice_report.build_report(invoice, match_results, page=page)
     if match["status"] == "ok":
+
         # После успешного редактирования сбрасываем страницу на 1
         await state.update_data(invoice_page=1)
-        match_results = matcher.match_positions(
-            invoice["positions"], data_loader.load_products()
-        )
+        match_results = matcher.match_positions(invoice["positions"], data_loader.load_products())
         page = 1
-        table_rows = [r for r in match_results]
-        total_rows = len(table_rows)
         page_size = 15
+        total_rows = len(match_results)
         total_pages = (total_rows + page_size - 1) // page_size
-        report = invoice_report.build_report(invoice, match_results, page=page)
-        # Подробное логирование перед отправкой
-        text_to_send = f"Updated!\n{report}"
+        text, has_errors = invoice_report.build_report(invoice, match_results, page=page)
         reply_markup = keyboards.build_invoice_report(
-            invoice["positions"], page=page, total_pages=total_pages
+            text, has_errors, match_results, page=page, total_pages=total_pages, page_size=page_size
         )
-        print(f"EDIT_MESSAGE_DEBUG: chat_id={message.chat.id}, msg_id={msg_id}, text_len={len(text_to_send)}, text_preview={text_to_send[:500]!r}, reply_markup={reply_markup}")
+        text_to_send = f"Updated!\n{text}"
+        with open("/tmp/nota_debug.log", "a") as f:
+            f.write(f"EDIT_MESSAGE_DEBUG: chat_id={message.chat.id}, msg_id={msg_id}, text_len={len(text_to_send)}, text_preview={text_to_send[:500]!r}, reply_markup={reply_markup}\n")
         try:
             await message.bot.edit_message_text(
                 text_to_send,
@@ -339,10 +447,11 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
             )
         except Exception as e:
             import traceback
-            print(f"EDIT_MESSAGE_ERROR: {e}")
-            if hasattr(e, 'description'):
-                print(f"EDIT_MESSAGE_ERROR_DESCRIPTION: {e.description}")
-            traceback.print_exc()
+            with open("/tmp/nota_debug.log", "a") as f:
+                f.write(f"EDIT_MESSAGE_ERROR: {e}\n")
+                if hasattr(e, 'description'):
+                    f.write(f"EDIT_MESSAGE_ERROR_DESCRIPTION: {e.description}\n")
+                f.write(traceback.format_exc() + "\n")
         await message.bot.edit_message_reply_markup(
             message.chat.id, msg_id, reply_markup=None
         )
@@ -350,21 +459,18 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
     else:
         # Если не ok, оставляем на той же странице (или сбрасываем на 1)
         await state.update_data(invoice_page=1)
-        match_results = matcher.match_positions(
-            invoice["positions"], data_loader.load_products()
-        )
+        match_results = matcher.match_positions(invoice["positions"], data_loader.load_products())
         page = 1
-        table_rows = [r for r in match_results]
-        total_rows = len(table_rows)
         page_size = 15
+        total_rows = len(match_results)
         total_pages = (total_rows + page_size - 1) // page_size
-        report = invoice_report.build_report(invoice, match_results, page=page)
-        # Подробное логирование перед отправкой
-        text_to_send = f"Updated!\n{report}"
+        text, has_errors = invoice_report.build_report(invoice, match_results, page=page)
         reply_markup = keyboards.build_invoice_report(
-            invoice["positions"], page=page, total_pages=total_pages
+            text, has_errors, match_results, page=page, total_pages=total_pages, page_size=page_size
         )
-        print(f"EDIT_MESSAGE_DEBUG: chat_id={message.chat.id}, msg_id={msg_id}, text_len={len(text_to_send)}, text_preview={text_to_send[:500]!r}, reply_markup={reply_markup}")
+        text_to_send = f"Updated!\n{text}"
+        with open("/tmp/nota_debug.log", "a") as f:
+            f.write(f"EDIT_MESSAGE_DEBUG: chat_id={message.chat.id}, msg_id={msg_id}, text_len={len(text_to_send)}, text_preview={text_to_send[:500]!r}, reply_markup={reply_markup}\n")
         try:
             await message.bot.edit_message_text(
                 text_to_send,
@@ -374,10 +480,11 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
             )
         except Exception as e:
             import traceback
-            print(f"EDIT_MESSAGE_ERROR: {e}")
-            if hasattr(e, 'description'):
-                print(f"EDIT_MESSAGE_ERROR_DESCRIPTION: {e.description}")
-            traceback.print_exc()
+            with open("/tmp/nota_debug.log", "a") as f:
+                f.write(f"EDIT_MESSAGE_ERROR: {e}\n")
+                if hasattr(e, 'description'):
+                    f.write(f"EDIT_MESSAGE_ERROR_DESCRIPTION: {e.description}\n")
+                f.write(traceback.format_exc() + "\n")
         await message.bot.edit_message_reply_markup(
             message.chat.id, msg_id, reply_markup=keyboards.kb_edit_fields(idx)
         )

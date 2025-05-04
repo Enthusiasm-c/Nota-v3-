@@ -65,42 +65,56 @@ def kb_report(match_results: list) -> InlineKeyboardMarkup:
 
 
 def build_invoice_report(
-    match_results: list, page: int = 1, total_pages: int = 1
+    text: str,
+    has_errors: bool,
+    match_results: list,
+    page: int = 1,
+    total_pages: int = 1,
+    page_size: int = 15,
 ) -> InlineKeyboardMarkup:
     """
     Клавиатура финального отчёта:
-    [✏️ Ред.1] [✏️ Ред.2] …
+    [✏️ Ред.n] ... (только строки текущей страницы)
     [➕ Add missing]
-    [✅ Submit anyway] [↩ Back]
+    [↩ Back] [✅ Submit] (Submit только если нет ошибок)
+    Навигация: ◀ 1/3 ▶
     """
-    # Кнопки редактирования для каждой строки
+    # Определяем индексы строк текущей страницы
+    start = (page - 1) * page_size
+    end = start + page_size
+    current_rows = match_results[start:end]
+    # Кнопки редактирования только для строк с ошибками на текущей странице
     edit_buttons = [
-        InlineKeyboardButton(text=f"✏️ Ред.{i+1}", callback_data=f"edit:{i}")
-        for i, _ in enumerate(match_results)
+        InlineKeyboardButton(text=f"✏️ Ред.{start + i + 1}", callback_data=f"edit:{start + i}")
+        for i, r in enumerate(current_rows)
+        if r.get("status") in ("unit_mismatch", "unknown")
     ]
-    # Кнопка Add missing
-    add_missing_btn = InlineKeyboardButton(
-        text="➕ Add missing", callback_data="inv_add_missing"
-    )
-    # Кнопка Submit anyway
-    submit_anyway_btn = InlineKeyboardButton(
-        text="✅ Submit anyway", callback_data="inv_submit_anyway"
-    )
+    # Кнопка Add missing (только если есть нераспознанные)
+    unknown_count = sum(1 for r in match_results if r.get("status") == "unknown")
+    add_missing_btn = None
+    if unknown_count > 0:
+        add_missing_btn = InlineKeyboardButton(
+            text="➕ Add missing", callback_data="inv_add_missing"
+        )
     # Кнопка Back
     back_btn = InlineKeyboardButton(text="↩ Back", callback_data="inv_cancel_edit")
-    # Кнопки навигации по страницам
+    # Кнопка Submit (только если нет ошибок)
+    submit_btn = None
+    if not has_errors:
+        submit_btn = InlineKeyboardButton(text="✅ Submit", callback_data="inv_submit")
+    # Пагинация
     nav_buttons = []
     if total_pages > 1:
         if page > 1:
             nav_buttons.append(
-                InlineKeyboardButton(text="←", callback_data="inv_page_prev")
+                InlineKeyboardButton(text="◀", callback_data=f"page_{page-1}")
             )
         nav_buttons.append(
             InlineKeyboardButton(text=f"{page}/{total_pages}", callback_data="noop")
         )
         if page < total_pages:
             nav_buttons.append(
-                InlineKeyboardButton(text="→", callback_data="inv_page_next")
+                InlineKeyboardButton(text="▶", callback_data=f"page_{page+1}")
             )
     # Сборка клавиатуры
     keyboard = []
@@ -108,8 +122,12 @@ def build_invoice_report(
         keyboard.append(edit_buttons[i : i + 3])
     if nav_buttons:
         keyboard.append(nav_buttons)
-    keyboard.append([add_missing_btn])
-    keyboard.append([submit_anyway_btn, back_btn])
+    if add_missing_btn:
+        keyboard.append([add_missing_btn])
+    btn_row = [back_btn]
+    if submit_btn:
+        btn_row.append(submit_btn)
+    keyboard.append(btn_row)
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
