@@ -84,7 +84,7 @@ def build_table(match_results):
     table = header + "\n" + divider + "\n"
     body = "\n".join(table_rows)
     table += body
-    return f"<pre>{table}</pre>"
+    return table
 
 
 
@@ -136,7 +136,9 @@ def build_report(parsed_data, match_results, escape=True, page=1, page_size=15):
     html_report = (
         f"<b>Supplier:</b> {supplier_str}\n"
         f"<b>Invoice date:</b> {date_str}\n"
-        f"<pre>{table}</pre>\n"
+        f"<pre>"
+        f"{table}\n"
+        f"</pre>"
         f"<b>✓ Correct:</b> {ok_count}    <b>🚫 Issues:</b> {issues_count}\n"
         f"{page_info}"
     )
