@@ -129,16 +129,15 @@ def build_report(parsed_data, match_results, escape=True, page=1, page_size=15):
     table = build_table(rows_to_show)
     total_pages = max(1, (len(match_results) + page_size - 1) // page_size)
 
-    html_report = f"""
-    <div style='background:#fff; color:#222; font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; border-radius:18px; box-shadow:0 2px 16px #0001; padding:18px 10px 10px 10px; max-width:410px; margin:auto;'>
-        <div style='font-size:1.1em; font-weight:600; margin-bottom:2px;'>Supplier: <span style='font-weight:400'>{supplier_str}</span></div>
-        <div style='font-size:1.1em; font-weight:600; margin-bottom:8px;'>Invoice date: <span style='font-weight:400'>{date_str}</span></div>
-        {table}
-        <div style='margin-top:10px; font-size:0.97em; color:#222;'>
-            <b>✓</b> Correct: {len([r for r in match_results if r.get('status') == 'ok'])} &nbsp; 
-            <b>🚫</b> Issues: {len([r for r in match_results if r.get('status') in ['unit_mismatch', 'unknown', 'ignored', 'error']])}
-        </div>
-        {f'<div style="margin-top:6px; font-size:0.95em; color:#888;">Page {page} / {total_pages}</div>' if total_pages > 1 else ''}
-    </div>
-    """
+    ok_count = len([r for r in match_results if r.get('status') == 'ok'])
+    issues_count = len([r for r in match_results if r.get('status') in ['unit_mismatch', 'unknown', 'ignored', 'error']])
+    page_info = f"Page {page} / {total_pages}" if total_pages > 1 else ""
+
+    html_report = (
+        f"<b>Supplier:</b> {supplier_str}\n"
+        f"<b>Invoice date:</b> {date_str}\n"
+        f"<pre>{table}</pre>\n"
+        f"<b>✓ Correct:</b> {ok_count}    <b>🚫 Issues:</b> {issues_count}\n"
+        f"{page_info}"
+    )
     return html_report.strip(), has_errors
