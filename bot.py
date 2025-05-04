@@ -10,6 +10,7 @@ from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.exceptions import TelegramBadRequest
 from app import ocr, matcher, data_loader
 from app.utils.md import escape_v2
 from app.config import settings
@@ -82,7 +83,7 @@ async def safe_edit(bot, chat_id, msg_id, text, kb=None, **kwargs):
         )
     except Exception as e:
         logger = logging.getLogger("bot")
-        if isinstance(e, types.TelegramBadRequest) and (
+        if isinstance(e, TelegramBadRequest) and (
             "can't parse entities" in str(e) or "parse_mode" in str(e)
         ):
             logger.warning(
