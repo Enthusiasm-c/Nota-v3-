@@ -5,9 +5,9 @@ W_IDX = 3
 W_NAME = 19
 W_QTY = 8
 W_UNIT = 4
-W_TOTAL = 13
+W_PRICE = 13
 W_STATUS = 2
-FMT_ROW = "{idx:<3} {name:<19} {qty:>8} {unit:<4} {total:>13} {status}"
+FMT_ROW = "{idx:<3} {name:<19} {qty:>8} {unit:<4} {price:>13} {status}"
 DIVIDER = "────────────────────"  # 20 символов
 
 
@@ -23,9 +23,9 @@ def format_idr(val):
 def _row(idx, name, qty, unit, total, price, status, escape=False):
     # Формируем статус с эмодзи и текстом
     if status == "ok":
-        status_str = "ok"
+        status_str = "✔️"
     elif status == "unknown":
-        status_str = "❌ not found"
+        status_str = "❌"
     elif status == "unit_mismatch":
         status_str = "⚠️ unit mismatch"
     else:
@@ -44,15 +44,14 @@ def _row(idx, name, qty, unit, total, price, status, escape=False):
         qty_str = f"{int(qty):,}".replace(",", "\u202f")
     except Exception:
         qty_str = str(qty)
-    # Format total: если total не задан, использовать price
-    value = total if total is not None else price
-    total_str = format_idr(value) if value is not None else "—"
+    # Format price
+    price_str = format_idr(price) if price is not None else "—"
     return FMT_ROW.format(
         idx=str(idx),
         name=name,
         qty=qty_str,
         unit=str(unit),
-        total=total_str,
+        price=price_str,
         status=status_str,
     )
 
@@ -61,16 +60,11 @@ def build_table(rows):
     # Удаляем divider-строки из rows, если они есть
     rows = [r for r in rows if set(r.strip()) != {'─'}]
     # Заголовок всегда без экранирования!
-    header = FMT_ROW.format(
-        idx="#",
-        name="NAME",
-        qty="QTY",
-        unit="UNIT",
-        total="TOTAL",
-        status="",
-    )
+    header = f"#   NAME{' ' * (W_NAME - 4)}QTY UNIT{' ' * (W_UNIT - 4)}PRICE{' ' * (W_PRICE - 5)}\n"
+    table = header
+    table += "-" * (W_IDX + W_NAME + W_QTY + W_UNIT + W_PRICE + W_STATUS + 6) + "\n"
     body = "\n".join(rows)
-    table = f"{header}\n{body}"
+    table += body
     # Markdown V2: тройные обратные кавычки, без языка
     return f"```\n{table}\n```\n"
 
@@ -120,7 +114,7 @@ def build_report(parsed_data, match_results, escape=True, page=1, page_size=15):
         elif status == "unknown":
             unknown_count += 1
             has_errors = True
-        table_rows.append(_row(idx, name, qty, unit, line_total, price, status, escape=escape))
+        table_rows.append(_row(idx, name, qty, unit, price, status, escape=escape))
     # Pagination
     pages = paginate_rows(table_rows, page_size)
     total_pages = len(pages)
@@ -131,12 +125,11 @@ def build_report(parsed_data, match_results, escape=True, page=1, page_size=15):
 
     # Header and summary
     report = (
-        f"\U0001f4e6 *Supplier:* {supplier_str}\n"
-        f"\U0001f4c6 *Invoice date:* {date_str}\n"
+        f"*Supplier:* {supplier_str}\n"
+        f"*Invoice date:* {date_str}\n"
         f"{DIVIDER}\n"
     )
-    if has_errors:
-        report += "⚠️ Обнаружены ошибки — исправьте их перед отправкой!\n"
+
     report += table
     report += f"{DIVIDER}\n"
     if total_pages > 1:
@@ -145,9 +138,6 @@ def build_report(parsed_data, match_results, escape=True, page=1, page_size=15):
     errors_count = len([r for r in match_results if r.get('status') in ['unit_mismatch', 'unknown']])
     report += f"Было успешно определено {ok_count} позиций\n"
     report += f"Позиции, требующие подтверждения: {errors_count} шт.\n"
-    if errors_count == 0:
-        report += "ok\n"
-    else:
-        report += "need check\n"
+
     report += f"{DIVIDER}\n"
     return report.strip(), has_errors
