@@ -34,7 +34,18 @@ def build_table(rows: list[str]) -> str:
     body = "\n".join(rows)
     return f"```\n{header}\n{divider}\n{body}\n```"
 
-def build_report(parsed_data, match_results: list) -> str:
+def build_report(parsed_data, match_results: list, escape=True) -> str:
+    """
+    Формирует отчет по инвойсу в формате MarkdownV2.
+    
+    Args:
+        parsed_data: Данные инвойса (объект ParsedData или словарь)
+        match_results: Результаты сопоставления позиций
+        escape: Нужно ли экранировать специальные символы Markdown
+        
+    Returns:
+        str: Форматированный отчет для отправки в Telegram
+    """
     # Support both dict and ParsedData object
     supplier = getattr(parsed_data, "supplier", None)
     if supplier is None and isinstance(parsed_data, dict):
@@ -42,8 +53,15 @@ def build_report(parsed_data, match_results: list) -> str:
     date = getattr(parsed_data, "date", None)
     if date is None and isinstance(parsed_data, dict):
         date = parsed_data.get("date", None)
-    supplier_str = "Unknown supplier" if not supplier else escape_md(str(supplier), version=2)
-    date_str = "—" if not date else escape_md(str(date), version=2)
+        
+    # В зависимости от параметра escape, экранируем или нет
+    if escape:
+        supplier_str = "Unknown supplier" if not supplier else escape_md(str(supplier), version=2)
+        date_str = "—" if not date else escape_md(str(date), version=2)
+    else:
+        supplier_str = "Unknown supplier" if not supplier else str(supplier)
+        date_str = "—" if not date else str(date)
+        
     ok_count = sum(1 for r in match_results if r.get("status") == "ok")
     unit_mismatch_count = sum(1 for r in match_results if r.get("status") == "unit_mismatch")
     unknown_count = sum(1 for r in match_results if r.get("status") == "unknown")
@@ -55,14 +73,22 @@ def build_report(parsed_data, match_results: list) -> str:
         f"\U0001F4C6 *Invoice date:* {date_str}\n"
     )
     report += "────────────────────────────────────────\n"
+    
     # Build table rows
     rows = []
     for idx, r in enumerate(match_results, 1):
-        name = escape_md(str(r.get("name", "")), version=2)
-        qty = escape_md(str(r.get("qty", "")), version=2)
-        unit = escape_md(str(r.get("unit", "")), version=2)
+        name = str(r.get("name", ""))
+        qty = str(r.get("qty", ""))
+        unit = str(r.get("unit", ""))
         price = r.get("price")
         status = r.get("status", "unknown")
+        
+        # Экранируем значения, если нужно
+        if escape:
+            name = escape_md(name, version=2)
+            qty = escape_md(qty, version=2)
+            unit = escape_md(unit, version=2)
+            
         if status == "ok":
             status_str = "✅ ok"
         elif status == "unit_mismatch":
@@ -70,10 +96,13 @@ def build_report(parsed_data, match_results: list) -> str:
         elif status == "unknown":
             status_str = "❓ not found"
         else:
-            status_str = escape_md(str(status), version=2)
+            status_str = escape_md(str(status), version=2) if escape else str(status)
+            
         rows.append(_row(idx, name, qty, unit, price, status_str))
+        
     report += build_table(rows) + "\n"
     report += "────────────────────────────────────────\n"
+    
     # Summary (outside code block, no '✅ 0 ok')
     summary = []
     if ok_count > 0:
@@ -84,4 +113,5 @@ def build_report(parsed_data, match_results: list) -> str:
         summary.append(f"❓ {unknown_count} not found")
     if summary:
         report += "        ".join(summary)
+        
     return report.strip()

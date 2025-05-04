@@ -338,8 +338,8 @@ async def photo_handler(message, state: FSMContext, **kwargs):
         logger.info(f"[{req_id}] Matching complete for user {user_id}")
         
         # Шаг 5: Формирование отчета
-        # Создаем отчет
-        report = build_report(ocr_result, match_results)
+        # Создаем отчет без экранирования в самой функции
+        report = build_report(ocr_result, match_results, escape=False)
         
         # Строим клавиатуру для редактирования
         keyboard_rows = []
@@ -373,12 +373,15 @@ async def photo_handler(message, state: FSMContext, **kwargs):
         # Обновляем статус стадии
         update_stage("report", kwargs, update_progress_message)
         
+        # Применяем escape_v2 для корректной обработки блоков кода
+        formatted_report = escape_v2(report)
+        
         # Отображаем финальный отчет
         await safe_edit(
             bot,
             message.chat.id,
             progress_msg_id,
-            escape_v2(report),
+            formatted_report,
             kb=inline_kb,
             parse_mode="MarkdownV2"
         )
@@ -679,13 +682,18 @@ async def handle_field_edit(message, state: FSMContext):
                 products = data_loader.load_products("data/base_products.csv")
                 entry["match_results"][idx] = matcher.match_positions([entry["match_results"][idx]], products)[0]
                 parsed_data = entry["parsed_data"]
-                report = build_report(parsed_data, entry["match_results"])
+                
+                # Создаем отчет без экранирования в самой функции
+                report = build_report(parsed_data, entry["match_results"], escape=False)
+                
+                # Применяем escape_v2 для корректной обработки блоков кода
+                formatted_report = escape_v2(report)
                 
                 await safe_edit(
                     bot,
                     message.chat.id,
                     msg_id,
-                    escape_v2(report),
+                    formatted_report,
                     kb=kb_report(entry["match_results"]),
                     parse_mode=ParseMode.MARKDOWN_V2,
                 )
