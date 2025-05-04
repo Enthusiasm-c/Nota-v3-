@@ -15,7 +15,7 @@ class Product(BaseModel):
 class Position(BaseModel):
     name: str
     qty: float
-    unit: str
+    unit: Optional[str] = None
     price: Optional[float] = None
     price_per_unit: Optional[float] = None
     total_price: Optional[float] = None

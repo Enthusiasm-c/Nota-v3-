@@ -56,8 +56,7 @@ tool_schema = {
                                     "l",
                                     "ml",
                                     "pcs",
-                                    "pack",
-                                    None,
+                                    "pack"
                                 ],
                             },
                             "price": {"type": "number", "nullable": True},
