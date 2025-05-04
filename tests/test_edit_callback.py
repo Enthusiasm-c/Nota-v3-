@@ -21,4 +21,4 @@ def test_edit_callback_flow():
     # Report should reflect updated line
     report, _ = build_report({"supplier": None, "date": "2025-04-28"}, match_results)
     assert "Corrected Item A" in report
-    assert "ok" in report
+    assert "✓" in report

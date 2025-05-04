@@ -1,5 +1,4 @@
 from app.formatters.report import build_report
-import re
 
 
 def test_report_layout_strict():
@@ -29,8 +28,7 @@ def test_report_layout_strict():
     ]
     report, _ = build_report(parsed_data, match_results)
     # Проверяем шапку
-    import re
-    # Проверяем, что Supplier выводится в любом месте HTML
+        # Проверяем, что Supplier выводится в любом месте HTML
     assert "Supplier:" in report
     assert "UD. WIDI WIGUNA" in report
     assert "Invoice date:" in report
@@ -39,13 +37,19 @@ def test_report_layout_strict():
     assert "─" in report
     # Проверяем <pre> для таблицы
     assert "<pre>" in report
+    # Проверяем, что имя товара обрезано по ширине столбца
+    assert "olive oil orille 5…" in report
+    # Проверяем, что длинное имя обрезано с …
+    assert "verylongproductnam…" in report
+    # Проверяем, что символ ✓ есть для ok-статуса
+    assert "✓" in report
     # Проверяем статусы
     assert "✓" in report
     assert "🚫" in report
     # Проверяем корректные данные
-    assert "olive oil orille 5liter" in report
+    assert "olive oil orille 5…" in report
     assert "lumajang" in report
-    assert "verylongproductnamethatiswaytoolong" in report
+    assert "verylongproductnam…" in report
     # Проверяем summary
     assert "Correct:" in report
     assert "Issues:" in report
