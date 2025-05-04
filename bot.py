@@ -413,7 +413,7 @@ async def photo_handler(message, state: FSMContext, **kwargs):
 
         # Шаг 5: Формирование отчета
         # Создаем отчет без экранирования в самой функции
-        report = build_report(ocr_result, match_results, escape=False)
+        report, has_errors = build_report(ocr_result, match_results, escape=False)
 
         # Строим клавиатуру для редактирования
         keyboard_rows = []
@@ -889,7 +889,7 @@ async def handle_field_edit(message, state: FSMContext):
 
         # Создаем отчет
         parsed_data = entry["parsed_data"]
-        report = build_report(parsed_data, entry["match_results"], escape=False)
+        report, has_errors = build_report(parsed_data, entry["match_results"], escape=False)
 
         # Применяем форматирование для Markdown
         formatted_report = escape_v2(report)
@@ -993,7 +993,7 @@ async def handle_edit_reply(message):
     match_results[idx]["name"] = message.text.strip()
     match_results[idx]["status"] = "unknown"  # Or re-match if needed
     parsed_data = entry["parsed_data"]
-    report = build_report(parsed_data, match_results)
+    report, has_errors = build_report(parsed_data, match_results)
     await message.reply(f"✏️ Updated line {idx+1}.\n" + report)
 
 
