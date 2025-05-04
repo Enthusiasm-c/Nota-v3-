@@ -3,12 +3,12 @@ from decimal import Decimal
 # Fixed column widths for the mobile-friendly invoice table
 W_IDX = 3
 W_NAME = 19
-W_QTY = 8
+W_QTY = 1  # QTY теперь без отступа
 W_UNIT = 4
 W_PRICE = 13
 W_STATUS = 2
-FMT_ROW = "{idx:<3} {name:<19} {qty:>8} {unit:<4} {price:>13} {status}"
-DIVIDER = "────────────────────"  # 20 символов
+FMT_ROW = "{idx:<3} {name:<19} {qty:>1} {unit:<4} {price:>13} {status}"
+DIVIDER = "───────────────"  # 15 символов
 
 
 def format_idr(val):
@@ -60,9 +60,9 @@ def build_table(rows):
     # Удаляем divider-строки из rows, если они есть
     rows = [r for r in rows if set(r.strip()) != {'─'}]
     # Заголовок всегда без экранирования!
-    header = f"#   NAME{' ' * (W_NAME - 4)}QTY UNIT{' ' * (W_UNIT - 4)}PRICE{' ' * (W_PRICE - 5)}\n"
+    header = f"#   NAME{' ' * (W_NAME - 4)} QTY UNIT{' ' * (W_UNIT - 4)}PRICE{' ' * (W_PRICE - 5)}\n"
     table = header
-    table += "-" * (W_IDX + W_NAME + W_QTY + W_UNIT + W_PRICE + W_STATUS + 6) + "\n"
+    table += "───────────────\n"  # 15 символов
     body = "\n".join(rows)
     table += body
     # Markdown V2: тройные обратные кавычки, без языка
@@ -125,8 +125,8 @@ def build_report(parsed_data, match_results, escape=True, page=1, page_size=15):
 
     # Header and summary
     report = (
-        f"*Supplier:* {supplier_str}\n"
-        f"*Invoice date:* {date_str}\n"
+        f"**Supplier:** {supplier_str}\n"
+        f"**Invoice date:** {date_str}\n"
         f"{DIVIDER}\n"
     )
 
