@@ -1,9 +1,11 @@
 import inspect
 from app import matcher, formatter
 
+
 def test_matcher_signature():
     params = list(inspect.signature(matcher.match_positions).parameters.keys())
     assert params[:2] == ["positions", "products"]
+
 
 def test_formatter_signature():
     sig = inspect.signature(formatter.build_report)

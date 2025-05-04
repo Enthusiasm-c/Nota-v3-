@@ -3,26 +3,36 @@ from app.formatter import build_report, W_IDX, W_NAME, W_QTY, W_UNIT, W_PRICE, W
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+
 @pytest.mark.asyncio
 async def test_formatter_no_bad_chars():
     """
     Формирует отчёт build_report и отправляет его через send_message(parse_mode=MarkdownV2).
     Проверяет, что Telegram не ругается на спецсимволы (#, !, | ...).
     """
+
     # Фейковый бот
     class FakeBot:
         def __init__(self):
             self.sent = []
+
         async def send_message(self, chat_id, text, parse_mode=None):
             self.sent.append((chat_id, text, parse_mode))
             # Эмулируем успешную отправку (не выбрасываем TelegramBadRequest)
             return SimpleNamespace(message_id=123)
+
     bot = FakeBot()
     # Данные с опасными символами
     parsed = SimpleNamespace(supplier='#ООО "Тест+!"', date="2024-05-03")
     match_results = [
         {"name": "#Кефир (1л)", "qty": 2, "unit": "+л.", "price": 99.5, "status": "ok"},
-        {"name": "Молоко!", "qty": 1, "unit": "л", "price": 70, "status": "unit_mismatch"},
+        {
+            "name": "Молоко!",
+            "qty": 1,
+            "unit": "л",
+            "price": 70,
+            "status": "unit_mismatch",
+        },
         {"name": "Творог|", "qty": 1, "unit": "кг", "price": 200, "status": "unknown"},
     ]
     text = build_report(parsed, match_results)
@@ -33,30 +43,39 @@ async def test_formatter_no_bad_chars():
     chat_id, sent_text, parse_mode = bot.sent[0]
     assert parse_mode == "MarkdownV2"
     # Проверяем, что спецсимволы экранированы или внутри code block
-    assert '```' in sent_text, "Table must be in code block"
-    assert '#  NAME' in sent_text, "Header must be present and not cause error"
+    assert "```" in sent_text, "Table must be in code block"
+    assert "#  NAME" in sent_text, "Header must be present and not cause error"
     # (Тест не падает, если нет TelegramBadRequest)
 
     # Проверяем, что нет языка после трёх кавычек
     for line in sent_text.splitlines():
-        if line.strip().startswith('```'):
-            assert line.strip() == '```', "Code block must not have language tag!"
+        if line.strip().startswith("```"):
+            assert line.strip() == "```", "Code block must not have language tag!"
             break
     # Проверяем, что все строки таблицы имеют нужную длину колонок
     in_table = False
     for line in sent_text.splitlines():
-        if line.strip() == '```':
+        if line.strip() == "```":
             if in_table:
                 break
             in_table = True
             continue
-        if in_table and line.strip() and not line.startswith('─'):
+        if in_table and line.strip() and not line.startswith("─"):
             # Проверяем длины колонок (разбиваем по срезам)
             idx = line[:W_IDX]
-            name = line[W_IDX:W_IDX+W_NAME]
-            qty = line[W_IDX+W_NAME:W_IDX+W_NAME+W_QTY]
-            unit = line[W_IDX+W_NAME+W_QTY:W_IDX+W_NAME+W_QTY+W_UNIT]
-            price = line[W_IDX+W_NAME+W_QTY+W_UNIT:W_IDX+W_NAME+W_QTY+W_UNIT+W_PRICE]
+            name = line[W_IDX : W_IDX + W_NAME]
+            qty = line[W_IDX + W_NAME : W_IDX + W_NAME + W_QTY]
+            unit = line[W_IDX + W_NAME + W_QTY : W_IDX + W_NAME + W_QTY + W_UNIT]
+            price = line[
+                W_IDX
+                + W_NAME
+                + W_QTY
+                + W_UNIT : W_IDX
+                + W_NAME
+                + W_QTY
+                + W_UNIT
+                + W_PRICE
+            ]
             # status = остаток
             assert len(idx) == W_IDX
             assert len(name) == W_NAME

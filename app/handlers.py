@@ -35,7 +35,9 @@ async def handle_edit(call: CallbackQuery, state: FSMContext):
 async def handle_field_choose(call: CallbackQuery, state: FSMContext):
     _, field, idx = call.data.split(":")
     idx = int(idx)
-    await state.update_data(edit_pos=idx, edit_field=field, msg_id=call.message.message_id)
+    await state.update_data(
+        edit_pos=idx, edit_field=field, msg_id=call.message.message_id
+    )
     await state.set_state(getattr(EditPosition, f"waiting_{field}"))
     await call.message.edit_text(
         f"Send new {field} for line {idx+1}:", reply_markup=ForceReply()
@@ -55,33 +57,27 @@ async def handle_cancel(call: CallbackQuery, state: FSMContext):
         invoice = data.get("invoice")
         if invoice:
             match_results = matcher.match_positions(
-    invoice["positions"], data_loader.load_products()
-)
+                invoice["positions"], data_loader.load_products()
+            )
             page = 1
-            
+
             table_rows = [r for r in match_results]
             total_rows = len(table_rows)
             page_size = 15
             total_pages = (total_rows + page_size - 1) // page_size
-            report = invoice_report.build_report(
-    invoice, match_results, page=page
-)
+            report = invoice_report.build_report(invoice, match_results, page=page)
             await call.message.edit_text(
                 report,
                 reply_markup=keyboards.build_invoice_report(
-    invoice["positions"], page=page, total_pages=total_pages
-)
+                    invoice["positions"], page=page, total_pages=total_pages
+                ),
             )
         else:
-            await call.message.edit_text(
-                "Editing cancelled. All keyboards removed."
-            )
+            await call.message.edit_text("Editing cancelled. All keyboards removed.")
         await state.clear()
         return
     idx = int(call.data.split(":")[1])
-    await call.message.edit_reply_markup(
-        reply_markup=keyboards.kb_edit(idx)
-    )
+    await call.message.edit_reply_markup(reply_markup=keyboards.kb_edit(idx))
     await state.clear()
 
 
@@ -92,16 +88,16 @@ async def handle_page_prev(call: CallbackQuery, state: FSMContext):
     invoice = data.get("invoice")
     page = data.get("invoice_page", 1)
     if not invoice:
-        await call.answer("Session expired. Please resend the invoice.", show_alert=True)
+        await call.answer(
+            "Session expired. Please resend the invoice.", show_alert=True
+        )
         return
     page = max(1, page - 1)
     await state.update_data(invoice_page=page)
     match_results = matcher.match_positions(
-    invoice["positions"], data_loader.load_products()
-)
-    report = invoice_report.build_report(
-    invoice, match_results, page=page
-)
+        invoice["positions"], data_loader.load_products()
+    )
+    report = invoice_report.build_report(invoice, match_results, page=page)
     table_rows = [r for r in match_results]
     total_rows = len(table_rows)
     page_size = 15
@@ -110,7 +106,7 @@ async def handle_page_prev(call: CallbackQuery, state: FSMContext):
         report,
         reply_markup=keyboards.build_invoice_report(
             invoice["positions"], page=page, total_pages=total_pages
-        )
+        ),
     )
 
 
@@ -120,7 +116,9 @@ async def handle_page_next(call: CallbackQuery, state: FSMContext):
     invoice = data.get("invoice")
     page = data.get("invoice_page", 1)
     if not invoice:
-        await call.answer("Session expired. Please resend the invoice.", show_alert=True)
+        await call.answer(
+            "Session expired. Please resend the invoice.", show_alert=True
+        )
         return
     match_results = matcher.match_positions(
         invoice["positions"], data_loader.load_products()
@@ -131,14 +129,12 @@ async def handle_page_next(call: CallbackQuery, state: FSMContext):
     total_pages = (total_rows + page_size - 1) // page_size
     page = min(total_pages, page + 1)
     await state.update_data(invoice_page=page)
-    report = invoice_report.build_report(
-        invoice, match_results, page=page
-    )
+    report = invoice_report.build_report(invoice, match_results, page=page)
     await call.message.edit_text(
         report,
         reply_markup=keyboards.build_invoice_report(
             invoice["positions"], page=page, total_pages=total_pages
-        )
+        ),
     )
 
 
@@ -149,14 +145,14 @@ async def handle_cancel_edit(call: CallbackQuery, state: FSMContext):
     invoice = data.get("invoice")
     page = data.get("invoice_page", 1)
     if not invoice:
-        await call.answer("Session expired. Please resend the invoice.", show_alert=True)
+        await call.answer(
+            "Session expired. Please resend the invoice.", show_alert=True
+        )
         return
     match_results = matcher.match_positions(
         invoice["positions"], data_loader.load_products()
     )
-    report = invoice_report.build_report(
-        invoice, match_results, page=page
-    )
+    report = invoice_report.build_report(invoice, match_results, page=page)
     table_rows = [r for r in match_results]
     total_rows = len(table_rows)
     page_size = 15
@@ -165,7 +161,7 @@ async def handle_cancel_edit(call: CallbackQuery, state: FSMContext):
         report,
         reply_markup=keyboards.build_invoice_report(
             invoice["positions"], page=page, total_pages=total_pages
-        )
+        ),
     )
     await state.set_state(InvoiceReviewStates.review)
 
@@ -176,10 +172,13 @@ async def handle_submit_anyway(call: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     invoice = data.get("invoice")
     if not invoice:
-        await call.answer("Session expired. Please resend the invoice.", show_alert=True)
+        await call.answer(
+            "Session expired. Please resend the invoice.", show_alert=True
+        )
         return
     # Импортируем экспорт и вызываем
     from app.export import export_to_syrve
+
     try:
         await export_to_syrve(invoice)
         # После отправки — показать первую страницу отчёта, если invoice есть
@@ -194,19 +193,15 @@ async def handle_submit_anyway(call: CallbackQuery, state: FSMContext):
             total_rows = len(table_rows)
             page_size = 15
             total_pages = (total_rows + page_size - 1) // page_size
-            report = invoice_report.build_report(
-                invoice, match_results, page=page
-            )
+            report = invoice_report.build_report(invoice, match_results, page=page)
             await call.message.answer(
                 report,
                 reply_markup=keyboards.build_invoice_report(
                     invoice["positions"], page=page, total_pages=total_pages
-                )
+                ),
             )
         else:
-            await call.message.answer(
-                "Invoice sent to Syrve!", reply_markup=None
-            )
+            await call.message.answer("Invoice sent to Syrve!", reply_markup=None)
         await state.clear()
     except Exception as e:
         # После ошибки — показать первую страницу отчёта, если invoice есть
@@ -221,19 +216,15 @@ async def handle_submit_anyway(call: CallbackQuery, state: FSMContext):
             total_rows = len(table_rows)
             page_size = 15
             total_pages = (total_rows + page_size - 1) // page_size
-            report = invoice_report.build_report(
-                invoice, match_results, page=page
-            )
+            report = invoice_report.build_report(invoice, match_results, page=page)
             await call.message.answer(
                 report,
                 reply_markup=keyboards.build_invoice_report(
                     invoice["positions"], page=page, total_pages=total_pages
-                )
+                ),
             )
         else:
-            await call.message.answer(
-                f"Error sending invoice: {e}"
-            )
+            await call.message.answer(f"Error sending invoice: {e}")
 
 
 @router.callback_query(F.data == "inv_add_missing")
@@ -242,14 +233,18 @@ async def handle_add_missing(call: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     invoice = data.get("invoice")
     if not invoice:
-        await call.answer("Session expired. Please resend the invoice.", show_alert=True)
+        await call.answer(
+            "Session expired. Please resend the invoice.", show_alert=True
+        )
         return
     # Найти первую unknown
     positions = invoice["positions"]
     for idx, pos in enumerate(positions):
         if pos.get("status") == "unknown":
             await state.update_data(edit_pos=idx, msg_id=call.message.message_id)
-            await call.message.edit_reply_markup(reply_markup=keyboards.kb_edit_fields(idx))
+            await call.message.edit_reply_markup(
+                reply_markup=keyboards.kb_edit_fields(idx)
+            )
             return
     await call.answer("No unknown positions left.")
 
@@ -281,9 +276,7 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
     msg_id = data.get("msg_id")
     invoice = data.get("invoice")
     if invoice is None or idx is None or msg_id is None:
-        await message.answer(
-            "Session expired. Please resend the invoice."
-        )
+        await message.answer("Session expired. Please resend the invoice.")
         await state.clear()
         return
     value = message.text.strip()
@@ -318,9 +311,7 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
     total_rows = len(table_rows)
     page_size = 15
     total_pages = (total_rows + page_size - 1) // page_size
-    report = invoice_report.build_report(
-        invoice, match_results, page=page
-    )
+    report = invoice_report.build_report(invoice, match_results, page=page)
     if match["status"] == "ok":
         # После успешного редактирования сбрасываем страницу на 1
         await state.update_data(invoice_page=1)
@@ -332,14 +323,14 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
         total_rows = len(table_rows)
         page_size = 15
         total_pages = (total_rows + page_size - 1) // page_size
-        report = invoice_report.build_report(
-            invoice, match_results, page=page
-        )
+        report = invoice_report.build_report(invoice, match_results, page=page)
         await message.bot.edit_message_text(
-            f"Updated!\n{report}", message.chat.id, msg_id,
+            f"Updated!\n{report}",
+            message.chat.id,
+            msg_id,
             reply_markup=keyboards.build_invoice_report(
                 invoice["positions"], page=page, total_pages=total_pages
-            )
+            ),
         )
         await message.bot.edit_message_reply_markup(
             message.chat.id, msg_id, reply_markup=None
@@ -356,18 +347,17 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
         total_rows = len(table_rows)
         page_size = 15
         total_pages = (total_rows + page_size - 1) // page_size
-        report = invoice_report.build_report(
-            invoice, match_results, page=page
-        )
+        report = invoice_report.build_report(invoice, match_results, page=page)
         await message.bot.edit_message_text(
-            f"Updated!\n{report}", message.chat.id, msg_id,
+            f"Updated!\n{report}",
+            message.chat.id,
+            msg_id,
             reply_markup=keyboards.build_invoice_report(
                 invoice["positions"], page=page, total_pages=total_pages
-            )
+            ),
         )
         await message.bot.edit_message_reply_markup(
-            message.chat.id, msg_id,
-            reply_markup=keyboards.kb_edit_fields(idx)
+            message.chat.id, msg_id, reply_markup=keyboards.kb_edit_fields(idx)
         )
         await state.update_data(edit_pos=idx)
 
@@ -384,16 +374,12 @@ async def handle_suggestion(call: CallbackQuery, state: FSMContext):
         )
         return
     products = data_loader.load_products()
-    prod = next(
-        (p for p in products if getattr(p, "id", None) == product_id), None
-    )
+    prod = next((p for p in products if getattr(p, "id", None) == product_id), None)
     if not prod:
-        await call.answer(
-            "Product not found.", show_alert=True
-        )
+        await call.answer("Product not found.", show_alert=True)
         return
     # Use product alias or name as the suggested name
-    suggested_name = getattr(prod, 'alias', None) or getattr(prod, 'name', '')
+    suggested_name = getattr(prod, "alias", None) or getattr(prod, "name", "")
     invoice["positions"][pos_idx]["name"] = suggested_name
     invoice["positions"][pos_idx]["status"] = "ok"
     alias.add_alias(suggested_name, product_id)
@@ -410,13 +396,11 @@ async def handle_suggestion(call: CallbackQuery, state: FSMContext):
     total_rows = len(table_rows)
     page_size = 15
     total_pages = (total_rows + page_size - 1) // page_size
-    report = invoice_report.build_report(
-        invoice, match_results, page=page
-    )
+    report = invoice_report.build_report(invoice, match_results, page=page)
     await call.message.answer(
         report,
         reply_markup=keyboards.build_invoice_report(
             invoice["positions"], page=page, total_pages=total_pages
-        )
+        ),
     )
     await state.clear()

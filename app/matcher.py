@@ -1,48 +1,82 @@
 import logging
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Sequence, Hashable, Callable, Any
+import re
+from app.config import settings
+from app.models import Position, Product
+from app.utils.md import escape_md
 
 try:
-    from Levenshtein import ratio as levenshtein_ratio, \
-    distance as levenshtein_distance
+    from Levenshtein import ratio as _levenshtein_ratio, distance as _levenshtein_distance
+
+    def levenshtein_ratio(
+        s1: Sequence[Hashable],
+        s2: Sequence[Hashable],
+        *,
+        processor: Callable[..., Sequence[Hashable]] | None = None,
+        score_cutoff: float | None = None,
+    ) -> float:
+        return _levenshtein_ratio(s1, s2)
+
+    def levenshtein_distance(
+        s1: Sequence[Hashable],
+        s2: Sequence[Hashable],
+        *,
+        weights: tuple[int, int, int] | None = None,
+        processor: Callable[..., Sequence[Hashable]] | None = None,
+        score_cutoff: float | None = None,
+        score_hint: float | None = None,
+    ) -> int:
+        return _levenshtein_distance(s1, s2)
+
     USE_LEVENSHTEIN = True
 except ImportError:
     from difflib import SequenceMatcher
 
-    def levenshtein_ratio(a: str, b: str) -> float:
+    def levenshtein_ratio(
+        s1: Sequence[Hashable],
+        s2: Sequence[Hashable],
+        *,
+        processor: Callable[..., Sequence[Hashable]] | None = None,
+        score_cutoff: float | None = None,
+    ) -> float:
+        a = "".join(map(str, s1))
+        b = "".join(map(str, s2))
         return SequenceMatcher(None, a, b).ratio()
 
-    def levenshtein_distance(a: str, b: str) -> int:
+    def levenshtein_distance(
+        s1: Sequence[Hashable],
+        s2: Sequence[Hashable],
+        *,
+        weights: tuple[int, int, int] | None = None,
+        processor: Callable[..., Sequence[Hashable]] | None = None,
+        score_cutoff: float | None = None,
+        score_hint: float | None = None,
+    ) -> int:
+        a = "".join(map(str, s1))
+        b = "".join(map(str, s2))
         if a == b:
             return 0
         if len(a) == 0:
             return len(b)
         if len(b) == 0:
             return len(a)
-
         matrix = [[0 for _ in range(len(b) + 1)] for _ in range(len(a) + 1)]
-
         for i in range(len(a) + 1):
             matrix[i][0] = i
         for j in range(len(b) + 1):
             matrix[0][j] = j
-
         for i in range(1, len(a) + 1):
             for j in range(1, len(b) + 1):
                 cost = 0 if a[i - 1] == b[j - 1] else 1
                 matrix[i][j] = min(
-                    matrix[i - 1][j] + 1,  # deletion
-                    matrix[i][j - 1] + 1,  # insertion
-                    matrix[i - 1][j - 1] + cost  # substitution
+                    matrix[i - 1][j] + 1,
+                    matrix[i][j - 1] + 1,
+                    matrix[i - 1][j - 1] + cost,
                 )
-
         return matrix[len(a)][len(b)]
-
     USE_LEVENSHTEIN = False
 
-from app.config import settings
-
 logger = logging.getLogger(__name__)
-
 
 
 def get_normalized_strings(s1: str, s2: str) -> Tuple[str, str]:
@@ -54,15 +88,14 @@ def get_normalized_strings(s1: str, s2: str) -> Tuple[str, str]:
     s1 = s1.lower().strip()
     s2 = s2.lower().strip()
 
-    for char in [',', '.', '-', '_', '(', ')', '/', '\\']:
-        s1 = s1.replace(char, ' ')
-        s2 = s2.replace(char, ' ')
+    for char in [",", ".", "-", "_", "(", ")", "/", "\\"]:
+        s1 = s1.replace(char, " ")
+        s2 = s2.replace(char, " ")
 
-    s1 = ' '.join(s1.split())
-    s2 = ' '.join(s2.split())
+    s1 = " ".join(s1.split())
+    s2 = " ".join(s2.split())
 
     return s1, s2
-
 
 
 def calculate_string_similarity(s1: str, s2: str) -> float:
@@ -82,7 +115,6 @@ def calculate_string_similarity(s1: str, s2: str) -> float:
     return ratio
 
 
-
 def fuzzy_best(name: str, catalog: dict[str, str]) -> tuple[str, float]:
     name_l = name.lower().strip()
 
@@ -99,9 +131,7 @@ def fuzzy_best(name: str, catalog: dict[str, str]) -> tuple[str, float]:
         score = max(min(score, 100), 0)
         candidates.append((prod, score, abs(len(name_l) - len(prod_l))))
 
-    candidates.sort(
-        key=lambda t: (t[1], -t[2], len(t[0])), reverse=True
-    )
+    candidates.sort(key=lambda t: (t[1], -t[2], len(t[0])), reverse=True)
 
     if not candidates:
         return "", 0.0
@@ -110,18 +140,17 @@ def fuzzy_best(name: str, catalog: dict[str, str]) -> tuple[str, float]:
     return best, score
 
 
-
 def match_positions(
     positions: List[Dict],
     products: List[Dict],
     threshold: Optional[float] = None,
-    return_suggestions: bool = False
+    return_suggestions: bool = False,
 ) -> List[Dict]:
     if threshold is None:
         threshold = settings.MATCH_THRESHOLD
 
     results = []
-    used_ids = set()
+    used_ids: set[Any] = set()
 
     for pos in positions:
         name = getattr(pos, "name", None)
@@ -137,7 +166,7 @@ def match_positions(
             unit = pos.get("unit", "")
 
         best_match = None
-        best_score = 0
+        best_score: float = -1.0
         matched_product = None
         status = "unknown"
         fuzzy_scores = []
@@ -197,15 +226,11 @@ def match_positions(
 
             threshold_value = settings.MATCH_THRESHOLD
 
-            if (
-                name_l and alias_l and name_l == alias_l
-            ):
+            if name_l and alias_l and name_l == alias_l:
                 matched_product = best_match
                 status = "ok"
                 canonical_name = product_name
-            elif (
-                name_l and product_name_l and name_l == product_name_l
-            ):
+            elif name_l and product_name_l and name_l == product_name_l:
                 matched_product = best_match
                 status = "ok"
                 canonical_name = product_name
@@ -258,7 +283,11 @@ def match_positions(
         try:
             if price is None and total is not None and qty not in (None, "", 0, "0"):
                 price = float(total) / float(qty)
-            if price is not None and (total is None or total == "") and qty not in (None, "", 0, "0"):
+            if (
+                price is not None
+                and (total is None or total == "")
+                and qty not in (None, "", 0, "0")
+            ):
                 total = float(price) * float(qty)
                 computed_price = None
                 computed_line_total = None
@@ -279,7 +308,9 @@ def match_positions(
 
         if return_suggestions and status == "unknown":
             fuzzy_scores.sort(reverse=True, key=lambda x: x[0])
-            result["suggestions"] = [p for s, p in fuzzy_scores[:5] if s > settings.MATCH_MIN_SCORE]
+            result["suggestions"] = [
+                p for s, p in fuzzy_scores[:5] if s > settings.MATCH_MIN_SCORE
+            ]
 
         results.append(result)
 

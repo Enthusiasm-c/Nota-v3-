@@ -3,6 +3,7 @@ from app.data_loader import load_products, load_units
 from typing import Iterable, Optional
 from app.models import Product
 
+
 def build_prompt(products: Optional[Iterable[Product]] = None) -> str:
     """Формирует text-prefix для Vision-запроса."""
     if products is None:
@@ -19,6 +20,6 @@ def build_prompt(products: Optional[Iterable[Product]] = None) -> str:
         *[f"- {u}" for u in units],
         "",
         "Return JSON list: ",
-        "[{line:int, name:str, qty:float, unit:str, price:int}]"
+        "[{line:int, name:str, qty:float, unit:str, price:int}]",
     ]
     return "\n".join(lines)

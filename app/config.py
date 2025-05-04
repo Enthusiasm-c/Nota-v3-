@@ -8,28 +8,24 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str = ""
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o"
-    
+
     # Fuzzy matching configuration
-    MATCH_THRESHOLD: float = 0.75        # Default match threshold (0-1.0)
-    MATCH_EXACT_BONUS: float = 0.05      # Bonus for substring matches (0-1.0)
-    MATCH_LENGTH_PENALTY: float = 0.1    # Penalty weight for length differences (0-1.0)
-    MATCH_MIN_SCORE: float = 0.5         # Minimum score to show in suggestions (0-1.0)
-    
+    MATCH_THRESHOLD: float = 0.75  # Default match threshold (0-1.0)
+    MATCH_EXACT_BONUS: float = 0.05  # Bonus for substring matches (0-1.0)
+    MATCH_LENGTH_PENALTY: float = 0.1  # Penalty weight for length differences (0-1.0)
+    MATCH_MIN_SCORE: float = 0.5  # Minimum score to show in suggestions (0-1.0)
+
     # OpenAI API configuration
     USE_OPENAI_OCR: bool = False
     OPENAI_OCR_KEY: str = os.getenv("OPENAI_OCR_KEY", "")
     OPENAI_CHAT_KEY: str = os.getenv("OPENAI_CHAT_KEY", "")
     OPENAI_ASSISTANT_ID: str = os.getenv("OPENAI_ASSISTANT_ID", "")
-    
+
     # Business logic configuration
-    OWN_COMPANY_ALIASES: list[str] = [
-        "Bali Veg Ltd", "Nota AI Cafe"
-    ]
+    OWN_COMPANY_ALIASES: list[str] = ["Bali Veg Ltd", "Nota AI Cafe"]
 
     model_config = SettingsConfigDict(
-        extra="allow",
-        env_file=os.getenv("ENV_FILE", ".env"),
-        env_file_encoding="utf-8"
+        extra="allow", env_file=os.getenv("ENV_FILE", ".env"), env_file_encoding="utf-8"
     )
 
 
@@ -40,21 +36,23 @@ settings = Settings()
 _ocr_client = None
 _chat_client = None
 
+
 def get_ocr_client():
     """
     Получает клиент OpenAI для OCR с ленивой инициализацией.
     Инициализирует клиент только при первом вызове.
-    
+
     Returns:
         openai.OpenAI: Инициализированный клиент или None при ошибке
     """
     global _ocr_client
-    
+
     if _ocr_client is not None:
         return _ocr_client
-    
+
     try:
         import openai
+
         if settings.OPENAI_OCR_KEY:
             _ocr_client = openai.OpenAI(api_key=settings.OPENAI_OCR_KEY)
             return _ocr_client
@@ -73,17 +71,18 @@ def get_chat_client():
     """
     Получает клиент OpenAI для чата с ленивой инициализацией.
     Инициализирует клиент только при первом вызове.
-    
+
     Returns:
         openai.OpenAI: Инициализированный клиент или None при ошибке
     """
     global _chat_client
-    
+
     if _chat_client is not None:
         return _chat_client
-    
+
     try:
         import openai
+
         if settings.OPENAI_CHAT_KEY:
             _chat_client = openai.OpenAI(api_key=settings.OPENAI_CHAT_KEY)
             return _chat_client

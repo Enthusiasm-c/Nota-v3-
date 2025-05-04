@@ -15,7 +15,7 @@ def format_idr(val):
     """Format number with narrow space and no currency for table."""
     try:
         val = Decimal(val)
-        return f"{val:,.0f}".replace(",", "\u202F")
+        return f"{val:,.0f}".replace(",", "\u202f")
     except Exception:
         return "—"
 
@@ -23,7 +23,7 @@ def format_idr(val):
 def _row(idx, name, qty, unit, price, total, status):
     # Truncate name if too long
     if len(name) > W_NAME:
-        name = name[:W_NAME-1] + "…"
+        name = name[: W_NAME - 1] + "…"
     # Format numbers and handle None
     price_str = format_idr(price) if price is not None else "—"
     total_str = format_idr(total) if total is not None else "—"
@@ -42,8 +42,13 @@ def _row(idx, name, qty, unit, price, total, status):
 
 def build_table(rows):
     header = FMT_ROW.format(
-        idx="#", name="NAME", qty="QTY", unit="UNIT",
-        price="PRICE", total="TOTAL", status=""
+        idx="#",
+        name="NAME",
+        qty="QTY",
+        unit="UNIT",
+        price="PRICE",
+        total="TOTAL",
+        status="",
     )
     divider = "─" * len(header)
     body = "\n".join(rows)
@@ -53,7 +58,7 @@ def build_table(rows):
 
 def paginate_rows(rows, page_size=15):
     """Split rows into pages of page_size."""
-    return [rows[i:i + page_size] for i in range(0, len(rows), page_size)]
+    return [rows[i : i + page_size] for i in range(0, len(rows), page_size)]
 
 
 def build_report(parsed_data, match_results, escape=True, page=1, page_size=15):
@@ -97,15 +102,15 @@ def build_report(parsed_data, match_results, escape=True, page=1, page_size=15):
     pages = paginate_rows(table_rows, page_size)
     total_pages = len(pages)
     page = max(1, min(page, total_pages))
-    current_rows = pages[page-1] if pages else []
+    current_rows = pages[page - 1] if pages else []
 
     # Build table for current page
     table = build_table(current_rows)
 
     # Header and summary
     report = (
-        f"\U0001F4E6 *Supplier:* {supplier_str}\n"
-        f"\U0001F4C6 *Invoice date:* {date_str}\n"
+        f"\U0001f4e6 *Supplier:* {supplier_str}\n"
+        f"\U0001f4c6 *Invoice date:* {date_str}\n"
         "────────────────────────────────────────\n"
     )
     report += table

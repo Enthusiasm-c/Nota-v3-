@@ -1,6 +1,7 @@
 from app.keyboards import kb_edit
 from app.formatter import build_report
 
+
 def test_edit_callback_flow():
     # Simulate initial state
     match_results = [

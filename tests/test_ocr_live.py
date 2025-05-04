@@ -4,6 +4,7 @@ import base64
 from pathlib import Path
 from app.ocr import call_openai_ocr
 
+
 @pytest.mark.vcr()
 @pytest.mark.skipif("OPENAI_API_KEY" not in os.environ, reason="no key")
 def test_live_ocr():
