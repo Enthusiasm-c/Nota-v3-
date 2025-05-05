@@ -14,7 +14,7 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 # Инициализация OpenAI API клиента
-client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY", getattr(settings, "OPENAI_API_KEY", "")))
+client = openai.OpenAI(api_key=os.getenv("OPENAI_CHAT_KEY", getattr(settings, "OPENAI_CHAT_KEY", "")))
 
 # ID ассистента для обработки команд редактирования
 ASSISTANT_ID = os.getenv("OPENAI_ASSISTANT_ID", getattr(settings, "OPENAI_ASSISTANT_ID", ""))
