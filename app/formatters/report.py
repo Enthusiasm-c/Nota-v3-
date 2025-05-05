@@ -42,7 +42,7 @@ def build_table(rows):
     from html import escape as html_escape
 
     status_map = {"ok": "✓", "unit_mismatch": "🚫", "unknown": "🚫", "ignored": "🚫", "error": "🚫"}
-    header = "#  NAME           QTY     UNIT    PRICE    ⚑"
+    header = "#  NAME           QTY     UNIT    PRICE"
     divider = "─" * len(header)
     table_rows = [header, divider]
 
@@ -51,13 +51,22 @@ def build_table(rows):
         if len(name) > 13:
             name = name[:12] + "…"
         name = html_escape(name)
-        qty = str(item.get("qty", ""))
-        unit = html_escape(item.get("unit", ""))
-        price = item.get("unit_price", "")
-        price_str = format_idr(price) if price not in (None, "") else "—"
-        status = item.get("status", "")
-        status_str = status_map.get(status, "")
-        row = f"{idx:<2} {name:<13} {qty:<7} {unit:<7} {price_str:<8} {status_str}"
+        qty = item.get("qty", None)
+        unit = html_escape(str(item.get("unit", "")))
+        price = item.get("unit_price", None)
+        total = item.get("total", None)
+        # Попытка вычислить unit_price, если есть total и qty, но нет unit_price
+        computed_price = None
+        if (price in (None, "", "—")) and (total not in (None, "", "—")) and (qty not in (None, "", "—")):
+            try:
+                computed_price = float(total) / float(qty)
+                price_str = format_idr(computed_price)
+            except Exception:
+                price_str = "—"
+        else:
+            price_str = format_idr(price) if price not in (None, "", "—") else "—"
+        qty_str = str(qty) if qty not in (None, "") else "—"
+        row = f"{idx:<2} {name:<13} {qty_str:<7} {unit:<7} {price_str:<8}"
         table_rows.append(row)
 
     return "\n".join(table_rows)
