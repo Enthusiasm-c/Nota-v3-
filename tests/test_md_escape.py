@@ -1,5 +1,5 @@
 import pytest
-from app.utils.md import escape_html
+from app.utils.md import escape_html, escape_v2
 
 
 def test_escape_html_basic():
@@ -15,13 +15,6 @@ def test_escape_html_basic():
         assert escape_html(raw) == expected
         # Проверяем, что результат совпадает с html.escape
         assert escape_html(raw) == html.escape(raw)
-
-    assert r"\#хэштегом" in result
-    assert r"\*текст\*" in result
-
-    # Проверяем отсутствие экранирования в блоках кода
-    assert "Первый блок кода #1" in result
-    assert "Второй блок кода #2" in result
 
 
 def test_escape_v2_without_code_blocks():

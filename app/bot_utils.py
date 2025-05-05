@@ -27,6 +27,8 @@ async def edit_message_text_safe(bot, chat_id, msg_id, text, kb):
     if len(text) > 4096:
         text = text[:4090] + "…"
 
+    logger.debug("OUT >>> %s", text[:200])
+    logger.debug("escape func = %s", escape)
     try:
         await bot.edit_message_text(
             chat_id=chat_id,

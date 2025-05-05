@@ -1,4 +1,6 @@
 from html import escape  # Для экранирования только данных, не тегов
+import logging
+logging.getLogger("nota.report").debug("escape func = %s", escape)
 from decimal import Decimal
 
 def format_idr(val):

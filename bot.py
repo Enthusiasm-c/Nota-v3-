@@ -109,6 +109,7 @@ async def safe_edit(bot, chat_id, msg_id, text, kb=None, **kwargs):
     ):
         text = escape_html(text)
 
+    logger.debug("OUT >>> %s", text[:200])
     try:
         # First attempt: with full formatting
         await bot.edit_message_text(
@@ -794,6 +795,7 @@ async def cb_field(callback: CallbackQuery, state: FSMContext):
         callback.from_user.id,
         f"Введите новое значение для {field} (строка {idx+1}):",
         reply_markup={"force_reply": True},
+        parse_mode="HTML"
     )
 
     # Логируем ID созданного сообщения
