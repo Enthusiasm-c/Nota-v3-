@@ -200,8 +200,9 @@ def call_openai_ocr(image_bytes: bytes) -> ParsedData:
     image_url = f"data:image/jpeg;base64,{base64_image}"
 
     # Set longer timeout and increase max_tokens
+    logging.info(f"[OCR] Используется модель для Vision: gpt-4o")
     rsp = client.chat.completions.create(
-        model=settings.OPENAI_MODEL,
+        model="gpt-4o",
         temperature=0,
         max_tokens=1200,  # Increased max tokens
         timeout=45,  # Increased timeout for larger invoices
