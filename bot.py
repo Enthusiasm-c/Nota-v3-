@@ -122,7 +122,7 @@ async def safe_edit(bot, chat_id, msg_id, text, kb=None, **kwargs):
         return True
     except Exception as e:
         error_msg = str(e)
-        logger.warning(f"Error editing message: {type(e).__name__}")
+        logger.warning(f"Error editing message: {type(e).__name__} - {error_msg} - in chat_id={chat_id}, msg_id={msg_id}")
         
         # Попытка 2: Если проблема с форматированием, пробуем без него
         if isinstance(e, TelegramBadRequest) and (
@@ -935,7 +935,7 @@ async def handle_field_edit(message, state: FSMContext):
 
         # Создаем отчет
         parsed_data = entry["parsed_data"]
-        report, has_errors = build_report(parsed_data, entry["match_results"], escape=False)
+        report, has_errors = build_report(parsed_data, entry["match_results"], escape_html=True)
 
         # Используем HTML отчет без экранирования
         formatted_report = report
@@ -945,14 +945,47 @@ async def handle_field_edit(message, state: FSMContext):
         logger.debug("TELEGRAM parse_mode: %s", ParseMode.HTML)
         logger.debug("TELEGRAM OUT (report) >>> %s", formatted_report[:500])
         try:
-            result = await message.answer(
-                formatted_report,
-                reply_markup=kb_report(entry["match_results"]),
-                parse_mode=ParseMode.HTML,
-            )
+            # Проверяем наличие потенциально опасных HTML-тегов
+            from app.utils.md import clean_html
+            if '<' in formatted_report and '>' in formatted_report:
+                logger.debug("Detecting potential HTML formatting issues, trying to send without formatting")
+                try:
+                    # Пробуем сначала без парсинга HTML
+                    result = await message.answer(
+                        formatted_report,
+                        reply_markup=kb_report(entry["match_results"]),
+                        parse_mode=None,  # Без форматирования для безопасности
+                    )
+                    logger.debug("Successfully sent message without HTML parsing")
+                except Exception as format_error:
+                    logger.error(f"Error sending without HTML parsing: {format_error}")
+                    # Если не получилось - очищаем HTML-теги
+                    clean_formatted_report = clean_html(formatted_report)
+                    result = await message.answer(
+                        clean_formatted_report,
+                        reply_markup=kb_report(entry["match_results"]),
+                        parse_mode=None,
+                    )
+                    logger.debug("Sent message with cleaned HTML")
+            else:
+                # Стандартный случай - пробуем с HTML
+                result = await message.answer(
+                    formatted_report,
+                    reply_markup=kb_report(entry["match_results"]),
+                    parse_mode=ParseMode.HTML,
+                )
         except Exception as e:
-            logger.error("Telegram error: %s\nText: %s", str(e), formatted_report[:500])
-            raise
+            logger.error("Telegram error: %s\nText length: %d\nText sample: %s", 
+                         str(e), len(formatted_report), formatted_report[:200])
+            # Пытаемся отправить сообщение без форматирования и без клавиатуры
+            try:
+                simple_msg = f"✅ Редактирование успешно. Поле '{field}' обновлено на '{text}'."
+                result = await message.answer(simple_msg, parse_mode=None)
+                logger.info("Sent fallback simple message")
+                return  # Выходим досрочно
+            except Exception as final_e:
+                logger.error(f"Final fallback message failed: {final_e}")
+                raise
 
         # Обновляем ссылки в user_matches с новым ID сообщения
         new_msg_id = result.message_id

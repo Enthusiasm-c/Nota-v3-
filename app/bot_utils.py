@@ -46,7 +46,16 @@ async def edit_message_text_safe(bot, chat_id, msg_id, text, kb):
         if "Message is not modified" in error_msg:
             logger.debug("Skip edit: not modified")
         elif "can't parse entities" in error_msg:
-            logger.warning("HTML parse error in edit_message_text_safe: %s", e.message)
+            logger.warning("HTML parse error in edit_message_text_safe: %s - in chat_id=%s, msg_id=%s", 
+                          error_msg, chat_id, msg_id)
+            
+            # Найдем проблемную часть HTML
+            entity_pos_match = re.search(r"can't parse entities: (.*) at byte offset (\d+)", error_msg)
+            if entity_pos_match:
+                error_type = entity_pos_match.group(1)
+                offset = int(entity_pos_match.group(2))
+                preview = text[max(0, offset-30):min(len(text), offset+30)]
+                logger.error(f"Entity parse error: {error_type} at offset {offset}, preview: {preview}")
             
             try:
                 # Вторая попытка: без форматирования
