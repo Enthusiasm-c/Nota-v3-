@@ -841,7 +841,8 @@ async def cb_cancel(callback: CallbackQuery, state: FSMContext):
 
 async def cb_edit_line(callback: CallbackQuery, state: FSMContext):
     idx = int(callback.data.split(":")[1])
-    await callback.message.edit_reply_markup(reply_markup=kb_field_menu(idx))
+    # TODO: Был вызов kb_field_menu(idx), функция удалена как устаревшая. Если требуется показать клавиатуру редактирования, используйте build_main_kb или обновите логику согласно новой UX.
+    await callback.message.edit_reply_markup(reply_markup=kb_main())
     await callback.answer()
 
 
@@ -1154,7 +1155,7 @@ async def _dummy(update, data):
 logging.getLogger("aiogram.event").setLevel(logging.DEBUG)
 
 
-from app.keyboards import kb_main, kb_upload, kb_help_back, kb_field_menu, build_edit_keyboard
+from app.keyboards import kb_main, kb_upload, kb_help_back
 
 # Remove duplicate NotaStates class
 # In-memory store for user sessions: {user_id: {msg_id: {...}}}

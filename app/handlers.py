@@ -149,20 +149,7 @@ async def handle_free_edit(message: Message, state: FSMContext):
         await state.set_state(EditFree.awaiting_input)
 
 # --- EDIT button pressed: show choose-field menu ---
-@router.callback_query(F.data.startswith("edit:"))
-async def handle_edit(call: CallbackQuery, state: FSMContext):
-    idx = int(call.data.split(":")[1])
-    await state.update_data(edit_pos=idx, msg_id=call.message.message_id)
-    try:
-        await call.message.edit_reply_markup(reply_markup=keyboards.kb_edit_fields(idx))
-    except Exception as e:
-        logging.warning(f"Failed to update keyboard: {e}")
-        # Пробуем отправить новое сообщение с клавиатурой
-        try:
-            await call.message.answer("Выберите поле для редактирования:", 
-                                    reply_markup=keyboards.kb_edit_fields(idx))
-        except Exception as e2:
-            logging.error(f"Failed to send fallback message: {e2}")
+
 
 
 # --- Field selection: set FSM and ask for new value ---
@@ -577,7 +564,7 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
         total_rows = len(match_results)
         total_pages = (total_rows + page_size - 1) // page_size
         text, has_errors = invoice_report.build_report(invoice, match_results, page=page)
-        reply_markup = keyboards.build_edit_keyboard(has_errors)
+        reply_markup = keyboards.build_main_kb(has_errors)
         text_to_send = f"<b>Updated!</b><br>{text}"
         with open("/tmp/nota_debug.log", "a") as f:
             f.write(f"EDIT_MESSAGE_DEBUG: chat_id={message.chat.id}, msg_id={msg_id}, text_len={len(text_to_send)}, text_preview={text_to_send[:500]!r}, reply_markup={reply_markup}\n")
@@ -621,13 +608,15 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
     else:
         # Если не ok, оставляем на той же странице (или сбрасываем на 1)
         await state.update_data(invoice_page=1)
-        match_results = matcher.match_positions(invoice["positions"], data_loader.load_products())
+        match_results = matcher.match_positions(
+            invoice["positions"], data_loader.load_products()
+        )
         page = 1
         page_size = 40
         total_rows = len(match_results)
         total_pages = (total_rows + page_size - 1) // page_size
         text, has_errors = invoice_report.build_report(invoice, match_results, page=page)
-        reply_markup = keyboards.build_edit_keyboard(has_errors)
+        reply_markup = keyboards.build_main_kb(has_errors)
         text_to_send = f"<b>Updated!</b><br>{text}"
         with open("/tmp/nota_debug.log", "a") as f:
             f.write(f"EDIT_MESSAGE_DEBUG: chat_id={message.chat.id}, msg_id={msg_id}, text_len={len(text_to_send)}, text_preview={text_to_send[:500]!r}, reply_markup={reply_markup}\n")

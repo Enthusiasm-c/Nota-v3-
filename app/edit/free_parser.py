@@ -14,26 +14,30 @@ FINISH_PATTERN = r"^(готово|все исправил|finish|done)$"
 
 
 def detect_intent(text: str) -> Dict[str, Any]:
-    text = text.strip().lower()
+    orig_text = text.strip()
+    text_lc = orig_text.lower()
     # 1. Date edit
     for pat in DATE_PATTERNS:
-        m = re.match(pat, text)
+        m = re.match(pat, text_lc)
         if m:
             return {"action": "edit_date", "value": m.group(1)}
     # 2. Line field edit
-    m = re.match(LINE_EDIT_PATTERN, text)
+    m = re.match(LINE_EDIT_PATTERN, text_lc)
     if m:
         return {"action": "edit_line_field", "line": int(m.group(1)), "field": m.group(2), "value": m.group(3)}
     # 3. Remove/ignore line
-    m = re.match(REMOVE_PATTERN, text)
+    m = re.match(REMOVE_PATTERN, text_lc)
     if m:
         return {"action": "remove_line", "line": int(m.group(2))}
     # 4. Add new line
-    m = re.match(ADD_PATTERN, text)
+    m = re.match(ADD_PATTERN, text_lc)
     if m:
-        return {"action": "add_line", "value": m.group(2)}
+        # Возвращаем исходный текст (с регистром) после команды "добавь"
+        match = re.match(ADD_PATTERN, orig_text, re.IGNORECASE)
+        value = match.group(2) if match else m.group(2)
+        return {"action": "add_line", "value": value}
     # 5. Finish
-    m = re.match(FINISH_PATTERN, text)
+    m = re.match(FINISH_PATTERN, text_lc)
     if m:
         return {"action": "finish"}
     # Не распознано

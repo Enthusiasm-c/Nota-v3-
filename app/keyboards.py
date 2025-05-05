@@ -45,24 +45,7 @@ def kb_help_back() -> ReplyKeyboardMarkup:
 
 # Клавиатура редактирования (inline)
 
-def build_edit_keyboard(has_errors: bool) -> InlineKeyboardMarkup:
-    """
-    Returns the main inline keyboard for invoice report:
-    - If there are errors: two buttons [Редактировать, Отмена]
-    - If no errors: three buttons [Подтвердить, Редактировать, Отмена]
-    """
-    if has_errors:
-        buttons = [
-            [InlineKeyboardButton(text="✏️ Редактировать", callback_data="edit:choose")],
-            [InlineKeyboardButton(text="↩ Отмена", callback_data="cancel:all")],
-        ]
-    else:
-        buttons = [
-            [InlineKeyboardButton(text="✅ Подтвердить", callback_data="confirm:invoice")],
-            [InlineKeyboardButton(text="✏️ Редактировать", callback_data="edit:choose")],
-            [InlineKeyboardButton(text="↩ Отмена", callback_data="cancel:all")],
-        ]
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
 
 
 # Клавиатура отчёта (inline)
@@ -118,37 +101,16 @@ def build_invoice_report(
 # Меню выбора поля для редактирования (inline)
 
 
-def kb_field_menu(idx: int = None) -> InlineKeyboardMarkup:
-    # Универсальный вариант: если idx=None, то просто field:name и т.д.
-    suffix = f":{idx}" if idx is not None else ""
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="Name", callback_data=f"field:name{suffix}"),
-                InlineKeyboardButton(text="Qty", callback_data=f"field:qty{suffix}"),
-                InlineKeyboardButton(text="Unit", callback_data=f"field:unit{suffix}"),
-                InlineKeyboardButton(
-                    text="Price", callback_data=f"field:price{suffix}"
-                ),
-            ],
-            [InlineKeyboardButton(text="Cancel", callback_data=f"cancel{suffix}")],
-        ]
-    )
+
 
 
 # Оставляем для совместимости (по одной строке)
 
 
-def kb_edit(idx: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="✏️ Edit", callback_data=f"edit:{idx}")]
-        ]
-    )
 
 
-def kb_edit_fields(idx: int) -> InlineKeyboardMarkup:
-    return kb_field_menu(idx)
+
+
 
 
 # Кнопка Set supplier (inline)
