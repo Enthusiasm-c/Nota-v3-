@@ -113,33 +113,6 @@ def build_invoice_report(
     # Если есть ошибки, submit_btn остается None и не добавляется в клавиатуру
     # Пагинация
     nav_buttons = []
-    if total_pages > 1:
-        if page > 1:
-            nav_buttons.append(
-                InlineKeyboardButton(text="◀", callback_data=f"page_{page-1}")
-            )
-        nav_buttons.append(
-            InlineKeyboardButton(text=f"{page}/{total_pages}", callback_data="noop")
-        )
-        if page < total_pages:
-            nav_buttons.append(
-                InlineKeyboardButton(text="▶", callback_data=f"page_{page+1}")
-            )
-    # Сборка клавиатуры
-    keyboard = []
-    for i in range(0, len(edit_buttons), 3):
-        keyboard.append(edit_buttons[i : i + 3])
-    if nav_buttons:
-        keyboard.append(nav_buttons)
-    if add_missing_btn:
-        keyboard.append([add_missing_btn])
-    btn_row = [back_btn]
-    # Кнопка 'Подтвердить' только если нет ошибок
-    if submit_btn and not has_errors:
-        btn_row.append(submit_btn)
-    keyboard.append(btn_row)
-    return InlineKeyboardMarkup(inline_keyboard=keyboard)
-    # NB: Если есть ошибки — только кнопка 'Отмена' и кнопки редактирования
 
 
 # Меню выбора поля для редактирования (inline)

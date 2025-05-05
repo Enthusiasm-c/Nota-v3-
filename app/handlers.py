@@ -101,6 +101,54 @@ async def handle_choose_line(message: Message, state: FSMContext):
     )
 
 # --- EDIT button pressed: show choose-field menu ---
+@router.callback_query(F.data == "edit:free")
+async def handle_edit_free(call: CallbackQuery, state: FSMContext):
+    await state.set_state(EditFree.awaiting_input)
+    await call.message.answer(
+        "Что нужно отредактировать? (пример: 'дата — 26 апреля' или 'строка 2 цена 90000')"
+    )
+
+@router.message(EditFree.awaiting_input)
+async def handle_free_edit(message: Message, state: FSMContext):
+    user_text = message.text.strip()
+    data = await state.get_data()
+    invoice = data.get("invoice")
+    if not invoice:
+        await message.answer("Сессия истекла. Пожалуйста, загрузите инвойс заново.")
+        await state.clear()
+        return
+    # Определяем намерение пользователя
+    from app.edit import free_parser
+    intent = free_parser.detect_intent(user_text)
+    if intent["action"] == "unknown":
+        await message.answer(
+            "Не понял, что менять. Пример: строка 2 цена 90000"
+        )
+        return
+    # Применяем правку
+    new_invoice = free_parser.apply_edit(invoice, intent)
+    # Пересчитываем отчёт
+    from app.formatters import report as invoice_report
+    match_results = matcher.match_positions(new_invoice["positions"], data_loader.load_products())
+    text, has_errors = invoice_report.build_report(new_invoice, match_results)
+    await message.answer(
+        text,
+        reply_markup=keyboards.build_main_kb(has_errors),
+        parse_mode="HTML"
+    )
+    # Обновляем state
+    await state.update_data(invoice=new_invoice)
+    # Если ошибок нет — можно завершать
+    if not has_errors:
+        await message.answer(
+            "Все ошибки исправлены! Вы можете подтвердить инвойс.",
+            reply_markup=keyboards.build_main_kb(False)
+        )
+    # Остаёмся в состоянии ожидания ввода
+    else:
+        await state.set_state(EditFree.awaiting_input)
+
+# --- EDIT button pressed: show choose-field menu ---
 @router.callback_query(F.data.startswith("edit:"))
 async def handle_edit(call: CallbackQuery, state: FSMContext):
     idx = int(call.data.split(":")[1])
