@@ -6,18 +6,26 @@ import atexit
 import uuid
 import json
 import time
-from aiogram import Bot, Dispatcher, types
+import shutil
+from datetime import datetime
+from typing import Dict, Any
+from pathlib import Path
+
+# Aiogram импорты
+from aiogram import Bot, Dispatcher, types, F
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.exceptions import TelegramBadRequest
+from aiogram.enums import ParseMode
+from aiogram.filters import CommandStart
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+
+# Импорты приложения
 from app import ocr, matcher, data_loader
-from app.utils.md import escape_html
+from app.utils.md import escape_html, clean_html
 from app.config import settings
-from pathlib import Path
-from aiogram.types import CallbackQuery
-import shutil
 
 # Setup logging
 logging.basicConfig(
@@ -65,6 +73,8 @@ def create_bot_and_dispatcher():
 # Глобальные bot и dp убраны для тестируемости.
 bot = None
 dp = None
+# Глобальный кэш для отредактированных сообщений
+_edit_cache: Dict[str, Dict[str, Any]] = {}
 # assistant_thread_id убран из глобальных переменных и перенесен в FSMContext
 
 
@@ -527,12 +537,6 @@ async def photo_handler(message, state: FSMContext, **kwargs):
             f"has code blocks: {'```' in full_message}"
         )
 
-        # Используем HTML отчет без экранирования
-        formatted_message = full_message
-
-        # Логируем изменение размера после форматирования
-        logger.debug(f"BUGFIX: Formatted message length: {len(formatted_message)}")
-
         # Пробуем удалить текущее сообщение о прогрессе
         try:
             logger.debug(
@@ -543,81 +547,80 @@ async def photo_handler(message, state: FSMContext, **kwargs):
         except Exception as e:
             logger.debug(f"BUGFIX: Could not delete progress message: {str(e)}")
 
-        # Отправляем новое сообщение с форматированным отчетом
+        # Создаем флаг для отслеживания успешной отправки
+        success = False
+        report_msg = None
+        
+        # Многоуровневая стратегия отправки сообщений
+        # 1: Пробуем сначала с HTML-форматированием
         try:
-            logger.debug(
-                "BUGFIX: Sending new message with formatted report and HTML mode"
-            )
-            # Убедимся, что форматирование HTML работает корректно
-            # Формат: ParseMode.HTML - должен быть точно таким для работы
-            result = await message.answer(
-                formatted_message,
+            logger.debug("Sending report with HTML formatting")
+            report_msg = await message.answer(
+                full_message,
                 reply_markup=inline_kb,
-                parse_mode="HTML",  # Явно указываем строковое значение
+                parse_mode="HTML",  # Строковый литерал для совместимости
             )
-            logger.debug(
-                f"BUGFIX: Successfully sent formatted report, new message ID: {result.message_id}"
-            )
-            # Сохраняем ID нового сообщения для дальнейшего доступа
-            # Это важно для редактирования позиций позже
-            entry = user_matches[(user_id, progress_msg_id)]
-            new_key = (user_id, result.message_id)
-            user_matches[new_key] = entry
-            # Удаляем старую запись, так как сообщение больше не существует
-            logger.debug(
-                f"BUGFIX: Updating user_matches with new message ID {result.message_id}"
-            )
-            del user_matches[(user_id, progress_msg_id)]
             success = True
-
-        except Exception as format_err:
-            logger.debug(f"BUGFIX: Error sending formatted report: {str(format_err)}")
-
-            # Запасной вариант: отправка простого текстового отчета
+            logger.debug(f"Successfully sent HTML-formatted report with message_id={report_msg.message_id}")
+        except Exception as html_err:
+            logger.warning(f"Error sending HTML report: {str(html_err)}")
+            
+            # 2: Если не получилось, пробуем без форматирования
             try:
-                logger.debug("BUGFIX: Attempting to send plain text report")
-                simple_message = re.sub(r"[^a-zA-Z0-9\s,.;:()]", " ", full_message)
-                result = await message.answer(
-                    simple_message, reply_markup=inline_kb, parse_mode=None
+                logger.debug("Attempting to send report without formatting")
+                report_msg = await message.answer(
+                    full_message,
+                    reply_markup=inline_kb,
+                    parse_mode=None
                 )
-                logger.debug(
-                    f"BUGFIX: Successfully sent plain report, new message ID: {result.message_id}"
-                )
-                # Обновляем ID сообщения в справочнике
-                entry = user_matches[(user_id, progress_msg_id)]
-                new_key = (user_id, result.message_id)
-                user_matches[new_key] = entry
-                del user_matches[(user_id, progress_msg_id)]
                 success = True
-
+                logger.debug(f"Successfully sent plain report with message_id={report_msg.message_id}")
             except Exception as plain_err:
-                logger.debug(f"BUGFIX: Error sending plain report: {str(plain_err)}")
-
-                # Последний вариант: отправка простого сообщения
+                logger.warning(f"Error sending plain report: {str(plain_err)}")
+                
+                # 3: Последний вариант - очищаем текст от HTML и отправляем
                 try:
-                    logger.debug("BUGFIX: Sending ultra-simple message")
-                    # Очень простое сообщение с минимумом информации
-                    ultrasimple_msg = f"📋 Найдено {len(match_results)} позиций:\n"
-                    ultrasimple_msg += f"✅ {sum(1 for p in match_results if p.get('status') == 'ok')} распознано успешно\n"
-                    ultrasimple_msg += f"⚠️ {sum(1 for p in match_results if p.get('status') != 'ok')} требуют проверки"
-
-                    result = await message.answer(
-                        ultrasimple_msg, reply_markup=inline_kb, parse_mode=None
+                    logger.debug("Sending report with cleaned HTML")
+                    cleaned_message = clean_html(full_message)
+                    report_msg = await message.answer(
+                        cleaned_message,
+                        reply_markup=inline_kb,
+                        parse_mode=None
                     )
-                    logger.debug(
-                        f"BUGFIX: Successfully sent summary message, new message ID: {result.message_id}"
-                    )
-                    # Обновляем ID сообщения в справочнике
-                    entry = user_matches[(user_id, progress_msg_id)]
-                    new_key = (user_id, result.message_id)
-                    user_matches[new_key] = entry
-                    del user_matches[(user_id, progress_msg_id)]
                     success = True
-
-                except Exception as final_err:
-                    logger.error(
-                        f"BUGFIX: All message attempts failed: {str(final_err)}"
-                    )
+                    logger.debug(f"Successfully sent cleaned report with message_id={report_msg.message_id}")
+                except Exception as clean_err:
+                    logger.error(f"All report sending attempts failed: {str(clean_err)}")
+                    
+                    # 4: Крайний случай - отправляем краткую сводку
+                    try:
+                        simple_message = (
+                            f"📋 Найдено {len(match_results)} позиций. "
+                            f"✅ OK: {sum(1 for p in match_results if p.get('status') == 'ok')}. "
+                            f"⚠️ Проблемы: {sum(1 for p in match_results if p.get('status') != 'ok')}."
+                        )
+                        report_msg = await message.answer(
+                            simple_message, 
+                            reply_markup=inline_kb, 
+                            parse_mode=None
+                        )
+                        success = True
+                        logger.debug(f"Sent summary message with message_id={report_msg.message_id}")
+                    except Exception as final_err:
+                        logger.error(f"All message attempts failed: {str(final_err)}")
+        
+        # Если успешно отправили сообщение, обновляем ссылки в user_matches
+        if success and report_msg:
+            try:
+                # Сохраняем ID нового сообщения для дальнейшего доступа
+                entry = user_matches[(user_id, progress_msg_id)]
+                new_key = (user_id, report_msg.message_id)
+                user_matches[new_key] = entry
+                # Удаляем старую запись
+                del user_matches[(user_id, progress_msg_id)]
+                logger.debug(f"Updated user_matches with new message_id={report_msg.message_id}")
+            except Exception as key_err:
+                logger.error(f"Error updating user_matches: {str(key_err)}")
 
         # Обновляем состояние пользователя
         await state.set_state(NotaStates.editing)
@@ -1119,11 +1122,6 @@ async def _dummy(update, data):
 logging.getLogger("aiogram.event").setLevel(logging.DEBUG)
 
 
-from aiogram.filters import CommandStart
-from aiogram.enums import ParseMode
-from aiogram import F
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.fsm.context import FSMContext
 from app.keyboards import kb_main, kb_upload, kb_help_back, kb_report, kb_field_menu
 
 # Remove duplicate NotaStates class

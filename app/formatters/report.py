@@ -20,32 +20,51 @@ def paginate_rows(rows, page_size=15):
 
 
 def build_header(supplier, date):
+    """
+    Формирует HTML-заголовок отчета с информацией о поставщике и дате инвойса.
+    Использует escape для безопасного включения данных в HTML.
+    """
+    # Явно импортируем escape для надежности
+    from html import escape as html_escape
     return (
-        f"<b>Supplier:</b> {escape(str(supplier))}<br>"
-        f"<b>Invoice date:</b> {escape(str(date))}<br><br>"
+        f"<b>Supplier:</b> {html_escape(str(supplier))}<br>"
+        f"<b>Invoice date:</b> {html_escape(str(date))}<br><br>"
     )
 
 def build_table(rows):
+    """
+    Формирует текстовую таблицу с позициями инвойса.
+    Текст в таблице безопасно экранируется для HTML.
+    """
+    # Явно импортируем escape для надежности
+    from html import escape as html_escape
+    
     status_map = {"ok": "✓", "unit_mismatch": "🚫", "unknown": "🚫", "ignored": "🚫", "error": "🚫"}
     header = "#  NAME                 QTY UNIT        TOTAL  ⚑"
     divider = "─" * len(header)
     table_rows = [header, divider]
+    
     for idx, item in enumerate(rows, 1):
         name = item.get("name", "")
         if len(name) > 19:
             name = name[:18] + "…"
-        name = escape(name)
+        name = html_escape(name)
         qty = item.get("qty", "")
-        unit = escape(item.get("unit", ""))
+        unit = html_escape(item.get("unit", ""))
         total = item.get("line_total", "")
         total_str = format_idr(total) if total not in (None, "") else "—"
         status = item.get("status", "")
         status_str = status_map.get(status, "")
         row = f"{idx:<2} {name:<19} {qty:>6} {unit:<4} {total_str:>12} {status_str}"
         table_rows.append(row)
+    
     return "\n".join(table_rows)
 
 def build_summary(ok_count, issues_count, invoice_total):
+    """
+    Формирует HTML-итоги по инвойсу с количеством успешных и проблемных позиций
+    и общей суммой.
+    """
     return (
         f"<b>✓ Correct:</b> {ok_count}&nbsp;&nbsp;<b>🚫 Issues:</b> {issues_count}<br>"
         f"<b>💰 Invoice total:</b> {format_idr(invoice_total)}"
