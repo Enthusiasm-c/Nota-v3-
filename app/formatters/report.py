@@ -112,16 +112,24 @@ def build_summary(match_results):
         if status == "error":
             problems.append("ошибка обработки строки")
         qty = item.get("qty", None)
-        price = item.get("unit_price", None)
+        price = item.get("price", None)
+        if price in (None, "", "—"):
+            price = item.get("unit_price", None)
         if qty in (None, "", "—"):
             problems.append("не указано количество")
         if price in (None, "", "—"):
             problems.append("не указана цена")
         if problems:
             errors.append(f"❗ Строка {idx} <b>{name}</b>: {', '.join(problems)}")
+    correct = sum(1 for item in match_results if item.get("status", "") == "ok")
+    issues = sum(1 for item in match_results if item.get("status", "") != "ok")
     if not errors:
-        return "<b>Нет ошибок. Все позиции распознаны корректно.</b>"
-    return "\n".join(errors)
+        return f"<b>Нет ошибок. Все позиции распознаны корректно.</b>\nCorrect: {correct}\nIssues: {issues}"
+    return (
+        "🚫\n"
+        + "\n".join(errors)
+        + f"\nCorrect: {correct}\nIssues: {issues}"
+    )
 
 def build_report(parsed_data, match_results, escape_html=True, page=1, page_size=40):
     """
