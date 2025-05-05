@@ -45,6 +45,9 @@ async def edit_message_text_safe(bot, chat_id, msg_id, text, kb):
         error_msg = str(e)
         if "Message is not modified" in error_msg:
             logger.debug("Skip edit: not modified")
+        elif "message to edit not found" in error_msg:
+            logger.info(f"Message {msg_id} not found, skipping edit")
+            return  # Просто выходим, не пытаясь продолжать редактирование
         elif "can't parse entities" in error_msg:
             logger.warning("HTML parse error in edit_message_text_safe: %s - in chat_id=%s, msg_id=%s", 
                           error_msg, chat_id, msg_id)

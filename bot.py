@@ -124,8 +124,13 @@ async def safe_edit(bot, chat_id, msg_id, text, kb=None, **kwargs):
         error_msg = str(e)
         logger.warning(f"Error editing message: {type(e).__name__} - {error_msg} - in chat_id={chat_id}, msg_id={msg_id}")
         
+        # Обработка случая с не найденным сообщением - переходим сразу к отправке нового
+        if isinstance(e, TelegramBadRequest) and "message to edit not found" in error_msg:
+            logger.info(f"Message {msg_id} not found, will send new message")
+            # Сразу перейдем к отправке нового сообщения (код ниже)
+            pass
         # Попытка 2: Если проблема с форматированием, пробуем без него
-        if isinstance(e, TelegramBadRequest) and (
+        elif isinstance(e, TelegramBadRequest) and (
             "can't parse entities" in error_msg or "parse_mode" in error_msg
         ):
             logger.info("Formatting failed, retrying without parse_mode")
@@ -536,10 +541,12 @@ async def photo_handler(message, state: FSMContext, **kwargs):
             logger.debug(
                 "BUGFIX: Sending new message with formatted report and HTML mode"
             )
+            # Убедимся, что форматирование HTML работает корректно
+            # Формат: ParseMode.HTML - должен быть точно таким для работы
             result = await message.answer(
                 formatted_message,
                 reply_markup=inline_kb,
-                parse_mode=ParseMode.HTML,
+                parse_mode="HTML",  # Явно указываем строковое значение
             )
             logger.debug(
                 f"BUGFIX: Successfully sent formatted report, new message ID: {result.message_id}"
@@ -950,23 +957,33 @@ async def handle_field_edit(message, state: FSMContext):
             if '<' in formatted_report and '>' in formatted_report:
                 logger.debug("Detecting potential HTML formatting issues, trying to send without formatting")
                 try:
-                    # Пробуем сначала без парсинга HTML
+                    # Пробуем сначала с HTML-форматированием 
                     result = await message.answer(
                         formatted_report,
                         reply_markup=kb_report(entry["match_results"]),
-                        parse_mode=None,  # Без форматирования для безопасности
+                        parse_mode=ParseMode.HTML,
                     )
-                    logger.debug("Successfully sent message without HTML parsing")
-                except Exception as format_error:
-                    logger.error(f"Error sending without HTML parsing: {format_error}")
-                    # Если не получилось - очищаем HTML-теги
-                    clean_formatted_report = clean_html(formatted_report)
-                    result = await message.answer(
-                        clean_formatted_report,
-                        reply_markup=kb_report(entry["match_results"]),
-                        parse_mode=None,
-                    )
-                    logger.debug("Sent message with cleaned HTML")
+                    logger.debug("Successfully sent message with HTML formatting")
+                except Exception as html_error:
+                    logger.error(f"Error sending with HTML parsing: {html_error}")
+                    try:
+                        # Пробуем без форматирования
+                        result = await message.answer(
+                            formatted_report,
+                            reply_markup=kb_report(entry["match_results"]),
+                            parse_mode=None,  # Без форматирования для безопасности
+                        )
+                        logger.debug("Successfully sent message without HTML parsing")
+                    except Exception as format_error:
+                        logger.error(f"Error sending without HTML parsing: {format_error}")
+                        # Если не получилось - очищаем HTML-теги
+                        clean_formatted_report = clean_html(formatted_report)
+                        result = await message.answer(
+                            clean_formatted_report,
+                            reply_markup=kb_report(entry["match_results"]),
+                            parse_mode=None,
+                        )
+                        logger.debug("Sent message with cleaned HTML")
             else:
                 # Стандартный случай - пробуем с HTML
                 result = await message.answer(
