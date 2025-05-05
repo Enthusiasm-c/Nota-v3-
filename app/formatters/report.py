@@ -52,6 +52,20 @@ def build_summary(ok_count, issues_count, invoice_total):
     )
 
 def build_report(parsed_data, match_results, escape=True, page=1, page_size=15):
+    """
+    Формирует HTML-отчет по инвойсу с пагинацией.
+    
+    Args:
+        parsed_data: Распознанные данные инвойса (объект или словарь)
+        match_results: Результаты сопоставления позиций с базой
+        escape: Флаг экранирования HTML (не используется, для совместимости)
+        page: Номер страницы для отображения
+        page_size: Размер страницы (количество позиций)
+        
+    Returns:
+        tuple: (HTML-отчет, флаг наличия ошибок)
+    """
+    # Извлекаем основную информацию из разных типов данных
     supplier = getattr(parsed_data, "supplier", None)
     if supplier is None and isinstance(parsed_data, dict):
         supplier = parsed_data.get("supplier", None)
@@ -60,6 +74,12 @@ def build_report(parsed_data, match_results, escape=True, page=1, page_size=15):
         date = parsed_data.get("date", None)
     supplier_str = "Unknown supplier" if not supplier else supplier
     date_str = "—" if not date else date
+
+    # Проверяем наличие потенциально опасных символов
+    if supplier_str and isinstance(supplier_str, str):
+        supplier_str = escape(supplier_str)
+    if date_str and isinstance(date_str, str):
+        date_str = escape(date_str)
 
     # Pagination
     start = (page - 1) * page_size
@@ -70,7 +90,7 @@ def build_report(parsed_data, match_results, escape=True, page=1, page_size=15):
     ok_count = 0
     issues_count = 0
     invoice_total = 0
-    for item in rows_to_show:
+    for item in match_results:  # Считаем для всех позиций, а не только для показываемых
         status = item.get("status", "")
         if status == "ok":
             ok_count += 1
@@ -81,12 +101,16 @@ def build_report(parsed_data, match_results, escape=True, page=1, page_size=15):
             invoice_total += total
         except Exception:
             pass
+    
     header_html = build_header(supplier_str, date_str)
     table = build_table(rows_to_show)
     summary_html = build_summary(ok_count, issues_count, invoice_total)
+    
+    # Собираем отчет
     html_report = (
         f"{header_html}"
         f"<pre>{table}</pre>"
         f"{summary_html}"
     )
+    
     return html_report.strip(), issues_count > 0
