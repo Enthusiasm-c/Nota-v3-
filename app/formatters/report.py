@@ -42,8 +42,12 @@ def build_table(rows):
     from html import escape as html_escape
 
     status_map = {"ok": "✓", "unit_mismatch": "🚫", "unknown": "🚫", "ignored": "🚫", "error": "🚫"}
-    header = "#  NAME           QTY    UNIT   PRICE  !"
-    divider = "─" * len(header)
+    def pad(text, width):
+        s = str(text)
+        return s[:width].ljust(width)
+
+    header = f"#  {pad('NAME',14)}{pad('QTY',5)}{pad('UNIT',5)}{pad('PRICE',6)}! "
+    divider = '-' * len(header)
     table_rows = [header, divider]
 
     for idx, item in enumerate(rows, 1):
@@ -80,10 +84,11 @@ def build_table(rows):
                 qty_str = str(qty)
         # Столбец с флажком для нераспознанных позиций
         flag = "🚩" if status != "ok" else ""
-        row = f"{idx:<2} {name:<13} {qty_str:<6} {unit:<6} {price_str:<7} {flag:<1}"
+        row = f"{str(idx):<2} {pad(name,14)}{pad(qty_str,5)}{pad(unit,5)}{pad(price_str,6)}{pad(flag,2)}"
         table_rows.append(row)
 
     return "\n".join(table_rows)
+
 
 def build_summary(ok_count, issues_count, invoice_total, show_total=True, has_unparsed=False):
     """

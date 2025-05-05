@@ -36,7 +36,11 @@ def test_report_layout_strict():
     assert "Invoice date:" in report
     assert "2025-04-29" in report
     # Divider и <pre>
-    assert "─" in report
+    # Divider: строим как в build_table
+    pad = lambda text, width: str(text)[:width].ljust(width)
+    header = f"#  {pad('NAME',14)}{pad('QTY',5)}{pad('UNIT',5)}{pad('PRICE',6)}! "
+    divider = '-' * len(header)
+    assert divider in report
     assert "<pre>" in report
     # Проверяем, что имя товара обрезано по ширине столбца
     assert "olive oil or…" in report
