@@ -1,12 +1,16 @@
 from aiogram import Router, CallbackQuery, Message, F
 import re
+import logging
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import ForceReply
+from aiogram.exceptions import TelegramBadRequest
 
 from app.formatters import report as invoice_report, alias, data_loader, keyboards
 from app import matcher
 from app.bot_utils import edit_message_text_safe
+
+logger = logging.getLogger(__name__)
 
 
 class InvoiceReviewStates(StatesGroup):
@@ -29,7 +33,16 @@ router = Router()
 async def handle_edit(call: CallbackQuery, state: FSMContext):
     idx = int(call.data.split(":")[1])
     await state.update_data(edit_pos=idx, msg_id=call.message.message_id)
-    await call.message.edit_reply_markup(reply_markup=keyboards.kb_edit_fields(idx))
+    try:
+        await call.message.edit_reply_markup(reply_markup=keyboards.kb_edit_fields(idx))
+    except Exception as e:
+        logging.warning(f"Failed to update keyboard: {e}")
+        # Пробуем отправить новое сообщение с клавиатурой
+        try:
+            await call.message.answer("Выберите поле для редактирования:", 
+                                    reply_markup=keyboards.kb_edit_fields(idx))
+        except Exception as e2:
+            logging.error(f"Failed to send fallback message: {e2}")
 
 
 # --- Field selection: set FSM and ask for new value ---
@@ -448,16 +461,35 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
         text_to_send = f"<b>Updated!</b><br>{text}"
         with open("/tmp/nota_debug.log", "a") as f:
             f.write(f"EDIT_MESSAGE_DEBUG: chat_id={message.chat.id}, msg_id={msg_id}, text_len={len(text_to_send)}, text_preview={text_to_send[:500]!r}, reply_markup={reply_markup}\n")
-        await edit_message_text_safe(
-            bot=message.bot,
-            chat_id=message.chat.id,
-            msg_id=msg_id,
-            text=text_to_send,
-            kb=reply_markup,
-        )
-        await message.bot.edit_message_reply_markup(
-            message.chat.id, msg_id, reply_markup=None
-        )
+        
+        # Отправляем новое сообщение вместо редактирования старого
+        try:
+            new_msg = await message.bot.send_message(
+                chat_id=message.chat.id,
+                text=text_to_send,
+                reply_markup=reply_markup,
+                parse_mode="HTML"
+            )
+            # Сохраняем ID нового сообщения для будущих обновлений
+            await state.update_data(msg_id=new_msg.message_id)
+            return  # Успешно отправили новое сообщение
+        except Exception as e:
+            logger.error(f"Failed to send new message: {e}")
+            # В случае ошибки пробуем безопасное редактирование как запасной вариант
+            await edit_message_text_safe(
+                bot=message.bot,
+                chat_id=message.chat.id,
+                msg_id=msg_id,
+                text=text_to_send,
+                kb=reply_markup,
+            )
+        try:
+            await message.bot.edit_message_reply_markup(
+                message.chat.id, msg_id, reply_markup=None
+            )
+        except Exception as e:
+            logging.warning(f"Failed to clear keyboard: {e}")
+            # Игнорируем ошибку - отсутствие клавиатуры не критично
         await state.clear()
     else:
         # Если не ok, оставляем на той же странице (или сбрасываем на 1)
@@ -474,16 +506,44 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
         text_to_send = f"<b>Updated!</b><br>{text}"
         with open("/tmp/nota_debug.log", "a") as f:
             f.write(f"EDIT_MESSAGE_DEBUG: chat_id={message.chat.id}, msg_id={msg_id}, text_len={len(text_to_send)}, text_preview={text_to_send[:500]!r}, reply_markup={reply_markup}\n")
-        await edit_message_text_safe(
-            bot=message.bot,
-            chat_id=message.chat.id,
-            msg_id=msg_id,
-            text=text_to_send,
-            kb=reply_markup,
-        )
-        await message.bot.edit_message_reply_markup(
-            message.chat.id, msg_id, reply_markup=keyboards.kb_edit_fields(idx)
-        )
+        
+        # Отправляем новое сообщение вместо редактирования старого
+        try:
+            new_msg = await message.bot.send_message(
+                chat_id=message.chat.id,
+                text=text_to_send,
+                reply_markup=reply_markup,
+                parse_mode="HTML"
+            )
+            # Сохраняем ID нового сообщения для будущих обновлений
+            await state.update_data(msg_id=new_msg.message_id)
+            return  # Успешно отправили новое сообщение
+        except Exception as e:
+            logger.error(f"Failed to send new message: {e}")
+            # В случае ошибки пробуем безопасное редактирование как запасной вариант
+            await edit_message_text_safe(
+                bot=message.bot,
+                chat_id=message.chat.id,
+                msg_id=msg_id,
+                text=text_to_send,
+                kb=reply_markup,
+            )
+        try:
+            await message.bot.edit_message_reply_markup(
+                message.chat.id, msg_id, reply_markup=keyboards.kb_edit_fields(idx)
+            )
+        except Exception as e:
+            logging.warning(f"Failed to update edit fields keyboard: {e}")
+            # Пробуем отправить новое сообщение с клавиатурой
+            try:
+                await message.answer("Выберите поле для редактирования:",
+                                    reply_markup=keyboards.kb_edit_fields(idx))
+                # Обновляем ID сообщения в состоянии
+                new_msg = await message.answer("Редактирование позиции...", 
+                                             reply_markup=keyboards.kb_edit_fields(idx))
+                await state.update_data(msg_id=new_msg.message_id)
+            except Exception as e2:
+                logging.error(f"Failed to send fallback message: {e2}")
         await state.update_data(edit_pos=idx)
 
 

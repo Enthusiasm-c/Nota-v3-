@@ -3,6 +3,8 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.enums import ParseMode
 from typing import Any, Dict
 import asyncio
+import re
+from app.utils.md import escape_html
 
 # In-memory cache for message edits (can be replaced with Redis)
 _edit_cache: Dict[str, Dict[str, Any]] = {}
@@ -28,8 +30,8 @@ async def edit_message_text_safe(bot, chat_id, msg_id, text, kb):
         text = text[:4090] + "…"
 
     logger.debug("OUT >>> %s", text[:200])
-    logger.debug("escape func = %s", escape)
     try:
+        # Первая попытка: с HTML-форматированием
         await bot.edit_message_text(
             chat_id=chat_id,
             message_id=msg_id,
@@ -40,10 +42,41 @@ async def edit_message_text_safe(bot, chat_id, msg_id, text, kb):
         # 3. Кэшируем успешный результат
         _edit_cache[cache_key] = {"text": text, "kb": kb_serialized}
     except TelegramBadRequest as e:
-        if "Message is not modified" in str(e):
+        error_msg = str(e)
+        if "Message is not modified" in error_msg:
             logger.debug("Skip edit: not modified")
-        elif "can't parse entities" in str(e):
-            logger.error("MD parse error: %s", e.message)
+        elif "can't parse entities" in error_msg:
+            logger.warning("HTML parse error in edit_message_text_safe: %s", e.message)
+            
+            try:
+                # Вторая попытка: без форматирования
+                await bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=msg_id,
+                    text=text,
+                    reply_markup=kb,
+                    parse_mode=None,  # Отключаем форматирование
+                )
+                logger.info("Message edited without HTML formatting")
+                _edit_cache[cache_key] = {"text": text, "kb": kb_serialized}
+                return
+            except TelegramBadRequest as e2:
+                logger.warning("Second attempt failed: %s", e2.message)
+                
+                try:
+                    # Третья попытка: очищаем текст от HTML-тегов
+                    clean_text = re.sub(r'<[^>]+>', '', text)
+                    await bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=msg_id,
+                        text=clean_text,
+                        reply_markup=kb,
+                        parse_mode=None,
+                    )
+                    logger.info("Message edited with stripped HTML tags")
+                    _edit_cache[cache_key] = {"text": clean_text, "kb": kb_serialized}
+                except Exception as e3:
+                    logger.error("All attempts to edit message failed: %s", e3)
         else:
             logger.error("Unexpected BadRequest: %s", e.message)
         logger.warning("Edit failed: %s", e.message)
