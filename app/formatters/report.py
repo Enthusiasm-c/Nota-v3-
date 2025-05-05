@@ -30,7 +30,7 @@ def build_header(supplier, date):
     # Явно импортируем escape для надежности
     from html import escape as html_escape
     return (
-        f"<b>Supplier:</b> {html_escape(str(supplier))}<br>"
+        f"<b>Supplier:</b> {html_escape(str(supplier))}\n"
         f"<b>Invoice date:</b> {html_escape(str(date))}\n\n"
     )
 
@@ -39,15 +39,17 @@ def build_table(rows):
     Формирует текстовую таблицу с позициями инвойса.
     Текст в таблице безопасно экранируется для HTML.
     """
+    # Явно импортируем escape для надежности
     from html import escape as html_escape
+    
     status_map = {"ok": "✓", "unit_mismatch": "🚫", "unknown": "🚫", "ignored": "🚫", "error": "🚫"}
-    header = "#  NAME                 QTY  UNIT       TOTAL        ⚑"
+    header = "#  NAME                 QTY UNIT        TOTAL  ⚑"
     divider = "─" * len(header)
     table_rows = [header, divider]
+    
     for idx, item in enumerate(rows, 1):
         name = item.get("name", "")
-        # Truncate to 18 chars + ellipsis for 19 total (to match 'olive oil orille 5…')
-        if len(name) > 18:
+        if len(name) > 19:
             name = name[:18] + "…"
         name = html_escape(name)
         qty = item.get("qty", "")
@@ -56,10 +58,10 @@ def build_table(rows):
         total_str = format_idr(total) if total not in (None, "") else "—"
         status = item.get("status", "")
         status_str = status_map.get(status, "")
-        row = f"{idx:<2} {name:<19} {qty:>4} {unit:<6} {total_str:>10} {status_str}"
+        row = f"{idx:<2} {name:<19} {qty:>6} {unit:<4} {total_str:>12} {status_str}"
         table_rows.append(row)
+    
     return "\n".join(table_rows)
-
 
 def build_summary(ok_count, issues_count, invoice_total):
     """
@@ -73,8 +75,6 @@ def build_summary(ok_count, issues_count, invoice_total):
         f"<b>✓ Correct:</b> {ok_count}  <b>🚫 Issues:</b> {issues_count}\n"
         f"<b>💰 Invoice total:</b> {format_idr(invoice_total)}"
     )
-
-
 
 def build_report(parsed_data, match_results, escape_html=True, page=1, page_size=15):
     """
