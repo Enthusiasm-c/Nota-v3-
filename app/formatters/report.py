@@ -57,6 +57,7 @@ def build_table(rows):
         name = html_escape(name)
         qty = item.get("qty", None)
         unit = html_escape(str(item.get("unit", "")))
+        status = item.get("status", "")
         # Подсветка UNIT если проблема только в единице измерения
         if status == "unit_mismatch":
             unit = f"<b>{unit}</b>"
