@@ -27,29 +27,27 @@ def test_report_layout_strict():
         },
     ]
     report, _ = build_report(parsed_data, match_results)
-    # Проверяем шапку
-        # Проверяем, что Supplier выводится в любом месте HTML
+    # Проверяем шапку (левое выравнивание, PRICE вместо TOTAL)
+    assert "#  NAME" in report
+    assert "QTY" in report and "UNIT" in report and "PRICE" in report
+    # Supplier и дата
     assert "Supplier:" in report
     assert "UD. WIDI WIGUNA" in report
     assert "Invoice date:" in report
     assert "2025-04-29" in report
-    # Проверяем divider (─)
+    # Divider и <pre>
     assert "─" in report
-    # Проверяем <pre> для таблицы
     assert "<pre>" in report
     # Проверяем, что имя товара обрезано по ширине столбца
-    assert "olive oil orille 5…" in report
-    # Проверяем, что длинное имя обрезано с …
-    assert "verylongproductnam…" in report
+    assert "olive oil or…" in report
+    assert "verylongprod…" in report
     # Проверяем, что символ ✓ есть для ok-статуса
-    assert "✓" in report
-    # Проверяем статусы
     assert "✓" in report
     assert "🚫" in report
     # Проверяем корректные данные
-    assert "olive oil orille 5…" in report
     assert "lumajang" in report
-    assert "verylongproductnam…" in report
     # Проверяем summary
     assert "Correct:" in report
     assert "Issues:" in report
+    # Проверяем, что итоговая сумма не выводится (есть нераспознанные цены)
+    assert "Invoice total" not in report

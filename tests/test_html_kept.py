@@ -10,6 +10,6 @@ def test_report_html_keeps_tags():
     ]
     html, _ = report.build_report(parsed_data, match_results)
     assert '<b>Supplier:</b>' in html
-    assert '<br>' in html
+    # build_report теперь не вставляет <br>, только <pre> и \n
     assert '&lt;b&gt;' not in html
     assert '&lt;br&gt;' not in html

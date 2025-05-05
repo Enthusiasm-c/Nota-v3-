@@ -37,13 +37,12 @@ def build_header(supplier, date):
 def build_table(rows):
     """
     Формирует текстовую таблицу с позициями инвойса.
-    Текст в таблице безопасно экранируется для HTML.
+    Столбцы QTY, UNIT, PRICE выровнены по левому краю, TOTAL заменён на PRICE.
     """
-    # Явно импортируем escape для надежности
     from html import escape as html_escape
-    
+
     status_map = {"ok": "✓", "unit_mismatch": "🚫", "unknown": "🚫", "ignored": "🚫", "error": "🚫"}
-    header = "#  NAME           QTY  UNIT   TOTAL    ⚑"
+    header = "#  NAME           QTY     UNIT    PRICE    ⚑"
     divider = "─" * len(header)
     table_rows = [header, divider]
 
@@ -52,29 +51,28 @@ def build_table(rows):
         if len(name) > 13:
             name = name[:12] + "…"
         name = html_escape(name)
-        qty = item.get("qty", "")
+        qty = str(item.get("qty", ""))
         unit = html_escape(item.get("unit", ""))
-        total = item.get("line_total", "")
-        total_str = format_idr(total) if total not in (None, "") else "—"
+        price = item.get("unit_price", "")
+        price_str = format_idr(price) if price not in (None, "") else "—"
         status = item.get("status", "")
         status_str = status_map.get(status, "")
-        row = f"{idx:<2} {name:<13} {qty:>5} {unit:<5} {total_str:>9} {status_str}"
+        row = f"{idx:<2} {name:<13} {qty:<7} {unit:<7} {price_str:<8} {status_str}"
         table_rows.append(row)
 
     return "\n".join(table_rows)
 
-def build_summary(ok_count, issues_count, invoice_total):
+def build_summary(ok_count, issues_count, invoice_total, show_total=True, has_unparsed=False):
     """
     Формирует HTML-итоги по инвойсу с количеством успешных и проблемных позиций
-    и общей суммой.
-    
-    Важно: Telegram поддерживает только ограниченное подмножество HTML-тегов.
-    Вместо <br> используем символ новой строки \n, вместо &nbsp; используем обычный пробел.
+    и общей суммой, если она доступна.
     """
-    return (
-        f"<b>✓ Correct:</b> {ok_count}  <b>🚫 Issues:</b> {issues_count}\n"
-        f"<b>💰 Invoice total:</b> {format_idr(invoice_total)}"
-    )
+    summary = f"<b>✓ Correct:</b> {ok_count}  <b>🚫 Issues:</b> {issues_count}\n"
+    if show_total and not has_unparsed:
+        summary += f"<b>💰 Invoice total:</b> {format_idr(invoice_total)}"
+    elif has_unparsed:
+        summary += "❗ Итоговая сумма не рассчитана: есть нераспознанные цены или количества."
+    return summary
 
 def build_report(parsed_data, match_results, escape_html=True, page=1, page_size=15):
     """
@@ -120,28 +118,30 @@ def build_report(parsed_data, match_results, escape_html=True, page=1, page_size
     ok_count = 0
     issues_count = 0
     invoice_total = 0
-    for item in match_results:  # Считаем для всех позиций, а не только для показываемых
+    has_unparsed = False
+    for item in match_results:
         status = item.get("status", "")
         if status == "ok":
             ok_count += 1
         elif status in ("unit_mismatch", "unknown", "ignored", "error"):
             issues_count += 1
+        # Проверяем наличие нераспознанных цен или количеств
+        qty = item.get("qty", None)
+        price = item.get("unit_price", None)
+        if qty in (None, "", "—") or price in (None, "", "—"):
+            has_unparsed = True
         try:
-            total = float(item.get("line_total", 0) or 0)
-            invoice_total += total
+            # Для подсчёта суммы используем только распознанные значения
+            if not has_unparsed:
+                invoice_total += float(qty) * float(price)
         except Exception:
-            pass
-    
+            has_unparsed = True
     header_html = build_header(supplier_str, date_str)
     table = build_table(rows_to_show)
-    summary_html = build_summary(ok_count, issues_count, invoice_total)
-    
-    # Собираем отчет
-    # Используем HTML-форматирование для Telegram, который поддерживает тег <pre>
+    summary_html = build_summary(ok_count, issues_count, invoice_total, show_total=not has_unparsed, has_unparsed=has_unparsed)
     html_report = (
         f"{header_html}"
         f"<pre>{table}</pre>\n"
         f"{summary_html}"
     )
-    
     return html_report.strip(), issues_count > 0
