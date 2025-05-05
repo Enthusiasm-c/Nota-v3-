@@ -493,6 +493,10 @@ async def photo_handler(message, state: FSMContext, **kwargs):
         # Создаем отчет для HTML-форматирования
         report, has_errors = build_report(ocr_result, match_results, escape_html=True)
 
+        # Сохраняем invoice в state для доступа в режиме редактирования
+        await state.update_data(invoice=ocr_result)
+        logger.info(f"[{req_id}] Saved invoice to state for user {user_id}")
+
         # Строим клавиатуру для редактирования - используем новую функцию build_main_kb
         edit_needed = False
         for pos in match_results:
