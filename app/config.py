@@ -7,7 +7,7 @@ import logging
 class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str = ""
     OPENAI_API_KEY: str = ""
-    OPENAI_MODEL: str = "gpt-4o"
+    OPENAI_MODEL: str = "gpt-3.5-turbo"
 
     # Fuzzy matching configuration
     MATCH_THRESHOLD: float = 0.75  # Default match threshold (0-1.0)

@@ -1002,7 +1002,7 @@ async def handle_field_edit(message, state: FSMContext):
                     # Пробуем сначала с HTML-форматированием 
                     result = await message.answer(
                         formatted_report,
-                        reply_markup=kb_report(entry["match_results"]),
+                        reply_markup=build_edit_keyboard(True),
                         parse_mode=ParseMode.HTML,  # Используем константу из aiogram
                     )
                     logger.debug("Successfully sent message with HTML formatting")
@@ -1012,7 +1012,7 @@ async def handle_field_edit(message, state: FSMContext):
                         # Пробуем без форматирования
                         result = await message.answer(
                             formatted_report,
-                            reply_markup=kb_report(entry["match_results"]),
+                            reply_markup=build_edit_keyboard(True),
                             parse_mode=None,  # Без форматирования для безопасности
                         )
                         logger.debug("Successfully sent message without HTML parsing")
@@ -1022,7 +1022,7 @@ async def handle_field_edit(message, state: FSMContext):
                         clean_formatted_report = clean_html(formatted_report)
                         result = await message.answer(
                             clean_formatted_report,
-                            reply_markup=kb_report(entry["match_results"]),
+                            reply_markup=build_edit_keyboard(True),
                             parse_mode=None,
                         )
                         logger.debug("Sent message with cleaned HTML")
@@ -1030,7 +1030,7 @@ async def handle_field_edit(message, state: FSMContext):
                 # Стандартный случай - пробуем с HTML
                 result = await message.answer(
                     formatted_report,
-                    reply_markup=kb_report(entry["match_results"]),
+                    reply_markup=build_edit_keyboard(True),
                     parse_mode=ParseMode.HTML,  # Используем константу из aiogram
                 )
         except Exception as e:
@@ -1154,7 +1154,7 @@ async def _dummy(update, data):
 logging.getLogger("aiogram.event").setLevel(logging.DEBUG)
 
 
-from app.keyboards import kb_main, kb_upload, kb_help_back, kb_report, kb_field_menu
+from app.keyboards import kb_main, kb_upload, kb_help_back, kb_field_menu, build_edit_keyboard
 
 # Remove duplicate NotaStates class
 # In-memory store for user sessions: {user_id: {msg_id: {...}}}

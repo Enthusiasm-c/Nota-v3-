@@ -3,6 +3,8 @@ import re
 import logging
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from app.fsm.states import EditFree
+from app.edit import free_parser
 from aiogram.types import ForceReply
 from aiogram.exceptions import TelegramBadRequest
 
@@ -33,11 +35,54 @@ router = Router()
 # --- Новый EDIT flow: интерактивный выбор строки ---
 @router.callback_query(F.data == "edit:choose")
 async def handle_edit_choose(call: CallbackQuery, state: FSMContext):
-    await state.set_state(InvoiceReviewStates.choose_line)
+    await state.set_state(EditFree.awaiting_input)
     await call.message.answer(
-        "Введите номер строки (1-40), которую хотите исправить:",
+        "Что нужно отредактировать? (пример: 'дата — 26 апреля' или 'строка 2 цена 90000')",
         reply_markup=None
     )
+
+# --- Свободный ввод в режиме редактирования ---
+@router.message(EditFree.awaiting_input)
+async def handle_free_edit(message: Message, state: FSMContext):
+    user_text = message.text.strip()
+    data = await state.get_data()
+    invoice = data.get("invoice")
+    if not invoice:
+        await message.answer("Сессия истекла. Пожалуйста, загрузите инвойс заново.")
+        await state.clear()
+        return
+    # Определяем намерение пользователя
+    intent = free_parser.detect_intent(user_text)
+    if intent["action"] == "unknown":
+        await message.answer(
+            "Не понял, что менять. Пример: 'дата — 26 апреля', 'строка 2 цена 90000'"
+        )
+        return
+    # Применяем правку (пока только mock)
+    new_invoice = free_parser.apply_edit(invoice, intent)
+    # Пересчитываем ошибки
+    from app.data_loader import load_products
+    from app.matcher import match_positions
+    match_results = match_positions(new_invoice["positions"], load_products())
+    text, has_errors = invoice_report.build_report(new_invoice, match_results)
+    from app.keyboards import build_edit_keyboard
+    await message.answer(
+        text,
+        reply_markup=build_edit_keyboard(has_errors),
+        parse_mode="HTML"
+    )
+    # Обновляем state
+    await state.update_data(invoice=new_invoice)
+    # Если ошибок нет — можно завершать
+    if not has_errors:
+        await message.answer(
+            "Все ошибки исправлены! Вы можете подтвердить инвойс.",
+            reply_markup=build_edit_keyboard(False)
+        )
+    # Остаёмся в состоянии ожидания ввода
+    else:
+        await state.set_state(EditFree.awaiting_input)
+
 
 # --- Получаем номер строки от пользователя ---
 @router.message(InvoiceReviewStates.choose_line)

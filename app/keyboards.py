@@ -46,6 +46,11 @@ def kb_help_back() -> ReplyKeyboardMarkup:
 # Клавиатура редактирования (inline)
 
 def build_edit_keyboard(has_errors: bool) -> InlineKeyboardMarkup:
+    """
+    Returns the main inline keyboard for invoice report:
+    - If there are errors: two buttons [Редактировать, Отмена]
+    - If no errors: three buttons [Подтвердить, Редактировать, Отмена]
+    """
     if has_errors:
         buttons = [
             [InlineKeyboardButton(text="✏️ Редактировать", callback_data="edit:choose")],
@@ -54,25 +59,14 @@ def build_edit_keyboard(has_errors: bool) -> InlineKeyboardMarkup:
     else:
         buttons = [
             [InlineKeyboardButton(text="✅ Подтвердить", callback_data="confirm:invoice")],
+            [InlineKeyboardButton(text="✏️ Редактировать", callback_data="edit:choose")],
             [InlineKeyboardButton(text="↩ Отмена", callback_data="cancel:all")],
         ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
+
 # Клавиатура отчёта (inline)
 
-def kb_report(match_results: list) -> InlineKeyboardMarkup:
-    # СТАРАЯ версия для совместимости
-    edit_buttons = [
-        [InlineKeyboardButton(text=f"✏️ Edit line {i+1}", callback_data=f"edit:{i}")]
-        for i, r in enumerate(match_results)
-        if r.get("status") != "ok"
-    ]
-    base_buttons = [
-        [InlineKeyboardButton(text="✅ Confirm", callback_data="confirm:invoice")],
-        *edit_buttons,
-        [InlineKeyboardButton(text="🚫 Cancel", callback_data="cancel:all")],
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=base_buttons)
 
 
 # --- D-2: UX финального отчёта ---
