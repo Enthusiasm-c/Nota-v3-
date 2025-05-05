@@ -657,7 +657,12 @@ async def handle_nlu_text(message, state: FSMContext):
         # Не экранируем HTML-теги для HTML режима
         logger.debug("TELEGRAM OUT >>> %s", assistant_response[:300])
         logger.debug("TELEGRAM parse_mode: %s", ParseMode.HTML)
-        await message.answer(assistant_response, parse_mode=ParseMode.HTML)
+        logger.debug("TELEGRAM OUT (assistant) >>> %s", assistant_response[:500])
+        try:
+            await message.answer(assistant_response, parse_mode=ParseMode.HTML)
+        except Exception as e:
+            logger.error("Telegram error (assistant): %s\nText: %s", str(e), assistant_response[:500])
+            raise
 
         # Сохраняем состояние редактирования инвойса
         await state.set_state(NotaStates.editing)
@@ -900,11 +905,16 @@ async def handle_field_edit(message, state: FSMContext):
         # Отправляем новое сообщение с обновленным отчетом
         logger.debug("TELEGRAM OUT >>> %s", formatted_report[:300])
         logger.debug("TELEGRAM parse_mode: %s", ParseMode.HTML)
-        result = await message.answer(
-            formatted_report,
-            reply_markup=kb_report(entry["match_results"]),
-            parse_mode=ParseMode.HTML,
-        )
+        logger.debug("TELEGRAM OUT (report) >>> %s", formatted_report[:500])
+        try:
+            result = await message.answer(
+                formatted_report,
+                reply_markup=kb_report(entry["match_results"]),
+                parse_mode=ParseMode.HTML,
+            )
+        except Exception as e:
+            logger.error("Telegram error: %s\nText: %s", str(e), formatted_report[:500])
+            raise
 
         # Обновляем ссылки в user_matches с новым ID сообщения
         new_msg_id = result.message_id
