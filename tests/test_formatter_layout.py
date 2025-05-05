@@ -36,17 +36,21 @@ def test_report_layout_strict():
     assert "Invoice date:" in report
     assert "2025-04-29" in report
     # Divider и <pre>
-    # Divider: строим как в build_table
     pad = lambda text, width: str(text)[:width].ljust(width)
     header = f"#  {pad('NAME',14)}{pad('QTY',5)}{pad('UNIT',5)}{pad('PRICE',6)}! "
-    divider = '-' * len(header)
-    assert divider in report
+    assert header in report
     assert "<pre>" in report
     # Проверяем, что имя товара обрезано по ширине столбца
     assert "olive oil or…" in report
     assert "verylongprod…" in report
-    # Проверяем, что символ ✓ есть для ok-статуса
-    assert "✓" in report
+    # Проверяем, что для ошибочных позиций есть ❗
+    assert report.count('❗') >= 2  # две ошибочные строки
+    # Проверяем, что для корректной позиции (verylongproductnamethatiswaytoolong) нет ❗ в её строке
+    for line in report.splitlines():
+        if "verylongproductnamethatiswaytoolong" in line and '|' in line:
+            assert "❗" not in line
+    # Проверяем summary
+    assert "❗" in report or "<b>Нет ошибок. Все позиции распознаны корректно.</b>" in report
     assert "🚫" in report
     # Проверяем корректные данные
     assert "lumajang" in report

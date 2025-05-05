@@ -41,7 +41,7 @@ def build_table(rows):
     """
     from html import escape as html_escape
 
-    status_map = {"ok": "✓", "unit_mismatch": "🚫", "unknown": "🚫", "ignored": "🚫", "error": "🚫"}
+    status_map = {"ok": "✓", "unit_mismatch": "❗", "unknown": "❗", "ignored": "❗", "error": "❗"}
     def pad(text, width):
         s = str(text)
         return s[:width].ljust(width)
@@ -89,26 +89,39 @@ def build_table(rows):
             except Exception:
                 qty_str = str(qty)
         # Столбец с флажком для нераспознанных позиций
-        flag = "🚩" if status != "ok" else ""
+        flag = "❗" if status != "ok" else ""
         row = f"{str(idx):<2} {pad(name,14)}{pad(qty_str,5)}{pad(unit,5)}{pad(price_str,6)}{pad(flag,2)}"
         table_rows.append(row)
 
     return "\n".join(table_rows)
 
 
-def build_summary(ok_count, issues_count, invoice_total, show_total=True, has_unparsed=False, unit_mismatch_count=0):
+def build_summary(match_results):
     """
-    Формирует HTML-итоги по инвойсу с количеством успешных и проблемных позиций
-    и общей суммой, если она доступна.
+    Формирует подробный HTML-отчет об ошибках по каждой проблемной позиции.
     """
-    summary = f"<b>✓ Correct:</b> {ok_count}  <b>🚫 Issues:</b> {issues_count}\n"
-    if unit_mismatch_count > 0:
-        summary += f"<b>🚩 Проблема с единицей измерения:</b> {unit_mismatch_count} строк(и)\n"
-    if show_total and not has_unparsed:
-        summary += f"<b>💰 Invoice total:</b> {format_idr(invoice_total)}"
-    elif has_unparsed:
-        summary += "❗ Итоговая сумма не рассчитана: есть нераспознанные цены или количества."
-    return summary
+    errors = []
+    for idx, item in enumerate(match_results, 1):
+        status = item.get("status", "")
+        name = item.get("name", "")
+        problems = []
+        if status == "unit_mismatch":
+            problems.append("ошибка в единице измерения")
+        if status == "unknown":
+            problems.append("позиция не распознана (ошибка в названии)")
+        if status == "error":
+            problems.append("ошибка обработки строки")
+        qty = item.get("qty", None)
+        price = item.get("unit_price", None)
+        if qty in (None, "", "—"):
+            problems.append("не указано количество")
+        if price in (None, "", "—"):
+            problems.append("не указана цена")
+        if problems:
+            errors.append(f"❗ Строка {idx} <b>{name}</b>: {', '.join(problems)}")
+    if not errors:
+        return "<b>Нет ошибок. Все позиции распознаны корректно.</b>"
+    return "\n".join(errors)
 
 def build_report(parsed_data, match_results, escape_html=True, page=1, page_size=40):
     """
@@ -177,11 +190,7 @@ def build_report(parsed_data, match_results, escape_html=True, page=1, page_size
             has_unparsed = True
     header_html = build_header(supplier_str, date_str)
     table = build_table(rows_to_show)
-    summary_html = build_summary(
-        ok_count, issues_count, invoice_total,
-        show_total=not has_unparsed, has_unparsed=has_unparsed,
-        unit_mismatch_count=unit_mismatch_count
-    )
+    summary_html = build_summary(match_results)
     html_report = (
         f"{header_html}"
         f"<pre>{table}</pre>\n"

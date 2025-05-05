@@ -1,0 +1,114 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.3, pytest-8.3.5, pluggy-1.5.0 -- /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/venv/bin/python3
+cachedir: .pytest_cache
+rootdir: /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1
+configfile: pytest.ini
+plugins: anyio-4.9.0, vcr-1.0.2
+collecting ... collected 87 items / 2 errors
+
+==================================== ERRORS ====================================
+_________________ ERROR collecting tests/test_edit_callback.py _________________
+ImportError while importing test module '/Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_edit_callback.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/test_edit_callback.py:1: in <module>
+    from app.keyboards import kb_edit
+E   ImportError: cannot import name 'kb_edit' from 'app.keyboards' (/Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/app/keyboards.py)
+_________________ ERROR collecting tests/test_unknown_flow.py __________________
+ImportError while importing test module '/Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_unknown_flow.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/test_unknown_flow.py:3: in <module>
+    from app.keyboards import kb_edit
+E   ImportError: cannot import name 'kb_edit' from 'app.keyboards' (/Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/app/keyboards.py)
+=============================== warnings summary ===============================
+tests/test_api_decorators.py:124
+  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_api_decorators.py:124: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_api_decorators.py:177
+  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_api_decorators.py:177: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_callbacks.py:12
+  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_callbacks.py:12: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_callbacks.py:25
+  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_callbacks.py:25: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_callbacks.py:38
+  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_callbacks.py:38: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_callbacks.py:85
+  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_callbacks.py:85: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_edit_keyboard_inline.py:7
+  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_edit_keyboard_inline.py:7: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_formatter_no_bad_chars.py:9
+  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_formatter_no_bad_chars.py:9: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_formatter_no_bad_chars.py:55
+  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_formatter_no_bad_chars.py:55: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_fuzzy_confirm.py:9
+  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_fuzzy_confirm.py:9: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_fuzzy_confirm.py:67
+  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_fuzzy_confirm.py:67: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_fuzzy_confirm.py:122
+  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_fuzzy_confirm.py:122: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_handlers.py:6
+  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_handlers.py:6: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_handlers.py:49
+  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_handlers.py:49: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_keyboard_main_edit.py:75
+  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_keyboard_main_edit.py:75: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_ocr.py:26
+  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_ocr.py:26: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_parse_mode.py:5
+  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_parse_mode.py:5: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_photo_handler.py:15
+  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_photo_handler.py:15: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_photo_handler.py:102
+  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_photo_handler.py:102: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_single_message_ux.py:7
+  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_single_message_ux.py:7: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+ERROR tests/test_edit_callback.py
+ERROR tests/test_unknown_flow.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 2 errors during collection !!!!!!!!!!!!!!!!!!!!
+======================== 20 warnings, 2 errors in 0.16s ========================
