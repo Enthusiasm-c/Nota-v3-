@@ -147,6 +147,9 @@ async def handle_page_next(call: CallbackQuery, state: FSMContext):
     page = min(total_pages, page + 1)
     await state.update_data(invoice_page=page)
     text, has_errors = invoice_report.build_report(invoice, match_results, page=page)
+    if '<pre>' not in text:
+        logger.error('Invoice report: <pre> block missing, forcibly wrapping!')
+        text = f'<pre>{text}</pre>'
     await call.message.edit_text(
         text,
         reply_markup=keyboards.build_invoice_report(
