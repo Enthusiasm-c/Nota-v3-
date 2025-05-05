@@ -489,7 +489,7 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
         with open("/tmp/nota_debug.log", "a") as f:
             f.write(f"EDIT_MESSAGE_DEBUG: chat_id={message.chat.id}, msg_id={msg_id}, text_len={len(text_to_send)}, text_preview={text_to_send[:500]!r}, reply_markup={reply_markup}\n")
         
-        # Отправляем новое сообщение вместо редактирования старого
+        # 1. Пытаемся отправить новое сообщение
         try:
             new_msg = await message.bot.send_message(
                 chat_id=message.chat.id,
@@ -497,12 +497,14 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
                 reply_markup=reply_markup,
                 parse_mode="HTML"
             )
-            # Сохраняем ID нового сообщения для будущих обновлений
             await state.update_data(msg_id=new_msg.message_id)
-            return  # Успешно отправили новое сообщение
+            await state.clear()
+            return  # Всё ок, больше ничего не делаем
         except Exception as e:
             logger.error(f"Failed to send new message: {e}")
-            # В случае ошибки пробуем безопасное редактирование как запасной вариант
+
+        # 2. Если не получилось — fallback: редактируем старое сообщение
+        try:
             await edit_message_text_safe(
                 bot=message.bot,
                 chat_id=message.chat.id,
@@ -510,13 +512,18 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
                 text=text_to_send,
                 kb=reply_markup,
             )
+            await state.clear()
+            return
+        except Exception as e:
+            logger.error(f"Fallback edit_message_text_safe also failed: {e}")
+
+        # 3. Если и это не удалось — пробуем хотя бы убрать клавиатуру
         try:
             await message.bot.edit_message_reply_markup(
                 message.chat.id, msg_id, reply_markup=None
             )
         except Exception as e:
             logging.warning(f"Failed to clear keyboard: {e}")
-            # Игнорируем ошибку - отсутствие клавиатуры не критично
         await state.clear()
     else:
         # Если не ok, оставляем на той же странице (или сбрасываем на 1)
