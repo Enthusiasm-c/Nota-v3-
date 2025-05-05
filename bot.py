@@ -103,7 +103,8 @@ async def safe_edit(bot, chat_id, msg_id, text, kb=None, **kwargs):
     parse_mode = kwargs.get("parse_mode")
     logger = logging.getLogger("bot")
 
-    # Apply escape_v2 only if not already escaped and using MarkdownV2
+    # Не экранируем HTML-теги, если используется HTML режим
+    # Экранируем только для Markdown
     if parse_mode in ("MarkdownV2", ParseMode.MARKDOWN_V2) and not (
         text and text.startswith("\\")
     ):
@@ -476,8 +477,8 @@ async def photo_handler(message, state: FSMContext, **kwargs):
             f"has code blocks: {'```' in full_message}"
         )
 
-        # Форматируем сообщение
-        formatted_message = full_message  # Не экранируем HTML отчёт!
+        # Используем HTML отчет без экранирования
+        formatted_message = full_message
 
         # Логируем изменение размера после форматирования
         logger.debug(f"BUGFIX: Formatted message length: {len(formatted_message)}")
@@ -495,12 +496,12 @@ async def photo_handler(message, state: FSMContext, **kwargs):
         # Отправляем новое сообщение с форматированным отчетом
         try:
             logger.debug(
-                "BUGFIX: Sending new message with formatted report and MarkdownV2"
+                "BUGFIX: Sending new message with formatted report and HTML mode"
             )
             result = await message.answer(
                 formatted_message,
                 reply_markup=inline_kb,
-                parse_mode=ParseMode.MARKDOWN_V2,
+                parse_mode=ParseMode.HTML,
             )
             logger.debug(
                 f"BUGFIX: Successfully sent formatted report, new message ID: {result.message_id}"
@@ -653,11 +654,8 @@ async def handle_nlu_text(message, state: FSMContext):
             pass
 
         # Отвечаем новым сообщением
-        formatted_response = escape_html(assistant_response)
-        # Если используем HTML-режим, не экранируем весь текст!
-        # await message.answer(formatted_response, parse_mode=ParseMode.HTML)
-        # Для MarkdownV2 — экранируем
-        await message.answer(formatted_response, parse_mode=ParseMode.MARKDOWN_V2)
+        # Не экранируем HTML-теги для HTML режима
+        await message.answer(assistant_response, parse_mode=ParseMode.HTML)
 
         # Сохраняем состояние редактирования инвойса
         await state.set_state(NotaStates.editing)
@@ -894,7 +892,7 @@ async def handle_field_edit(message, state: FSMContext):
         parsed_data = entry["parsed_data"]
         report, has_errors = build_report(parsed_data, entry["match_results"], escape=False)
 
-        # Для HTML-режима не экранируем весь отчёт!
+        # Используем HTML отчет без экранирования
         formatted_report = report
 
         # Отправляем новое сообщение с обновленным отчетом
@@ -903,7 +901,7 @@ async def handle_field_edit(message, state: FSMContext):
             result = await message.answer(
                 formatted_report,
                 reply_markup=kb_report(entry["match_results"]),
-                parse_mode=ParseMode.MARKDOWN_V2,
+                parse_mode=ParseMode.HTML,
             )
 
             # Обновляем ссылки в user_matches с новым ID сообщения
