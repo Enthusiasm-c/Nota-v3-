@@ -116,6 +116,11 @@ async def handle_edit_free(call: CallbackQuery, state: FSMContext):
     Обработчик кнопки "✏️ Редактировать".
     Переводит пользователя в режим свободного редактирования.
     """
+    # Явно сохраняем invoice в state при переходе в режим редактирования
+    data = await state.get_data()
+    invoice = data.get("invoice")
+    if invoice:
+        await state.update_data(invoice=invoice)
     # Переходим в состояние ожидания ввода
     await state.set_state(EditFree.awaiting_input)
     
