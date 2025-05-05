@@ -38,7 +38,21 @@ def clean_html(text: str) -> str:
     if text is None:
         return ""
     try:
-        return re.sub(r'<[^>]+>', '', text)
+        # Сначала заменяем специальные HTML-сущности
+        text = text.replace("&nbsp;", " ")
+        text = text.replace("&lt;", "<")
+        text = text.replace("&gt;", ">")
+        text = text.replace("&amp;", "&")
+        text = text.replace("&quot;", "\"")
+        
+        # Затем удаляем HTML-теги
+        text = re.sub(r'<[^>]+>', '', text)
+        
+        # Удаляем Markdown-код если он случайно попал в текст
+        text = text.replace("```diff", "")
+        text = text.replace("```", "")
+        
+        return text
     except Exception as e:
         logger.error(f"Error removing HTML tags: {e}, text: {text[:100]}...")
         return text

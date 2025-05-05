@@ -474,7 +474,7 @@ async def photo_handler(message, state: FSMContext, **kwargs):
         logger.info(f"[{req_id}] Matching complete for user {user_id}")
 
         # Шаг 5: Формирование отчета
-        # Создаем отчет с экранированием HTML
+        # Создаем отчет для HTML-форматирования
         report, has_errors = build_report(ocr_result, match_results, escape_html=True)
 
         # Строим клавиатуру для редактирования
@@ -531,11 +531,20 @@ async def photo_handler(message, state: FSMContext, **kwargs):
         if edit_needed:
             full_message += "\n\n⚠️ Некоторые позиции не удалось определить. Используйте кнопки «Ред.» для корректировки."
 
-        # Лог: размер и характеристики отчета
+        # Расширенное логирование форматирования для отладки
         logger.debug(
             f"BUGFIX: Full message prepared, length: {len(full_message)}, "
-            f"has code blocks: {'```' in full_message}"
+            f"has code blocks: {'```' in full_message}, "
+            f"has HTML tags: {'<' in full_message and '>' in full_message}, "
+            f"contains <pre>: {'<pre>' in full_message}"
         )
+        
+        # Удаляем любые Markdown-стиль блоки кода (```) если они есть, 
+        # так как мы используем HTML-форматирование
+        if '```' in full_message:
+            logger.debug("Removing Markdown code blocks as we're using HTML formatting")
+            full_message = full_message.replace('```diff', '')
+            full_message = full_message.replace('```', '')
 
         # Пробуем удалить текущее сообщение о прогрессе
         try:
@@ -554,11 +563,19 @@ async def photo_handler(message, state: FSMContext, **kwargs):
         # Многоуровневая стратегия отправки сообщений
         # 1: Пробуем сначала с HTML-форматированием
         try:
-            logger.debug("Sending report with HTML formatting")
+            # Проверяем сообщение на потенциальные проблемы с HTML до отправки
+            telegram_html_tags = ["<b>", "<i>", "<u>", "<s>", "<strike>", "<del>", "<code>", "<pre>", "<a"]
+            has_valid_html = any(tag in full_message for tag in telegram_html_tags)
+            
+            if "<pre>" in full_message and "</pre>" not in full_message:
+                logger.warning("Unclosed <pre> tag detected in message, attempting to fix")
+                full_message = full_message.replace("<pre>", "<pre>") + "</pre>"
+                
+            logger.debug(f"Sending report with HTML formatting (valid HTML tags: {has_valid_html})")
             report_msg = await message.answer(
                 full_message,
                 reply_markup=inline_kb,
-                parse_mode="HTML",  # Строковый литерал для совместимости
+                parse_mode=ParseMode.HTML,  # Используем константу из aiogram вместо строки
             )
             success = True
             logger.debug(f"Successfully sent HTML-formatted report with message_id={report_msg.message_id}")
@@ -625,6 +642,21 @@ async def photo_handler(message, state: FSMContext, **kwargs):
         # Обновляем состояние пользователя
         await state.set_state(NotaStates.editing)
         logger.info(f"[{req_id}] Invoice processing complete for user {user_id}")
+        
+        # Проверяем и чистим любые оставшиеся сообщения о прогрессе
+        try:
+            # Предыдущие стадии могли создать сообщения о прогрессе, которые не были удалены
+            for stage_name in stages_names.values():
+                stage_key = f"progress_msg_{stage_name}_{user_id}"
+                if stage_key in _edit_cache and "msg_id" in _edit_cache[stage_key]:
+                    old_msg_id = _edit_cache[stage_key]["msg_id"]
+                    try:
+                        await bot.delete_message(chat_id=message.chat.id, message_id=old_msg_id)
+                        logger.debug(f"Cleaned up old progress message {old_msg_id} for stage {stage_name}")
+                    except Exception as e:
+                        logger.debug(f"Could not delete old progress message: {e}")
+        except Exception as cleanup_error:
+            logger.debug(f"Error during progress message cleanup: {cleanup_error}")
 
     except Exception as e:
         # Обработка исключений делегируется декоратору with_progress_stages
@@ -855,7 +887,7 @@ async def cb_field(callback: CallbackQuery, state: FSMContext):
         callback.from_user.id,
         f"Введите новое значение для {field} (строка {idx+1}):",
         reply_markup={"force_reply": True},
-        parse_mode="HTML"
+        parse_mode=ParseMode.HTML
     )
 
     # Логируем ID созданного сообщения
@@ -971,7 +1003,7 @@ async def handle_field_edit(message, state: FSMContext):
                     result = await message.answer(
                         formatted_report,
                         reply_markup=kb_report(entry["match_results"]),
-                        parse_mode=ParseMode.HTML,
+                        parse_mode=ParseMode.HTML,  # Используем константу из aiogram
                     )
                     logger.debug("Successfully sent message with HTML formatting")
                 except Exception as html_error:
@@ -999,7 +1031,7 @@ async def handle_field_edit(message, state: FSMContext):
                 result = await message.answer(
                     formatted_report,
                     reply_markup=kb_report(entry["match_results"]),
-                    parse_mode=ParseMode.HTML,
+                    parse_mode=ParseMode.HTML,  # Используем константу из aiogram
                 )
         except Exception as e:
             logger.error("Telegram error: %s\nText length: %d\nText sample: %s", 

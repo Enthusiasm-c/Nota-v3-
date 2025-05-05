@@ -89,6 +89,9 @@ def build_report(parsed_data, match_results, escape_html=True, page=1, page_size
         
     Returns:
         tuple: (HTML-отчет, флаг наличия ошибок)
+    
+    Важно: Telegram поддерживает только ограниченное подмножество HTML-тегов:
+    <b>, <i>, <u>, <s>, <strike>, <del>, <a>, <code>, <pre>
     """
     # Извлекаем основную информацию из разных типов данных
     supplier = getattr(parsed_data, "supplier", None)
@@ -134,9 +137,10 @@ def build_report(parsed_data, match_results, escape_html=True, page=1, page_size
     summary_html = build_summary(ok_count, issues_count, invoice_total)
     
     # Собираем отчет
+    # Используем HTML-форматирование для Telegram, который поддерживает тег <pre>
     html_report = (
         f"{header_html}"
-        f"<pre>{table}</pre>"
+        f"<pre>{table}</pre>\n"
         f"{summary_html}"
     )
     
