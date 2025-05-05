@@ -208,12 +208,6 @@ def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
                             "output": json.dumps({"actions": results})
                         })
                     continue
-
-                    else:
-                        tool_outputs.append({
-                            "tool_call_id": tool_call.id,
-                            "output": json.dumps({"action": "unknown", "error": "unsupported_command"})
-                        })
                 else:
                     # Для неизвестных функций возвращаем ошибку
                     tool_outputs.append({
