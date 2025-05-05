@@ -42,7 +42,7 @@ def build_table(rows):
     from html import escape as html_escape
 
     status_map = {"ok": "✓", "unit_mismatch": "🚫", "unknown": "🚫", "ignored": "🚫", "error": "🚫"}
-    header = "#  NAME           QTY     UNIT    PRICE"
+    header = "#  NAME           QTY    UNIT   PRICE  !"
     divider = "─" * len(header)
     table_rows = [header, divider]
 
@@ -55,6 +55,7 @@ def build_table(rows):
         unit = html_escape(str(item.get("unit", "")))
         price = item.get("unit_price", None)
         total = item.get("total", None)
+        status = item.get("status", "")
         # Попытка вычислить unit_price, если есть total и qty, но нет unit_price
         computed_price = None
         if (price in (None, "", "—")) and (total not in (None, "", "—")) and (qty not in (None, "", "—")):
@@ -65,8 +66,21 @@ def build_table(rows):
                 price_str = "—"
         else:
             price_str = format_idr(price) if price not in (None, "", "—") else "—"
-        qty_str = str(qty) if qty not in (None, "") else "—"
-        row = f"{idx:<2} {name:<13} {qty_str:<7} {unit:<7} {price_str:<8}"
+        # Форматирование QTY: если целое — без .0, иначе с дробью
+        if qty in (None, ""):
+            qty_str = "—"
+        else:
+            try:
+                qty_f = float(qty)
+                if qty_f.is_integer():
+                    qty_str = str(int(qty_f))
+                else:
+                    qty_str = str(qty)
+            except Exception:
+                qty_str = str(qty)
+        # Столбец с флажком для нераспознанных позиций
+        flag = "🚩" if status != "ok" else ""
+        row = f"{idx:<2} {name:<13} {qty_str:<6} {unit:<6} {price_str:<7} {flag:<1}"
         table_rows.append(row)
 
     return "\n".join(table_rows)
