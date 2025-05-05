@@ -73,6 +73,105 @@ def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
             )
         
         # Обрабатываем результат
+        if run.status == "requires_action":
+            # Обработка случая, когда ассистент хочет вызвать функцию
+            tool_calls = run.required_action.submit_tool_outputs.tool_calls
+            tool_outputs = []
+            
+            for tool_call in tool_calls:
+                # Здесь можно добавить обработку разных функций по их именам
+                function_name = tool_call.function.name
+                function_args = json.loads(tool_call.function.arguments)
+                
+                # Простая эмуляция функции parse_edit_command
+                if function_name == "parse_edit_command":
+                    command = function_args.get("command", "")
+                    
+                    # Простой парсер для команды изменения даты
+                    if "дата" in command.lower() or "date" in command.lower():
+                        date_parts = [part for part in command.split() if part.isdigit() or part in ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"]]
+                        if len(date_parts) >= 2:
+                            tool_outputs.append({
+                                "tool_call_id": tool_call.id,
+                                "output": json.dumps({"action": "set_date", "date": " ".join(date_parts)})
+                            })
+                        else:
+                            tool_outputs.append({
+                                "tool_call_id": tool_call.id,
+                                "output": json.dumps({"action": "unknown", "error": "invalid_date_format"})
+                            })
+                    # Простой парсер для команды изменения строки
+                    elif "строка" in command.lower() or "line" in command.lower():
+                        parts = command.lower().split()
+                        try:
+                            line_idx = parts.index("строка") + 1 if "строка" in parts else parts.index("line") + 1
+                            if line_idx < len(parts) and parts[line_idx].isdigit():
+                                line_num = int(parts[line_idx])
+                                
+                                if "цена" in parts or "price" in parts:
+                                    price_idx = parts.index("цена") + 1 if "цена" in parts else parts.index("price") + 1
+                                    if price_idx < len(parts) and parts[price_idx].isdigit():
+                                        tool_outputs.append({
+                                            "tool_call_id": tool_call.id,
+                                            "output": json.dumps({"action": "set_price", "line": line_num - 1, "price": float(parts[price_idx])})
+                                        })
+                                    else:
+                                        tool_outputs.append({
+                                            "tool_call_id": tool_call.id,
+                                            "output": json.dumps({"action": "unknown", "error": "invalid_price_format"})
+                                        })
+                                else:
+                                    tool_outputs.append({
+                                        "tool_call_id": tool_call.id,
+                                        "output": json.dumps({"action": "unknown", "error": "unsupported_field"})
+                                    })
+                            else:
+                                tool_outputs.append({
+                                    "tool_call_id": tool_call.id,
+                                    "output": json.dumps({"action": "unknown", "error": "invalid_line_number"})
+                                })
+                        except (ValueError, IndexError):
+                            tool_outputs.append({
+                                "tool_call_id": tool_call.id,
+                                "output": json.dumps({"action": "unknown", "error": "parse_error"})
+                            })
+                    else:
+                        tool_outputs.append({
+                            "tool_call_id": tool_call.id,
+                            "output": json.dumps({"action": "unknown", "error": "unsupported_command"})
+                        })
+                else:
+                    # Для неизвестных функций возвращаем ошибку
+                    tool_outputs.append({
+                        "tool_call_id": tool_call.id,
+                        "output": json.dumps({"action": "unknown", "error": "unsupported_function"})
+                    })
+            
+            # Отправляем результаты выполнения функций обратно ассистенту
+            run = client.beta.threads.runs.submit_tool_outputs(
+                thread_id=thread.id,
+                run_id=run.id,
+                tool_outputs=tool_outputs
+            )
+            
+            # Ждем завершения после отправки результатов функций
+            while run.status in ["queued", "in_progress"]:
+                if time.time() - start_time > timeout:
+                    logger.error(f"Timeout waiting for Assistant API response after tool outputs, {timeout}s")
+                    return {"action": "unknown", "error": "timeout_after_tools"}
+                
+                time.sleep(1)
+                run = client.beta.threads.runs.retrieve(
+                    thread_id=thread.id,
+                    run_id=run.id
+                )
+            
+            # Если после отправки результатов функций ассистент завершился успешно,
+            # продолжаем обработку как обычно
+            if run.status != "completed":
+                logger.error(f"Assistant run failed after tool outputs with status: {run.status}")
+                return {"action": "unknown", "error": f"run_failed_after_tools: {run.status}"}
+                
         if run.status == "completed":
             # Получаем последнее сообщение ассистента
             messages = client.beta.threads.messages.list(
