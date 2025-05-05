@@ -7,10 +7,74 @@ import json
 import logging
 import time
 import re
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List, Union
 import os
 import openai
 from app.config import settings
+
+from pydantic import BaseModel, ValidationError, field_validator
+
+logger = logging.getLogger(__name__)
+
+class EditCommand(BaseModel):
+    action: str
+    row: Optional[int] = None
+    qty: Optional[Union[str, float, int]] = None
+    name: Optional[str] = None
+    unit: Optional[str] = None
+    price: Optional[Union[str, float, int]] = None
+    price_per_unit: Optional[Union[str, float, int]] = None
+    total_price: Optional[Union[str, float, int]] = None
+    date: Optional[str] = None
+    supplier: Optional[str] = None
+
+    @field_validator('row')
+    @classmethod
+    def check_row(cls, v, values):
+        # Только для команд, где row обязателен
+        actions_with_row = {"set_name", "set_qty", "set_unit", "set_price", "set_price_per_unit", "set_total_price"}
+        action = values.data.get("action")
+        if action in actions_with_row:
+            if v is None or v < 1:
+                raise ValueError(f"row must be >= 1 for action {action}")
+        return v
+
+def parse_assistant_output(raw: str) -> List[EditCommand]:
+    """
+    Принимает JSON-строку от Assistant и возвращает список EditCommand.
+    Бросает ValueError, если в любом элементе нет поля 'action'.
+    """
+    logger.debug(f"[RAW assistant output]: {raw}")
+    try:
+        data = json.loads(raw)
+    except Exception as e:
+        raise ValueError(f"Invalid JSON: {e}")
+
+    # Новый формат: actions
+    if isinstance(data, dict) and "actions" in data:
+        actions = data["actions"]
+        if not isinstance(actions, list):
+            raise ValueError("'actions' must be a list")
+        cmds = []
+        for i, item in enumerate(actions):
+            if not isinstance(item, dict):
+                raise ValueError(f"Action at index {i} is not a dict")
+            if "action" not in item:
+                raise ValueError("Missing 'action' field in response")
+            try:
+                cmds.append(EditCommand(**item))
+            except ValidationError as ve:
+                raise ValueError(str(ve))
+        return cmds
+    # Старый формат: одиночная команда
+    elif isinstance(data, dict) and "action" in data:
+        try:
+            cmd = EditCommand(**data)
+        except ValidationError as ve:
+            raise ValueError(str(ve))
+        return [cmd]
+    else:
+        raise ValueError("Neither 'action' nor 'actions' found")
 
 logger = logging.getLogger(__name__)
 
