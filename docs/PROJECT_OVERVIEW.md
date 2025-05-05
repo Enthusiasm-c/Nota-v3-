@@ -195,7 +195,31 @@ S-05	Multi-tenant, i18n, price anomaly alerts, dashboard (Grafana/Metabase).
 ### Roadmap
 - [x] Sprint 1: Inline corrections, self-learning aliases
 - [x] Sprint 2: Real OCR integration and cassette-based tests
-- [ ] Sprint 3: Price anomaly alerts, daily Syrve CSV sync
+- [x] Sprint 3: Simplified editing UX with free-form text and fuzzy matching
+- [ ] Sprint 4: Price anomaly alerts, daily Syrve CSV sync
+
+## Sprint 3: Simplified Editing UX (2025-05-05)
+
+### Features
+- **Single-button editing**: Replaced multiple per-line edit buttons with one main "✏️ Редактировать" button
+- **Free-form text commands**: Users can edit using natural language commands (e.g., "строка 2 цена 90000", "дата 26 апреля")
+- **Intelligent fuzzy matching**: When users input product names with typos, system suggests correct names with ≥82% match confidence
+- **Self-learning aliases**: Confirmed fuzzy matches are automatically added to aliases.csv for future recognition
+- **Cleaner UI**: Removed clutter from the interface, focused on essential actions
+- **Mobile-friendly**: Optimized for mobile users by eliminating the need to search for specific buttons
+
+### Benefits
+- **Faster editing**: Users can make multiple changes with simple text commands
+- **Reduced errors**: Fuzzy matching suggestions help avoid typos and inconsistencies
+- **Continuous learning**: System improves over time as alias database grows
+- **Better UX**: Cleaner, more intuitive interface with clear editing flow
+- **More robust**: Handles edge cases better than the previous approach
+
+### Technical Implementation
+- **New FSM states**: Added `EditFree.awaiting_input` and `EditFree.awaiting_free_edit` states
+- **Intent detection**: RegEx-based parsing of free-form commands in `free_parser.py`
+- **Fuzzy matching**: Uses rapidfuzz with 82% threshold for name suggestions
+- **Extensive test coverage**: Added dedicated tests for new keyboard layout and fuzzy confirmation flow
 
 ---
 
