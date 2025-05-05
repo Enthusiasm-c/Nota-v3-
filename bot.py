@@ -88,6 +88,7 @@ async def safe_edit(bot, chat_id, msg_id, text, kb=None, **kwargs):
     """
     Безопасное редактирование сообщения с обработкой ошибок форматирования.
     В случае ошибки с parse_mode пытается отправить сообщение без форматирования.
+    Если редактирование не удаётся - отправляет новое сообщение.
 
     Args:
         bot: Экземпляр бота
@@ -111,26 +112,25 @@ async def safe_edit(bot, chat_id, msg_id, text, kb=None, **kwargs):
         text = escape_html(text)
 
     logger.debug("OUT >>> %s", text[:200])
+    
+    # Попытка 1: Стандартное редактирование с форматированием
     try:
-        # First attempt: with full formatting
         await bot.edit_message_text(
             chat_id=chat_id, message_id=msg_id, text=text, reply_markup=kb, **kwargs
         )
         logger.info(f"Successfully edited message {msg_id}")
         return True
-
     except Exception as e:
+        error_msg = str(e)
         logger.warning(f"Error editing message: {type(e).__name__}")
-
+        
+        # Попытка 2: Если проблема с форматированием, пробуем без него
         if isinstance(e, TelegramBadRequest) and (
-            "can't parse entities" in str(e) or "parse_mode" in str(e)
+            "can't parse entities" in error_msg or "parse_mode" in error_msg
         ):
-            logger.info("MarkdownV2 edit failed, retrying without parse_mode")
-
+            logger.info("Formatting failed, retrying without parse_mode")
             try:
-                # Second attempt: without formatting
                 clean_kwargs = {k: v for k, v in kwargs.items() if k != "parse_mode"}
-
                 await bot.edit_message_text(
                     chat_id=chat_id,
                     message_id=msg_id,
@@ -140,35 +140,73 @@ async def safe_edit(bot, chat_id, msg_id, text, kb=None, **kwargs):
                 )
                 logger.info("Message sent without formatting")
                 return True
-
             except Exception as retry_error:
-                logger.warning(
-                    f"Failed to edit message without parse_mode: {type(retry_error).__name__}"
-                )
-
-                # Third attempt: clean text from all special characters
+                logger.warning(f"Second attempt failed: {type(retry_error).__name__}")
+                
+                # Попытка 3: Удаляем HTML-теги
                 try:
-                    clean_text = re.sub(r"[^\w\s]", " ", text)
-                    if len(clean_text) < 10:  # If text became too short
-                        clean_text = "Failed to render message with special characters. Please try again."
-
+                    clean_text = re.sub(r'<[^>]+>', '', text)
                     await bot.edit_message_text(
                         chat_id=chat_id,
                         message_id=msg_id,
                         text=clean_text,
                         reply_markup=kb,
+                        parse_mode=None,
                     )
-                    logger.info("Sent fallback plain text message")
+                    logger.info("Message edited with stripped HTML tags")
                     return True
-
-                except Exception as last_error:
-                    logger.error(
-                        f"All attempts to edit message failed: {type(last_error).__name__}"
-                    )
-                    return False
-        else:
-            logger.error(f"Unexpected error editing message: {type(e).__name__}")
-            return False
+                except Exception as html_error:
+                    logger.warning(f"Third attempt (HTML strip) failed: {type(html_error).__name__}")
+                    
+                    # Попытка 4: Очищаем от всех спецсимволов
+                    try:
+                        ultra_clean_text = re.sub(r"[^\w\s]", " ", text)
+                        if len(ultra_clean_text) < 10:  # Если текст стал слишком коротким
+                            ultra_clean_text = "Failed to render message with special characters. Please try again."
+                        
+                        await bot.edit_message_text(
+                            chat_id=chat_id,
+                            message_id=msg_id,
+                            text=ultra_clean_text,
+                            reply_markup=kb,
+                            parse_mode=None,
+                        )
+                        logger.info("Sent clean fallback text message")
+                        return True
+                    except Exception as last_edit_error:
+                        logger.error(f"All edit attempts failed: {type(last_edit_error).__name__}")
+        
+        # Попытка 5: Если все способы редактирования не сработали - отправляем новое сообщение
+        try:
+            # Сначала пробуем с форматированием
+            result = await bot.send_message(
+                chat_id=chat_id,
+                text=text,
+                reply_markup=kb,
+                **kwargs
+            )
+            logger.info(f"Sent new message instead of editing: {result.message_id}")
+            return True
+        except Exception as send_error:
+            logger.warning(f"Failed to send formatted message: {type(send_error).__name__}")
+            
+            # Если с форматированием не вышло - пробуем без него
+            try:
+                clean_kwargs = {k: v for k, v in kwargs.items() if k != "parse_mode"}
+                result = await bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    reply_markup=kb,
+                    **clean_kwargs
+                )
+                logger.info(f"Sent new plain message instead of editing: {result.message_id}")
+                return True
+            except Exception as final_error:
+                logger.error(f"All message attempts failed: {type(final_error).__name__}")
+                return False
+        
+        logger.error(f"Unexpected error editing message: {type(e).__name__}")
+        return False
 
 
 from app.utils.api_decorators import with_async_retry_backoff, ErrorType
