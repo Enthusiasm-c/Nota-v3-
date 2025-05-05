@@ -7,6 +7,30 @@ from app.edit.apply_intent import (
     set_unit,
     apply_intent
 )
+from app.models import ParsedData, as_invoice_dict
+
+def test_as_invoice_dict_with_dict():
+    d = {"a": 1, "b": 2}
+    assert as_invoice_dict(d) == d
+
+def test_as_invoice_dict_with_parseddata():
+    pd = ParsedData(supplier="Test", date=None, positions=[])
+    result = as_invoice_dict(pd)
+    assert isinstance(result, dict)
+    assert result["supplier"] == "Test"
+    assert result["positions"] == []
+
+def test_apply_intent_with_parseddata():
+    pd = ParsedData(
+        supplier="Test",
+        date=None,
+        positions=[{"name": "A", "qty": 1, "price": "10", "status": "error"}]
+    )
+    intent = {"action": "set_price", "line_index": 0, "value": "1000"}
+    result = apply_intent(pd, intent)
+    assert result["positions"][0]["price"] == "1000"
+    assert result["positions"][0]["status"] == "ok"
+
 
 def test_set_price():
     """Тест функции set_price"""

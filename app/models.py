@@ -35,6 +35,15 @@ else:
 import datetime
 
 
+def as_invoice_dict(invoice) -> dict:
+    """
+    Универсальный адаптер: приводит ParsedData или dict к dict.
+    """
+    if hasattr(invoice, "dict"):
+        return invoice.dict()
+    return dict(invoice)
+
+
 class ParsedData(BaseModel):
     supplier: Optional[str] = None
     date: Optional[datetime.date] = None

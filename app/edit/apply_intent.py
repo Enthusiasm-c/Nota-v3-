@@ -116,17 +116,21 @@ def set_unit(invoice: Dict[str, Any], line_index: int, value: str) -> Dict[str, 
     
     return result
 
-def apply_intent(invoice: Dict[str, Any], intent: Dict[str, Any]) -> Dict[str, Any]:
+from typing import Union
+from app.models import ParsedData, as_invoice_dict
+
+def apply_intent(invoice: Union[dict, ParsedData], intent: dict) -> dict:
     """
     Применяет интент к инвойсу на основе действия.
     
     Args:
-        invoice: Словарь с данными инвойса
+        invoice: Словарь с данными инвойса или ParsedData
         intent: Словарь с интентом от GPT-3.5
     
     Returns:
         Dict: Обновленный инвойс
     """
+    invoice = as_invoice_dict(invoice)
     action = intent.get("action", "unknown")
     
     if action == "set_date":
