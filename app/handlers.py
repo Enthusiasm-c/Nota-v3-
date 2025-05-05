@@ -93,10 +93,10 @@ async def handle_choose_line(message: Message, state: FSMContext):
         return
     idx = int(text) - 1
     await state.update_data(edit_pos=idx)
-    await state.set_state(InvoiceReviewStates.edit_line)
-    # Показываем меню выбора поля (или сразу поле, если только один вариант)
+    # Instead of showing a per-line field menu, prompt for free text input
+    await state.set_state(EditFree.awaiting_input)
     await message.answer(
-        f"Какое поле строки {idx+1} вы хотите изменить? (name/qty/unit/price)",
+        "Что нужно отредактировать? (пример: 'дата — 26 апреля' или 'строка 2 цена 90000')",
         reply_markup=None
     )
 
@@ -486,9 +486,8 @@ async def handle_add_missing(call: CallbackQuery, state: FSMContext):
     for idx, pos in enumerate(positions):
         if pos.get("status") == "unknown":
             await state.update_data(edit_pos=idx, msg_id=call.message.message_id)
-            await call.message.edit_reply_markup(
-                reply_markup=keyboards.kb_edit_fields(idx)
-            )
+            await call.message.edit_reply_markup(reply_markup=None)
+            # Now only the main edit button and free input are used.
             return
     await call.answer("No unknown positions left.")
 
