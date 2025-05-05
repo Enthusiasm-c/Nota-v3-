@@ -51,14 +51,14 @@ def build_summary(ok_count, issues_count, invoice_total):
         f"<b>💰 Invoice total:</b> {format_idr(invoice_total)}"
     )
 
-def build_report(parsed_data, match_results, escape=True, page=1, page_size=15):
+def build_report(parsed_data, match_results, escape_html=True, page=1, page_size=15):
     """
     Формирует HTML-отчет по инвойсу с пагинацией.
     
     Args:
         parsed_data: Распознанные данные инвойса (объект или словарь)
         match_results: Результаты сопоставления позиций с базой
-        escape: Флаг экранирования HTML (не используется, для совместимости)
+        escape_html: Флаг экранирования HTML (True по умолчанию)
         page: Номер страницы для отображения
         page_size: Размер страницы (количество позиций)
         
@@ -76,10 +76,12 @@ def build_report(parsed_data, match_results, escape=True, page=1, page_size=15):
     date_str = "—" if not date else date
 
     # Проверяем наличие потенциально опасных символов
+    # Используем функцию escape из модуля html, а не параметр escape_html
+    from html import escape as html_escape
     if supplier_str and isinstance(supplier_str, str):
-        supplier_str = escape(supplier_str)
+        supplier_str = html_escape(supplier_str)
     if date_str and isinstance(date_str, str):
-        date_str = escape(date_str)
+        date_str = html_escape(date_str)
 
     # Pagination
     start = (page - 1) * page_size

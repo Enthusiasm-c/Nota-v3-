@@ -452,8 +452,8 @@ async def photo_handler(message, state: FSMContext, **kwargs):
         logger.info(f"[{req_id}] Matching complete for user {user_id}")
 
         # Шаг 5: Формирование отчета
-        # Создаем отчет без экранирования в самой функции
-        report, has_errors = build_report(ocr_result, match_results, escape=False)
+        # Создаем отчет с экранированием HTML
+        report, has_errors = build_report(ocr_result, match_results, escape_html=True)
 
         # Строим клавиатуру для редактирования
         keyboard_rows = []

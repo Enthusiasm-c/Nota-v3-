@@ -3,8 +3,8 @@ from app.formatters.report import build_report
 from types import SimpleNamespace
 import html
 
-def test_build_report_with_escape():
-    """Проверяет работу build_report с параметром escape=True."""
+def test_build_report_with_escape_html():
+    """Проверяет работу build_report с параметром escape_html=True."""
     # Тестовые данные
     parsed = SimpleNamespace(supplier="Test #Supplier", date="2025-05-04")
     match_results = [
@@ -18,8 +18,8 @@ def test_build_report_with_escape():
         },
     ]
 
-    # Вызываем функцию с escape=True
-    report, _ = build_report(parsed, match_results, escape=True)
+    # Вызываем функцию с escape_html=True
+    report, _ = build_report(parsed, match_results, escape_html=True)
 
     # Проверяем наличие статусов
     assert "✓" in report
@@ -37,8 +37,8 @@ def test_build_report_with_escape():
     assert "Issues:" in report
 
 
-def test_build_report_without_escape():
-    """Проверяет работу build_report с параметром escape=False."""
+def test_build_report_without_escape_html():
+    """Проверяет работу build_report с параметром escape_html=False."""
     # Тестовые данные
     parsed = SimpleNamespace(supplier="Test #Supplier", date="2025-05-04")
     match_results = [
@@ -52,8 +52,8 @@ def test_build_report_without_escape():
         },
     ]
 
-    # Вызываем функцию с escape=False
-    report, _ = build_report(parsed, match_results, escape=False)
+    # Вызываем функцию с escape_html=False
+    report, _ = build_report(parsed, match_results, escape_html=False)
 
     # Проверяем наличие статусов
     assert "✓" in report
@@ -78,7 +78,7 @@ def test_build_report_edge_cases():
     match_results = []
 
     # Вызываем функцию
-    report, _ = build_report(parsed, match_results, escape=True)
+    report, _ = build_report(parsed, match_results, escape_html=True)
 
     # Проверяем обработку None
     assert "Unknown supplier" in report
