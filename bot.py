@@ -908,8 +908,7 @@ async def handle_field_edit(message, state: FSMContext):
 
         # Обновляем ссылки в user_matches с новым ID сообщения
         new_msg_id = result.message_id
-        new_key = (user_id, new_msg_id)
-        user_matches[new_key] = entry.copy()
+        try:
             new_key = (user_id, new_msg_id)
             user_matches[new_key] = entry.copy()
 
@@ -918,7 +917,6 @@ async def handle_field_edit(message, state: FSMContext):
                 del user_matches[key]
 
             logger.debug(f"BUGFIX: Created new report with message_id {new_msg_id}")
-
         except Exception as e:
             logger.error(f"BUGFIX: Error sending new report: {str(e)}")
             # Отправляем простое подтверждение
