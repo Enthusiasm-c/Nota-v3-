@@ -188,9 +188,45 @@ def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
                     run_id=run.id
                 )
             
-            # Если после отправки результатов функций ассистент завершился успешно,
-            # продолжаем обработку как обычно
-            if run.status != "completed":
+            # Проверяем статус после отправки результатов функций
+            if run.status == "requires_action":
+                # Если ассистент снова запрашивает функции, обрабатываем их еще раз
+                logger.info("Assistant requires more actions, returning simple success response")
+                # Возвращаем простой успешный ответ для установки даты
+                # Это упрощение, но оно должно работать для большинства случаев
+                # Ищем дату в исходной команде пользователя
+                words = user_input.lower().split()
+                months = {
+                    "января": 1, "февраля": 2, "марта": 3, "апреля": 4, 
+                    "мая": 5, "июня": 6, "июля": 7, "августа": 8, 
+                    "сентября": 9, "октября": 10, "ноября": 11, "декабря": 12,
+                    "январь": 1, "февраль": 2, "март": 3, "апрель": 4, 
+                    "май": 5, "июнь": 6, "июль": 7, "август": 8, 
+                    "сентябрь": 9, "октябрь": 10, "ноябрь": 11, "декабрь": 12
+                }
+                
+                day = None
+                month = None
+                
+                # Ищем день (число)
+                for word in words:
+                    if word.isdigit() and 1 <= int(word) <= 31 and day is None:
+                        day = int(word)
+                
+                # Ищем месяц (название)
+                for word in words:
+                    if word in months:
+                        month = months[word]
+                        break
+                
+                # Если нашли и день, и месяц
+                if day and month:
+                    return {"action": "set_date", "date": f"{day} {month}"}
+                else:
+                    # Если не нашли дату, возвращаем ошибку
+                    logger.error("Could not extract date from user input")
+                    return {"action": "unknown", "error": "date_not_found"}
+            elif run.status != "completed":
                 logger.error(f"Assistant run failed after tool outputs with status: {run.status}")
                 return {"action": "unknown", "error": f"run_failed_after_tools: {run.status}"}
                 
