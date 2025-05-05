@@ -184,6 +184,10 @@ async def safe_edit(bot, chat_id, msg_id, text, kb=None, **kwargs):
         # Попытка 5: Если все способы редактирования не сработали - отправляем новое сообщение
         try:
             # Сначала пробуем с форматированием
+            # Храним ID новых сообщений, чтобы избежать дублирования
+            from datetime import datetime
+            msg_key = f"new_msg:{chat_id}:{datetime.now().timestamp()}"
+            
             result = await bot.send_message(
                 chat_id=chat_id,
                 text=text,
@@ -191,6 +195,9 @@ async def safe_edit(bot, chat_id, msg_id, text, kb=None, **kwargs):
                 **kwargs
             )
             logger.info(f"Sent new message instead of editing: {result.message_id}")
+            
+            # Добавляем сообщение в кэш, чтобы избежать дублирования
+            _edit_cache[msg_key] = {"sent": True, "msg_id": result.message_id}
             return True
         except Exception as send_error:
             logger.warning(f"Failed to send formatted message: {type(send_error).__name__}")
