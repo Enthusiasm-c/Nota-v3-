@@ -223,6 +223,14 @@ def call_openai_ocr(image_bytes: bytes) -> ParsedData:
         p["price"] = _clean_num(p.get("price"))
         p["price_per_unit"] = _clean_num(p.get("price_per_unit"))
         p["total_price"] = _clean_num(p.get("total_price"))
+        # Если price отсутствует, но есть total_price и qty > 0, вычислить price
+        if (p.get("price") is None or p.get("price") == 0) and p.get("total_price") and p.get("qty"):
+            try:
+                qty = float(p["qty"])
+                if qty > 0:
+                    p["price"] = float(p["total_price"]) / qty
+            except Exception as e:
+                logging.warning(f"Failed to auto-calc price: {e} for position {p}")
     data["price"] = _clean_num(data.get("price"))
     data["price_per_unit"] = _clean_num(data.get("price_per_unit"))
     data["total_price"] = _clean_num(data.get("total_price"))

@@ -43,8 +43,22 @@ def kb_help_back() -> ReplyKeyboardMarkup:
     )
 
 
-# Клавиатура отчёта (inline)
+# Клавиатура редактирования (inline)
 
+def build_edit_keyboard(has_errors: bool) -> InlineKeyboardMarkup:
+    if has_errors:
+        buttons = [
+            [InlineKeyboardButton(text="✏️ Редактировать", callback_data="edit:choose")],
+            [InlineKeyboardButton(text="↩ Отмена", callback_data="cancel:all")],
+        ]
+    else:
+        buttons = [
+            [InlineKeyboardButton(text="✅ Подтвердить", callback_data="confirm:invoice")],
+            [InlineKeyboardButton(text="↩ Отмена", callback_data="cancel:all")],
+        ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+# Клавиатура отчёта (inline)
 
 def kb_report(match_results: list) -> InlineKeyboardMarkup:
     # СТАРАЯ версия для совместимости

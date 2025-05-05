@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 
 class InvoiceReviewStates(StatesGroup):
     review = State()
+    choose_line = State()
+    edit_line = State()
 
 
 class EditPosition(StatesGroup):
@@ -27,6 +29,31 @@ class EditPosition(StatesGroup):
 
 router = Router()
 
+
+# --- Новый EDIT flow: интерактивный выбор строки ---
+@router.callback_query(F.data == "edit:choose")
+async def handle_edit_choose(call: CallbackQuery, state: FSMContext):
+    await state.set_state(InvoiceReviewStates.choose_line)
+    await call.message.answer(
+        "Введите номер строки (1-40), которую хотите исправить:",
+        reply_markup=None
+    )
+
+# --- Получаем номер строки от пользователя ---
+@router.message(InvoiceReviewStates.choose_line)
+async def handle_choose_line(message: Message, state: FSMContext):
+    text = message.text.strip()
+    if not text.isdigit() or not (1 <= int(text) <= 40):
+        await message.answer("Пожалуйста, введите корректный номер строки (1-40):")
+        return
+    idx = int(text) - 1
+    await state.update_data(edit_pos=idx)
+    await state.set_state(InvoiceReviewStates.edit_line)
+    # Показываем меню выбора поля (или сразу поле, если только один вариант)
+    await message.answer(
+        f"Какое поле строки {idx+1} вы хотите изменить? (name/qty/unit/price)",
+        reply_markup=None
+    )
 
 # --- EDIT button pressed: show choose-field menu ---
 @router.callback_query(F.data.startswith("edit:"))
@@ -444,9 +471,8 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
         invoice["positions"], data_loader.load_products()
     )
     page = 1
-    table_rows = [r for r in match_results]
-    total_rows = len(table_rows)
-    page_size = 15
+    page_size = 40
+    total_rows = len(match_results)
     total_pages = (total_rows + page_size - 1) // page_size
     if match["status"] == "ok":
 
@@ -454,13 +480,11 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
         await state.update_data(invoice_page=1)
         match_results = matcher.match_positions(invoice["positions"], data_loader.load_products())
         page = 1
-        page_size = 15
+        page_size = 40
         total_rows = len(match_results)
         total_pages = (total_rows + page_size - 1) // page_size
         text, has_errors = invoice_report.build_report(invoice, match_results, page=page)
-        reply_markup = keyboards.build_invoice_report(
-            text, has_errors, match_results, page=page, total_pages=total_pages, page_size=page_size
-        )
+        reply_markup = keyboards.build_edit_keyboard(has_errors)
         text_to_send = f"<b>Updated!</b><br>{text}"
         with open("/tmp/nota_debug.log", "a") as f:
             f.write(f"EDIT_MESSAGE_DEBUG: chat_id={message.chat.id}, msg_id={msg_id}, text_len={len(text_to_send)}, text_preview={text_to_send[:500]!r}, reply_markup={reply_markup}\n")
@@ -499,13 +523,11 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
         await state.update_data(invoice_page=1)
         match_results = matcher.match_positions(invoice["positions"], data_loader.load_products())
         page = 1
-        page_size = 15
+        page_size = 40
         total_rows = len(match_results)
         total_pages = (total_rows + page_size - 1) // page_size
         text, has_errors = invoice_report.build_report(invoice, match_results, page=page)
-        reply_markup = keyboards.build_invoice_report(
-            text, has_errors, match_results, page=page, total_pages=total_pages, page_size=page_size
-        )
+        reply_markup = keyboards.build_edit_keyboard(has_errors)
         text_to_send = f"<b>Updated!</b><br>{text}"
         with open("/tmp/nota_debug.log", "a") as f:
             f.write(f"EDIT_MESSAGE_DEBUG: chat_id={message.chat.id}, msg_id={msg_id}, text_len={len(text_to_send)}, text_preview={text_to_send[:500]!r}, reply_markup={reply_markup}\n")

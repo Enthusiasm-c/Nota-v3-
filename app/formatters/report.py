@@ -14,7 +14,7 @@ def format_idr(val):
 
 
 
-def paginate_rows(rows, page_size=15):
+def paginate_rows(rows, page_size=40):
     """Split rows into pages of page_size."""
     return [rows[i : i + page_size] for i in range(0, len(rows), page_size)]
 
@@ -57,10 +57,12 @@ def build_table(rows):
         name = html_escape(name)
         qty = item.get("qty", None)
         unit = html_escape(str(item.get("unit", "")))
-        price = item.get("unit_price", None)
+        # Используем price если есть, иначе unit_price, иначе вычисляем из total/qty
+        price = item.get("price", None)
+        if price in (None, "", "—"):
+            price = item.get("unit_price", None)
         total = item.get("total", None)
         status = item.get("status", "")
-        # Попытка вычислить unit_price, если есть total и qty, но нет unit_price
         computed_price = None
         if (price in (None, "", "—")) and (total not in (None, "", "—")) and (qty not in (None, "", "—")):
             try:
@@ -102,7 +104,7 @@ def build_summary(ok_count, issues_count, invoice_total, show_total=True, has_un
         summary += "❗ Итоговая сумма не рассчитана: есть нераспознанные цены или количества."
     return summary
 
-def build_report(parsed_data, match_results, escape_html=True, page=1, page_size=15):
+def build_report(parsed_data, match_results, escape_html=True, page=1, page_size=40):
     """
     Формирует HTML-отчет по инвойсу с пагинацией.
     
