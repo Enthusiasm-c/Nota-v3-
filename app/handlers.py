@@ -119,6 +119,8 @@ async def handle_free_edit(message: Message, state: FSMContext):
 # --- Получаем номер строки от пользователя ---
 @router.message(InvoiceReviewStates.choose_line)
 async def handle_choose_line(message: Message, state: FSMContext):
+    data = await state.get_data()
+    logger.info(f"[DEBUG] State at handle_choose_line: {data}")
     text = message.text.strip()
     if not text.isdigit() or not (1 <= int(text) <= 40):
         await message.answer("Пожалуйста, введите корректный номер строки (1-40):")
@@ -135,6 +137,8 @@ async def handle_choose_line(message: Message, state: FSMContext):
 # --- EDIT button pressed: show choose-field menu ---
 @router.callback_query(F.data == "edit:free")
 async def handle_edit_free(call: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    logger.info(f"[DEBUG] State at handle_edit_free: {data}")
     await state.set_state(EditFree.awaiting_input)
     await call.message.answer(
         "Что нужно отредактировать? (пример: 'дата — 26 апреля' или 'строка 2 цена 90000')"
@@ -202,6 +206,8 @@ async def handle_cancel(call: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "inv_page_prev")
 async def handle_page_prev(call: CallbackQuery, state: FSMContext):
     data = await state.get_data()
+    logger.info(f"[DEBUG] State at handle_page_prev: {data}")
+    data = await state.get_data()
     invoice = data.get("invoice")
     page = data.get("invoice_page", 1)
     if not invoice:
@@ -231,6 +237,8 @@ async def handle_page_prev(call: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "inv_page_next")
 async def handle_page_next(call: CallbackQuery, state: FSMContext):
     data = await state.get_data()
+    logger.info(f"[DEBUG] State at handle_page_next: {data}")
+    data = await state.get_data()
     invoice = data.get("invoice")
     page = data.get("invoice_page", 1)
 
@@ -254,6 +262,8 @@ async def handle_page_next(call: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "inv_cancel_edit")
 async def handle_cancel_edit(call: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    logger.info(f"[DEBUG] State at handle_cancel_edit: {data}")
     # Вернуться к отчёту без удаления черновика
     data = await state.get_data()
     invoice = data.get("invoice")
@@ -283,6 +293,8 @@ async def handle_cancel_edit(call: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "inv_submit")
 async def handle_submit(call: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    logger.info(f"[DEBUG] State at handle_submit: {data}")
     data = await state.get_data()
     invoice = data.get("invoice")
     if not invoice:
@@ -318,6 +330,8 @@ async def handle_submit(call: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "inv_submit_confirm")
 async def handle_submit_confirm(call: CallbackQuery, state: FSMContext):
     data = await state.get_data()
+    logger.info(f"[DEBUG] State at handle_submit_confirm: {data}")
+    data = await state.get_data()
     invoice = data.get("invoice")
     if not invoice:
         await call.answer("Session expired. Please resend the invoice.", show_alert=True)
@@ -329,6 +343,8 @@ async def handle_submit_confirm(call: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "inv_submit_cancel")
 async def handle_submit_cancel(call: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    logger.info(f"[DEBUG] State at handle_submit_cancel: {data}")
     data = await state.get_data()
     invoice = data.get("invoice")
     page = data.get("invoice_page", 1)
@@ -365,6 +381,8 @@ async def handle_submit_cancel(call: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data.regexp(r"^page_(\\d+)$"))
 async def handle_page_n(call: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    logger.info(f"[DEBUG] State at handle_page_n: {data}")
     page = int(re.match(r"^page_(\\d+)$", call.data).group(1))
     data = await state.get_data()
     invoice = data.get("invoice")
@@ -391,6 +409,8 @@ async def handle_page_n(call: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "inv_submit_anyway")
 async def handle_submit_anyway(call: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    logger.info(f"[DEBUG] State at handle_submit_anyway: {data}")
     # Отправить инвойс в Syrve даже если есть unknown
     data = await state.get_data()
     invoice = data.get("invoice")
@@ -454,6 +474,8 @@ async def handle_submit_anyway(call: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "inv_add_missing")
 async def handle_add_missing(call: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    logger.info(f"[DEBUG] State at handle_add_missing: {data}")
     # Переход к поиску по базе (как при unknown)
     data = await state.get_data()
     invoice = data.get("invoice")
@@ -639,6 +661,8 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
 
 @router.callback_query(F.data.startswith("suggest:"))
 async def handle_suggestion(call: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    logger.info(f"[DEBUG] State at handle_suggestion: {data}")
     _, pos_idx, product_id = call.data.split(":")
     data = await state.get_data()
     invoice = data.get("invoice")

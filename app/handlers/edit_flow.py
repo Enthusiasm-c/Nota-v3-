@@ -33,6 +33,7 @@ async def handle_free_edit_text(message: Message, state: FSMContext):
     
     # Получаем данные из состояния
     data = await state.get_data()
+    logger.info(f"[DEBUG] State at handler start: {data}")
     invoice = data.get("invoice")
     
     if not invoice:
