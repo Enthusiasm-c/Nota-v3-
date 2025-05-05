@@ -57,6 +57,9 @@ def build_table(rows):
         name = html_escape(name)
         qty = item.get("qty", None)
         unit = html_escape(str(item.get("unit", "")))
+        # Подсветка UNIT если проблема только в единице измерения
+        if status == "unit_mismatch":
+            unit = f"<b>{unit}</b>"
         # Используем price если есть, иначе unit_price, иначе вычисляем из total/qty
         price = item.get("price", None)
         if price in (None, "", "—"):
@@ -92,12 +95,14 @@ def build_table(rows):
     return "\n".join(table_rows)
 
 
-def build_summary(ok_count, issues_count, invoice_total, show_total=True, has_unparsed=False):
+def build_summary(ok_count, issues_count, invoice_total, show_total=True, has_unparsed=False, unit_mismatch_count=0):
     """
     Формирует HTML-итоги по инвойсу с количеством успешных и проблемных позиций
     и общей суммой, если она доступна.
     """
     summary = f"<b>✓ Correct:</b> {ok_count}  <b>🚫 Issues:</b> {issues_count}\n"
+    if unit_mismatch_count > 0:
+        summary += f"<b>🚩 Проблема с единицей измерения:</b> {unit_mismatch_count} строк(и)\n"
     if show_total and not has_unparsed:
         summary += f"<b>💰 Invoice total:</b> {format_idr(invoice_total)}"
     elif has_unparsed:
@@ -147,6 +152,7 @@ def build_report(parsed_data, match_results, escape_html=True, page=1, page_size
     # Build table and summary
     ok_count = 0
     issues_count = 0
+    unit_mismatch_count = 0
     invoice_total = 0
     has_unparsed = False
     for item in match_results:
@@ -155,6 +161,8 @@ def build_report(parsed_data, match_results, escape_html=True, page=1, page_size
             ok_count += 1
         elif status in ("unit_mismatch", "unknown", "ignored", "error"):
             issues_count += 1
+        if status == "unit_mismatch":
+            unit_mismatch_count += 1
         # Проверяем наличие нераспознанных цен или количеств
         qty = item.get("qty", None)
         price = item.get("unit_price", None)
@@ -168,7 +176,11 @@ def build_report(parsed_data, match_results, escape_html=True, page=1, page_size
             has_unparsed = True
     header_html = build_header(supplier_str, date_str)
     table = build_table(rows_to_show)
-    summary_html = build_summary(ok_count, issues_count, invoice_total, show_total=not has_unparsed, has_unparsed=has_unparsed)
+    summary_html = build_summary(
+        ok_count, issues_count, invoice_total,
+        show_total=not has_unparsed, has_unparsed=has_unparsed,
+        unit_mismatch_count=unit_mismatch_count
+    )
     html_report = (
         f"{header_html}"
         f"<pre>{table}</pre>\n"
