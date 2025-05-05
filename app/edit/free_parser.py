@@ -7,7 +7,18 @@ DATE_PATTERNS = [
     r"дата\s*[—-]?\s*(.+)",
     r"invoice date\s*[—-]?\s*(.+)",
 ]
-LINE_EDIT_PATTERN = r"строка\s*(\d+)\s*(name|qty|unit|price|имя|кол-во|единица|цена)\s+(.+)"
+WORD_NUMS = {
+    "один": 1, "два": 2, "три": 3, "четыре": 4, "пять": 5, "шесть": 6, "семь": 7, "восемь": 8, "девять": 9, "десять": 10,
+    "1": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9, "10": 10
+}
+FIELD_SYNONYMS = {
+    "название": "name", "наименование": "name", "имя": "name",
+    "кол-во": "qty", "количество": "qty",
+    "единица": "unit", "ед": "unit",
+    "цена": "price",
+    "name": "name", "qty": "qty", "unit": "unit", "price": "price"
+}
+LINE_EDIT_PATTERN = r"строка\s*(\w+)\s*(name|qty|unit|price|имя|кол-во|единица|цена|название|наименование|количество|ед|единиц[аы]|имя)\s+(.+)"
 REMOVE_PATTERN = r"(удали|игнор)\s*(\d+)"
 ADD_PATTERN = r"добав(ь|ить)?\s+(.+)"
 FINISH_PATTERN = r"^(готово|все исправил|finish|done)$"
@@ -24,7 +35,21 @@ def detect_intent(text: str) -> Dict[str, Any]:
     # 2. Line field edit
     m = re.match(LINE_EDIT_PATTERN, text_lc)
     if m:
-        return {"action": "edit_line_field", "line": int(m.group(1)), "field": m.group(2), "value": m.group(3)}
+        line_raw = m.group(1)
+        field_raw = m.group(2)
+        value = m.group(3)
+        # Поддержка числительных словами
+        line = WORD_NUMS.get(line_raw, None)
+        if line is None:
+            try:
+                line = int(line_raw)
+            except Exception:
+                line = None
+        # Поддержка синонимов полей
+        field = FIELD_SYNONYMS.get(field_raw, field_raw)
+        if line is not None:
+            return {"action": "edit_line_field", "line": line, "field": field, "value": value}
+    # 3. Remove/ignore line
     # 3. Remove/ignore line
     m = re.match(REMOVE_PATTERN, text_lc)
     if m:
@@ -61,16 +86,7 @@ def apply_edit(ctx: dict, intent: dict) -> dict:
         field = intent["field"]
         value = intent["value"]
         # Маппинг русских полей к внутренним ключам
-        field_map = {
-            "цена": "price",
-            "имя": "name",
-            "кол-во": "qty",
-            "единица": "unit",
-            "price": "price",
-            "name": "name",
-            "qty": "qty",
-            "unit": "unit",
-        }
+        field_map = FIELD_SYNONYMS
         field = field_map.get(field, field)
         new_ctx = deepcopy(ctx)
         if 0 <= idx < len(new_ctx["positions"]):
