@@ -63,7 +63,8 @@ async def handle_free_edit(message: Message, state: FSMContext):
     # Пересчитываем ошибки
     from app.data_loader import load_products
     from app.matcher import match_positions
-    match_results = match_positions(new_invoice["positions"], load_products())
+    # Получаем match_results с подсказками
+    match_results = match_positions(new_invoice["positions"], load_products(), return_suggestions=True)
     text, has_errors = invoice_report.build_report(new_invoice, match_results)
     from app.keyboards import build_edit_keyboard
     await message.answer(
@@ -71,6 +72,22 @@ async def handle_free_edit(message: Message, state: FSMContext):
         reply_markup=build_edit_keyboard(has_errors),
         parse_mode="HTML"
     )
+    # Если есть ошибки и есть предложения для некорректной позиции — показать их
+    if has_errors:
+        for idx, result in enumerate(match_results):
+            if result.get("status") == "unknown" and result.get("suggestions"):
+                from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+                suggestions = result["suggestions"][:3]
+                kb = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [InlineKeyboardButton(text=s.get("name", ""), callback_data=f"suggest:{idx}:{s.get('id')}") for s in suggestions]
+                    ]
+                )
+                await message.answer(
+                    f"Позиция '{result.get('name')}' не найдена. Возможно, вы имели в виду:",
+                    reply_markup=kb
+                )
+                break
     # Обновляем state
     await state.update_data(invoice=new_invoice)
     # Если ошибок нет — можно завершать
