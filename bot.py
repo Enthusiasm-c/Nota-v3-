@@ -1216,7 +1216,11 @@ async def handle_free_edit_text(message: types.Message, state: FSMContext):
         best_match, score = None, 0
         
         if product_names:
-            best_match, score = fuzzy_process.extractOne(field_value, product_names)
+            result = fuzzy_process.extractOne(field_value, product_names)
+            if result is not None:
+                best_match, score = result[0], result[1]
+            else:
+                best_match, score = None, 0
         
         # Если есть хорошее совпадение (≥82%), предлагаем пользователю подтвердить
         if best_match and score >= 82:
