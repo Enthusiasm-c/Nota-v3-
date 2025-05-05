@@ -117,7 +117,8 @@ def set_unit(invoice: Dict[str, Any], line_index: int, value: str) -> Dict[str, 
     return result
 
 from typing import Union
-from app.models import ParsedData, as_invoice_dict
+from app.models import ParsedData
+from app.converters import parsed_to_dict
 
 def apply_intent(invoice: Union[dict, ParsedData], intent: dict) -> dict:
     """
@@ -130,7 +131,7 @@ def apply_intent(invoice: Union[dict, ParsedData], intent: dict) -> dict:
     Returns:
         Dict: Обновленный инвойс
     """
-    invoice = as_invoice_dict(invoice)
+    invoice = parsed_to_dict(invoice)
     action = intent.get("action", "unknown")
     
     if action == "set_date":

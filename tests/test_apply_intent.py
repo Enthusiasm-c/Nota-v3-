@@ -7,15 +7,16 @@ from app.edit.apply_intent import (
     set_unit,
     apply_intent
 )
-from app.models import ParsedData, as_invoice_dict
+from app.models import ParsedData
+from app.converters import parsed_to_dict
 
-def test_as_invoice_dict_with_dict():
+def test_parsed_to_dict_with_dict():
     d = {"a": 1, "b": 2}
-    assert as_invoice_dict(d) == d
+    assert parsed_to_dict(d) == d
 
-def test_as_invoice_dict_with_parseddata():
+def test_parsed_to_dict_with_parseddata():
     pd = ParsedData(supplier="Test", date=None, positions=[])
-    result = as_invoice_dict(pd)
+    result = parsed_to_dict(pd)
     assert isinstance(result, dict)
     assert result["supplier"] == "Test"
     assert result["positions"] == []

@@ -60,7 +60,8 @@ async def handle_free_edit_text(message: Message, state: FSMContext):
         return
     
     # Приведение invoice к dict через универсальный адаптер
-    invoice = as_invoice_dict(invoice)
+    from app.converters import parsed_to_dict
+    invoice = parsed_to_dict(invoice)
     # Применяем интент к инвойсу
     new_invoice = apply_intent(invoice, intent)
     
