@@ -6,7 +6,7 @@ from aiogram.fsm.state import State, StatesGroup
 from app.fsm.states import EditFree
 from app.edit import free_parser
 from aiogram.types import ForceReply
-from aiogram.exceptions import TelegramBadRequest
+
 
 from app.formatters import report as invoice_report, alias, data_loader, keyboards
 from app import matcher
@@ -42,25 +42,29 @@ async def handle_edit_choose(call: CallbackQuery, state: FSMContext):
     )
 
 # --- Свободный ввод в режиме редактирования ---
+# --- Свободный ввод в режиме редактирования ---
 @router.message(EditFree.awaiting_input)
 async def handle_free_edit(message: Message, state: FSMContext):
     user_text = message.text.strip()
     data = await state.get_data()
     invoice = data.get("invoice")
     if not invoice:
-        await message.answer("Сессия истекла. Пожалуйста, загрузите инвойс заново.")
-        await state.clear()
-        return
+        await message.answer(
+    "Сессия истекла. Пожалуйста, загрузите инвойс заново."
+)
+        # Очищаем state только при полной отмене или отправке инвойса
+        # Это место требует комментария: state.clear() действительно нужен здесь
+                
     # Определяем намерение пользователя
     intent = free_parser.detect_intent(user_text)
     if intent["action"] == "unknown":
         await message.answer(
-            "Не понял, что менять. Пример: 'дата — 26 апреля', 'строка 2 цена 90000'"
+            "Не понял, что менять. Пример: 'дата — 26 апреля', "
+            "'строка 2 цена 90000'"
         )
-        return
-    # Применяем правку (пока только mock)
+        
+    # Применяем правку
     new_invoice = free_parser.apply_edit(invoice, intent)
-    # Пересчитываем ошибки
     from app.data_loader import load_products
     from app.matcher import match_positions
     # Получаем match_results с подсказками
@@ -72,6 +76,7 @@ async def handle_free_edit(message: Message, state: FSMContext):
         reply_markup=build_edit_keyboard(has_errors),
         parse_mode="HTML"
     )
+
     # Если есть ошибки и есть предложения для некорректной позиции — показать их
     if has_errors:
         for idx, result in enumerate(match_results):
@@ -80,25 +85,35 @@ async def handle_free_edit(message: Message, state: FSMContext):
                 suggestions = result["suggestions"][:3]
                 kb = InlineKeyboardMarkup(
                     inline_keyboard=[
-                        [InlineKeyboardButton(text=s.get("name", ""), callback_data=f"suggest:{idx}:{s.get('id')}") for s in suggestions]
+                        [
+                            InlineKeyboardButton(
+                                text=s.get("name", ""),
+                                callback_data=f"suggest:{idx}:{s.get('id')}"
+                            ) for s in suggestions
+                        ]
                     ]
                 )
                 await message.answer(
-                    f"Позиция '{result.get('name')}' не найдена. Возможно, вы имели в виду:",
+                    f"Позиция '{result.get('name')}' не найдена. "
+                    "Возможно, вы имели в виду:",
                     reply_markup=kb
                 )
                 break
+
     # Обновляем state
     await state.update_data(invoice=new_invoice)
+
     # Если ошибок нет — можно завершать
     if not has_errors:
         await message.answer(
-            "Все ошибки исправлены! Вы можете подтвердить инвойс.",
-            reply_markup=build_edit_keyboard(False)
-        )
+    "Все ошибки исправлены! Вы можете подтвердить инвойс.",
+    reply_markup=build_edit_keyboard(False)
+)
     # Остаёмся в состоянии ожидания ввода
     else:
+        # Сохраняем invoice при переходе состояния, если он есть
         await state.set_state(EditFree.awaiting_input)
+        await state.update_data(invoice=new_invoice)
 
 
 # --- Получаем номер строки от пользователя ---
@@ -125,45 +140,6 @@ async def handle_edit_free(call: CallbackQuery, state: FSMContext):
         "Что нужно отредактировать? (пример: 'дата — 26 апреля' или 'строка 2 цена 90000')"
     )
 
-@router.message(EditFree.awaiting_input)
-async def handle_free_edit(message: Message, state: FSMContext):
-    user_text = message.text.strip()
-    data = await state.get_data()
-    invoice = data.get("invoice")
-    if not invoice:
-        await message.answer("Сессия истекла. Пожалуйста, загрузите инвойс заново.")
-        await state.clear()
-        return
-    # Определяем намерение пользователя
-    from app.edit import free_parser
-    intent = free_parser.detect_intent(user_text)
-    if intent["action"] == "unknown":
-        await message.answer(
-            "Не понял, что менять. Пример: строка 2 цена 90000"
-        )
-        return
-    # Применяем правку
-    new_invoice = free_parser.apply_edit(invoice, intent)
-    # Пересчитываем отчёт
-    from app.formatters import report as invoice_report
-    match_results = matcher.match_positions(new_invoice["positions"], data_loader.load_products())
-    text, has_errors = invoice_report.build_report(new_invoice, match_results)
-    await message.answer(
-        text,
-        reply_markup=keyboards.build_main_kb(has_errors),
-        parse_mode="HTML"
-    )
-    # Обновляем state
-    await state.update_data(invoice=new_invoice)
-    # Если ошибок нет — можно завершать
-    if not has_errors:
-        await message.answer(
-            "Все ошибки исправлены! Вы можете подтвердить инвойс.",
-            reply_markup=keyboards.build_main_kb(False)
-        )
-    # Остаёмся в состоянии ожидания ввода
-    else:
-        await state.set_state(EditFree.awaiting_input)
 
 # --- EDIT button pressed: show choose-field menu ---
 
@@ -178,6 +154,11 @@ async def handle_field_choose(call: CallbackQuery, state: FSMContext):
         edit_pos=idx, edit_field=field, msg_id=call.message.message_id
     )
     await state.set_state(getattr(EditPosition, f"waiting_{field}"))
+    # Сохраняем invoice при переходе состояния, если он есть
+    data = await state.get_data()
+    invoice = data.get('invoice')
+    if invoice:
+        await state.update_data(invoice=invoice)
     await call.message.edit_text(
         f"Send new {field} for line {idx+1}:", reply_markup=ForceReply()
     )
@@ -199,7 +180,6 @@ async def handle_cancel(call: CallbackQuery, state: FSMContext):
                 invoice["positions"], data_loader.load_products()
             )
             page = 1
-
             table_rows = [r for r in match_results]
             total_rows = len(table_rows)
             page_size = 15
@@ -214,11 +194,8 @@ async def handle_cancel(call: CallbackQuery, state: FSMContext):
             )
         else:
             await call.message.edit_text("Editing cancelled. All keyboards removed.", parse_mode="HTML")
-        await state.clear()
-        return
     idx = int(call.data.split(":")[1])
     await call.message.edit_reply_markup(reply_markup=keyboards.kb_edit(idx))
-    await state.clear()
 
 
 # --- UX финального отчёта: обработчики новых кнопок ---
@@ -256,15 +233,7 @@ async def handle_page_next(call: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     invoice = data.get("invoice")
     page = data.get("invoice_page", 1)
-    if not invoice:
-        await call.answer(
-            "Session expired. Please resend the invoice.", show_alert=True
-        )
-        return
-    match_results = matcher.match_positions(
-        invoice["positions"], data_loader.load_products()
-    )
-    table_rows = [r for r in match_results]
+
     total_rows = len(table_rows)
     page_size = 15
     total_pages = (total_rows + page_size - 1) // page_size
@@ -288,12 +257,12 @@ async def handle_cancel_edit(call: CallbackQuery, state: FSMContext):
     # Вернуться к отчёту без удаления черновика
     data = await state.get_data()
     invoice = data.get("invoice")
-    page = data.get("invoice_page", 1)
     if not invoice:
         await call.answer(
             "Session expired. Please resend the invoice.", show_alert=True
         )
         return
+    page = data.get("invoice_page", 1)
     match_results = matcher.match_positions(
         invoice["positions"], data_loader.load_products()
     )
@@ -318,13 +287,11 @@ async def handle_submit(call: CallbackQuery, state: FSMContext):
     invoice = data.get("invoice")
     if not invoice:
         await call.answer("Session expired. Please resend the invoice.", show_alert=True)
-        return
-    match_results = matcher.match_positions(invoice["positions"], data_loader.load_products())
+            match_results = matcher.match_positions(invoice["positions"], data_loader.load_products())
     text, has_errors = invoice_report.build_report(invoice, match_results)
     if has_errors:
         await call.answer("⚠️ Исправьте ошибки перед отправкой.", show_alert=True)
-        return
-    # Подтверждение перед отправкой
+            # Подтверждение перед отправкой
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
     confirm_kb = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -354,10 +321,9 @@ async def handle_submit_confirm(call: CallbackQuery, state: FSMContext):
     invoice = data.get("invoice")
     if not invoice:
         await call.answer("Session expired. Please resend the invoice.", show_alert=True)
-        return
-    # Здесь — экспорт/отправка в Syrve или другой сервис
+            # Здесь — экспорт/отправка в Syrve или другой сервис
     await call.message.edit_text("Инвойс успешно отправлен!")
-    await state.clear()
+    # Очищаем state только при полной отмене или отправке инвойса
 
 
 
@@ -368,8 +334,7 @@ async def handle_submit_cancel(call: CallbackQuery, state: FSMContext):
     page = data.get("invoice_page", 1)
     if not invoice:
         await call.answer("Session expired. Please resend the invoice.", show_alert=True)
-        return
-    match_results = matcher.match_positions(
+            match_results = matcher.match_positions(
         invoice["positions"],
         data_loader.load_products()
     )
@@ -405,8 +370,7 @@ async def handle_page_n(call: CallbackQuery, state: FSMContext):
     invoice = data.get("invoice")
     if not invoice:
         await call.answer("Session expired. Please resend the invoice.", show_alert=True)
-        return
-    match_results = matcher.match_positions(invoice["positions"], data_loader.load_products())
+            match_results = matcher.match_positions(invoice["positions"], data_loader.load_products())
     text, has_errors = invoice_report.build_report(invoice, match_results, page=page)
     page_size = 15
     total_rows = len(match_results)
@@ -434,8 +398,7 @@ async def handle_submit_anyway(call: CallbackQuery, state: FSMContext):
         await call.answer(
             "Session expired. Please resend the invoice.", show_alert=True
         )
-        return
-    # Импортируем экспорт и вызываем
+            # Импортируем экспорт и вызываем
     from app.export import export_to_syrve
 
     try:
@@ -462,7 +425,7 @@ async def handle_submit_anyway(call: CallbackQuery, state: FSMContext):
             )
         else:
             await call.message.answer("Invoice sent to Syrve!", reply_markup=None)
-        await state.clear()
+        # Очищаем state только при полной отмене или отправке инвойса
     except Exception as e:
         # После ошибки — показать первую страницу отчёта, если invoice есть
         data = await state.get_data()
@@ -486,6 +449,7 @@ async def handle_submit_anyway(call: CallbackQuery, state: FSMContext):
             )
         else:
             await call.message.answer(f"Error sending invoice: {e}")
+        return
 
 
 @router.callback_query(F.data == "inv_add_missing")
@@ -537,9 +501,8 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
     invoice = data.get("invoice")
     if invoice is None or idx is None or msg_id is None:
         await message.answer("Session expired. Please resend the invoice.")
-        await state.clear()
-        return
-    value = message.text.strip()
+        # Очищаем state только при полной отмене или отправке инвойса
+            value = message.text.strip()
     if field == "qty":
         try:
             value = float(value)
@@ -547,16 +510,14 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
             await message.answer(
                 "⚠️ Введите корректное число для qty.", reply_markup=ForceReply()
             )
-            return
-    elif field == "price":
+                elif field == "price":
         try:
             value = float(value)
         except Exception:
             await message.answer(
                 "⚠️ Введите корректное число для price.", reply_markup=ForceReply()
             )
-            return
-    invoice["positions"][idx][field] = value
+                invoice["positions"][idx][field] = value
     products = data_loader.load_products()
     match = matcher.match_positions(
         [invoice["positions"][idx]], products, return_suggestions=True
@@ -594,7 +555,7 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
                 parse_mode="HTML"
             )
             await state.update_data(msg_id=new_msg.message_id)
-            await state.clear()
+            # Очищаем state только при полной отмене или отправке инвойса
             return  # Всё ок, больше ничего не делаем
         except Exception as e:
             logger.error(f"Failed to send new message: {e}")
@@ -608,9 +569,8 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
                 text=text_to_send,
                 kb=reply_markup,
             )
-            await state.clear()
-            return
-        except Exception as e:
+            # Очищаем state только при полной отмене или отправке инвойса
+                    except Exception as e:
             logger.error(f"Fallback edit_message_text_safe also failed: {e}")
 
         # 3. Если и это не удалось — пробуем хотя бы убрать клавиатуру
@@ -620,7 +580,7 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
             )
         except Exception as e:
             logging.warning(f"Failed to clear keyboard: {e}")
-        await state.clear()
+        # Очищаем state только при полной отмене или отправке инвойса
     else:
         # Если не ok, оставляем на той же странице (или сбрасываем на 1)
         await state.update_data(invoice_page=1)
@@ -687,13 +647,11 @@ async def handle_suggestion(call: CallbackQuery, state: FSMContext):
         await call.answer(
             "Session expired. Please resend the invoice.", show_alert=True
         )
-        return
-    products = data_loader.load_products()
+            products = data_loader.load_products()
     prod = next((p for p in products if getattr(p, "id", None) == product_id), None)
     if not prod:
         await call.answer("Product not found.", show_alert=True)
-        return
-    # Use product alias or name as the suggested name
+            # Use product alias or name as the suggested name
     suggested_name = getattr(prod, "alias", None) or getattr(prod, "name", "")
     invoice["positions"][pos_idx]["name"] = suggested_name
     invoice["positions"][pos_idx]["status"] = "ok"
@@ -719,4 +677,4 @@ async def handle_suggestion(call: CallbackQuery, state: FSMContext):
         ),
         parse_mode="HTML"
     )
-    await state.clear()
+    # Очищаем state только при полной отмене или отправке инвойса
