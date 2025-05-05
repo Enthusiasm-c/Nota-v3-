@@ -43,14 +43,14 @@ def build_table(rows):
     from html import escape as html_escape
     
     status_map = {"ok": "✓", "unit_mismatch": "🚫", "unknown": "🚫", "ignored": "🚫", "error": "🚫"}
-    header = "#  NAME                 QTY UNIT        TOTAL  ⚑"
+    header = "#  NAME           QTY  UNIT   TOTAL    ⚑"
     divider = "─" * len(header)
     table_rows = [header, divider]
-    
+
     for idx, item in enumerate(rows, 1):
         name = item.get("name", "")
-        if len(name) > 19:
-            name = name[:18] + "…"
+        if len(name) > 13:
+            name = name[:12] + "…"
         name = html_escape(name)
         qty = item.get("qty", "")
         unit = html_escape(item.get("unit", ""))
@@ -58,9 +58,9 @@ def build_table(rows):
         total_str = format_idr(total) if total not in (None, "") else "—"
         status = item.get("status", "")
         status_str = status_map.get(status, "")
-        row = f"{idx:<2} {name:<19} {qty:>6} {unit:<4} {total_str:>12} {status_str}"
+        row = f"{idx:<2} {name:<13} {qty:>5} {unit:<5} {total_str:>9} {status_str}"
         table_rows.append(row)
-    
+
     return "\n".join(table_rows)
 
 def build_summary(ok_count, issues_count, invoice_total):
