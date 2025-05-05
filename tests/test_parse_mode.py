@@ -20,3 +20,16 @@ async def test_edit_message_text_safe_parse_mode_html():
         reply_markup=kb,
         parse_mode='HTML',
     )
+
+    # Проверяем отсутствие "сырых" HTML-тегов или их обрывков в отправляемом тексте
+    sent_args = bot.edit_message_text.await_args.kwargs
+    sent_text = sent_args['text']
+    # Не должно быть обрывков вида 'bSupplier', '/b', '&lt;b&gt;', '&lt;/b&gt;', '&lt;br&gt;'
+    assert not any(
+        pattern in sent_text
+        for pattern in [
+            "bSupplier", "/b", "&lt;b&gt;", "&lt;/b&gt;", "&lt;br&gt;"
+        ]
+    ), f"Message contains unformatted HTML: {sent_text}"
+    # Должны остаться корректные HTML-теги
+    assert "<b>" in sent_text and "</b>" in sent_text and "<br>" in sent_text

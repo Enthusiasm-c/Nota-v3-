@@ -655,6 +655,8 @@ async def handle_nlu_text(message, state: FSMContext):
 
         # Отвечаем новым сообщением
         # Не экранируем HTML-теги для HTML режима
+        logger.debug("TELEGRAM OUT >>> %s", assistant_response[:300])
+        logger.debug("TELEGRAM parse_mode: %s", ParseMode.HTML)
         await message.answer(assistant_response, parse_mode=ParseMode.HTML)
 
         # Сохраняем состояние редактирования инвойса
@@ -896,16 +898,18 @@ async def handle_field_edit(message, state: FSMContext):
         formatted_report = report
 
         # Отправляем новое сообщение с обновленным отчетом
-        try:
-            logger.debug(f"BUGFIX: Sending new report")
-            result = await message.answer(
-                formatted_report,
-                reply_markup=kb_report(entry["match_results"]),
-                parse_mode=ParseMode.HTML,
-            )
+        logger.debug("TELEGRAM OUT >>> %s", formatted_report[:300])
+        logger.debug("TELEGRAM parse_mode: %s", ParseMode.HTML)
+        result = await message.answer(
+            formatted_report,
+            reply_markup=kb_report(entry["match_results"]),
+            parse_mode=ParseMode.HTML,
+        )
 
-            # Обновляем ссылки в user_matches с новым ID сообщения
-            new_msg_id = result.message_id
+        # Обновляем ссылки в user_matches с новым ID сообщения
+        new_msg_id = result.message_id
+        new_key = (user_id, new_msg_id)
+        user_matches[new_key] = entry.copy()
             new_key = (user_id, new_msg_id)
             user_matches[new_key] = entry.copy()
 
