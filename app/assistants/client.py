@@ -29,22 +29,11 @@ def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
     
     Returns:
         Dict: JSON-объект с результатом разбора команды
-        
-    Raises:
-        TimeoutError: Если запрос выполняется дольше timeout
-        ValueError: Если ответ не соответствует ожидаемому формату
     """
-    if not ASSISTANT_ID:
-        logger.error("OpenAI Assistant ID не настроен")
-        return {"action": "unknown", "error": "assistant_not_configured"}
-    
     start_time = time.time()
     
-    # Лог входящего сообщения
-    logger.info(f"FREE EDIT → {user_input}")
-    
     try:
-        # Создаем thread
+        # Создаем новый тред
         thread = client.beta.threads.create()
         
         # Добавляем сообщение пользователя
@@ -89,11 +78,44 @@ def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
                     
                     # Простой парсер для команды изменения даты
                     if "дата" in command.lower() or "date" in command.lower():
-                        date_parts = [part for part in command.split() if part.isdigit() or part in ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"]]
-                        if len(date_parts) >= 2:
+                        # Более надежный парсер для даты, учитывающий разные форматы
+                        words = command.lower().split()
+                        # Находим числа (день) и месяцы в тексте
+                        months = {
+                            "января": 1, "февраля": 2, "марта": 3, "апреля": 4, 
+                            "мая": 5, "июня": 6, "июля": 7, "августа": 8, 
+                            "сентября": 9, "октября": 10, "ноября": 11, "декабря": 12,
+                            "январь": 1, "февраль": 2, "март": 3, "апрель": 4, 
+                            "май": 5, "июнь": 6, "июль": 7, "август": 8, 
+                            "сентябрь": 9, "октябрь": 10, "ноябрь": 11, "декабрь": 12
+                        }
+                        
+                        day = None
+                        month = None
+                        year = None
+                        
+                        # Ищем день (число)
+                        for word in words:
+                            if word.isdigit() and 1 <= int(word) <= 31 and day is None:
+                                day = int(word)
+                            elif word.isdigit() and int(word) > 2000 and year is None:
+                                year = int(word)
+                        
+                        # Ищем месяц (название)
+                        for word in words:
+                            if word in months:
+                                month = months[word]
+                                break
+                        
+                        # Если нашли и день, и месяц
+                        if day and month:
+                            date_str = f"{day} {month}"
+                            if year:
+                                date_str += f" {year}"
+                                
                             tool_outputs.append({
                                 "tool_call_id": tool_call.id,
-                                "output": json.dumps({"action": "set_date", "date": " ".join(date_parts)})
+                                "output": json.dumps({"action": "set_date", "date": date_str})
                             })
                         else:
                             tool_outputs.append({
@@ -188,9 +210,10 @@ def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
                 logger.error("Assistant did not generate any response")
                 return {"action": "unknown", "error": "no_response"}
             
-            # Извлекаем JSON-ответ из сообщения
+            # Извлекаем ответ из сообщения
             try:
                 content = assistant_messages[0].content[0].text.value
+                
                 # Проверяем, есть ли JSON в тексте
                 if "{" in content and "}" in content:
                     # Извлекаем только JSON-часть ответа
@@ -209,9 +232,53 @@ def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
                     
                     return result
                 else:
-                    # Если нет JSON в ответе, рассматриваем как ошибку
-                    logger.error(f"Assistant response does not contain JSON: {content}")
-                    return {"action": "unknown", "error": "no_json_in_response"}
+                    # Если нет JSON в ответе, пытаемся распарсить текстовый ответ
+                    logger.info(f"Parsing text response: {content}")
+                    
+                    # Пытаемся распознать команды в тексте
+                    content_lower = content.lower()
+                    
+                    # Распознаем команду изменения даты
+                    if ("дат" in content_lower or "date" in content_lower) and ("изменить" in content_lower or "исправить" in content_lower):
+                        # Ищем числа (день) и месяцы в тексте
+                        words = content_lower.split()
+                        months = {
+                            "января": 1, "февраля": 2, "марта": 3, "апреля": 4, 
+                            "мая": 5, "июня": 6, "июля": 7, "августа": 8, 
+                            "сентября": 9, "октября": 10, "ноября": 11, "декабря": 12,
+                            "январь": 1, "февраль": 2, "март": 3, "апрель": 4, 
+                            "май": 5, "июнь": 6, "июль": 7, "август": 8, 
+                            "сентябрь": 9, "октябрь": 10, "ноябрь": 11, "декабрь": 12
+                        }
+                        
+                        day = None
+                        month = None
+                        year = None
+                        
+                        # Ищем день (число)
+                        for word in words:
+                            if word.isdigit() and 1 <= int(word) <= 31 and day is None:
+                                day = int(word)
+                            elif word.isdigit() and int(word) > 2000 and year is None:
+                                year = int(word)
+                        
+                        # Ищем месяц (название)
+                        for word in words:
+                            if word in months:
+                                month = months[word]
+                                break
+                        
+                        # Если нашли и день, и месяц
+                        if day and month:
+                            date_str = f"{day} {month}"
+                            if year:
+                                date_str += f" {year}"
+                                
+                            return {"action": "set_date", "date": date_str}
+                    
+                    # Если не удалось распознать команду, возвращаем ошибку
+                    logger.error(f"Could not parse text response: {content}")
+                    return {"action": "unknown", "error": "unparseable_text_response"}
             except Exception as e:
                 logger.exception(f"Error parsing assistant response: {e}")
                 return {"action": "unknown", "error": f"parse_error: {str(e)}"}
