@@ -65,27 +65,47 @@ async def handle_free_edit_text(message: Message, state: FSMContext):
     # Пересчитываем ошибки и обновляем отчёт
     match_results = match_positions(new_invoice["positions"], load_products())
     text, has_errors = report.build_report(new_invoice, match_results)
-    
+
+    # Fuzzy-подсказка для некорректного имени позиции
+    from rapidfuzz import process as fuzzy_process
+    products = load_products()
+    product_names = [p.name for p in products]
+    for idx, item in enumerate(match_results):
+        if item.get("status") == "unknown":
+            name_to_check = item.get("name", "")
+            # Ищем ближайшее совпадение
+            result = fuzzy_process.extractOne(name_to_check, product_names, score_cutoff=82)
+            if result:
+                suggestion, score = result[0], result[1]
+                # Отправляем подсказку пользователю
+                await message.answer(
+                    f"Наверное, вы имели в виду <b>{suggestion}</b>? Если да, напишите: строка {idx+1} name {suggestion}",
+                    parse_mode="HTML"
+                )
+                # Сохраняем оригинал и подсказку в state для теста и дальнейшей логики
+                await state.update_data(fuzzy_original=name_to_check, fuzzy_match=suggestion)
+                break  # Показываем только одну подсказку за раз
+
     # Подсчитываем количество оставшихся проблем
     issues_count = sum(1 for item in match_results if item.get("status", "") != "ok")
-    
+
     # Обновляем данные в состоянии
     await state.update_data(invoice=new_invoice, issues_count=issues_count)
-    
+
     # Генерируем клавиатуру в зависимости от наличия ошибок
     keyboard = build_main_kb(has_errors)
-    
+
     # Отправляем обновлённый отчёт
     await message.answer(
         text, 
         reply_markup=keyboard, 
         parse_mode="HTML"
     )
-    
+
     # Добавляем сообщение об успешном редактировании
     if not has_errors:
         await message.answer("✅ Все ошибки исправлены! Вы можете подтвердить инвойс.")
-    
+
     # Остаёмся в том же состоянии для продолжения редактирования
     await state.set_state(EditFree.awaiting_input)
 

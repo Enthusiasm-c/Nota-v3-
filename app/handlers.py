@@ -128,6 +128,10 @@ async def handle_choose_line(message: Message, state: FSMContext):
     idx = int(text) - 1
     await state.update_data(edit_pos=idx)
     # Instead of showing a per-line field menu, prompt for free text input
+    # Явно обновляем invoice в FSM для надёжности
+    invoice = data.get('invoice')
+    if invoice:
+        await state.update_data(invoice=invoice)
     await state.set_state(EditFree.awaiting_input)
     await message.answer(
         "Что нужно отредактировать? (пример: 'дата — 26 апреля' или 'строка 2 цена 90000')",

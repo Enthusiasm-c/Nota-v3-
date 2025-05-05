@@ -160,6 +160,12 @@ def apply_intent(invoice: Dict[str, Any], intent: Dict[str, Any]) -> Dict[str, A
             intent.get("value", "")
         )
     
+    elif action == "edit_name":
+        return set_name(
+            invoice,
+            intent.get("line", 0),
+            intent.get("value", "")
+        )
     else:
         logger.warning(f"Неизвестное действие в интенте: {action}")
         return deepcopy(invoice)  # Возвращаем копию без изменений

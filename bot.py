@@ -433,13 +433,15 @@ async def photo_handler(message, state: FSMContext, **kwargs):
                 parse_mode=None,
             )
         elif stage and stage_name:
-            await safe_edit(
-                bot,
-                message.chat.id,
-                progress_msg_id,
-                f"🔄 {stage_name}...",
-                parse_mode=None,
-            )
+            # [INTERNAL] Stage progress, do not show to user
+            pass
+# await safe_edit(
+#     bot,
+#     message.chat.id,
+#     progress_msg_id,
+#     f"🔄 {stage_name}...",
+#     parse_mode=None,
+# )
 
     # Передаем функцию обновления прогресса
     kwargs["_update_progress"] = update_progress_message
@@ -1305,6 +1307,9 @@ async def handle_edit_reply(message):
 #             f"Ошибка при редактировании: {str(e)}. Попробуйте еще раз."
 #         )
 
+
+from app.keyboards import build_main_kb
+from app import data_loader, matcher
 
 async def confirm_fuzzy_name(callback: CallbackQuery, state: FSMContext):
     """
