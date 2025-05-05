@@ -1,0 +1,75 @@
+import pytest
+from app.edit.apply_intent import (
+    set_price,
+    set_date,
+    set_name,
+    set_quantity,
+    set_unit,
+    apply_intent
+)
+
+def test_set_price():
+    """Тест функции set_price"""
+    invoice = {
+        "positions": [
+            {"name": "Товар 1", "price": "100", "status": "error"},
+            {"name": "Товар 2", "price": "200", "status": "error"},
+        ]
+    }
+    
+    # Меняем цену второго товара
+    result = set_price(invoice, 1, "95000")
+    
+    # Проверяем что цена изменилась
+    assert result["positions"][1]["price"] == "95000"
+    # Проверяем что статус изменился на ok
+    assert result["positions"][1]["status"] == "ok"
+    # Проверяем что первый товар не изменился
+    assert result["positions"][0]["price"] == "100"
+
+def test_set_date():
+    """Тест функции set_date"""
+    invoice = {"date": "", "supplier": "Test"}
+    
+    # Устанавливаем дату
+    result = set_date(invoice, "2025-04-16")
+    
+    # Проверяем что дата изменилась
+    assert result["date"] == "2025-04-16"
+    # Проверяем что supplier не изменился
+    assert result["supplier"] == "Test"
+
+def test_apply_intent_price():
+    """Тест apply_intent для изменения цены"""
+    invoice = {
+        "positions": [
+            {"name": "Товар 1", "price": "100", "status": "error"},
+        ]
+    }
+    
+    intent = {
+        "action": "set_price",
+        "line_index": 0,
+        "value": "95000"
+    }
+    
+    result = apply_intent(invoice, intent)
+    
+    # Проверяем что цена изменилась
+    assert result["positions"][0]["price"] == "95000"
+    # Проверяем что статус изменился на ok
+    assert result["positions"][0]["status"] == "ok"
+
+def test_apply_intent_date():
+    """Тест apply_intent для изменения даты"""
+    invoice = {"date": "", "supplier": "Test"}
+    
+    intent = {
+        "action": "set_date",
+        "value": "2025-04-16"
+    }
+    
+    result = apply_intent(invoice, intent)
+    
+    # Проверяем что дата изменилась
+    assert result["date"] == "2025-04-16"

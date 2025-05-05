@@ -131,6 +131,18 @@ def build_summary(match_results):
         + f"\nCorrect: {correct}\nIssues: {issues}"
     )
 
+def count_issues(match_results):
+    """
+    Подсчитывает количество проблемных позиций в результатах матчинга.
+    
+    Args:
+        match_results: Список результатов матчинга позиций
+        
+    Returns:
+        int: Количество позиций со статусом отличным от "ok"
+    """
+    return sum(1 for item in match_results if item.get("status", "") != "ok")
+
 def build_report(parsed_data, match_results, escape_html=True, page=1, page_size=40):
     """
     Формирует HTML-отчет по инвойсу с пагинацией.

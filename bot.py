@@ -30,6 +30,9 @@ from app import ocr, matcher, data_loader
 from app.utils.md import escape_html, clean_html
 from app.config import settings
 
+# Импортируем обработчики для свободного редактирования
+from app.handlers.edit_flow import router as edit_flow_router, handle_free_edit_text
+
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,  # Default to INFO level
@@ -330,10 +333,13 @@ def register_handlers(dp, bot=None):
     dp.message.register(cancel_command, Command("cancel"))
     dp.message.register(handle_edit_reply, F.reply_to_message)
     
-    # Новые обработчики для свободного редактирования
-    dp.message.register(handle_free_edit_text, EditFree.awaiting_input)
-    dp.callback_query.register(confirm_fuzzy_name, F.data.startswith("fuzzy:confirm:"))
-    dp.callback_query.register(reject_fuzzy_name, F.data.startswith("fuzzy:reject:"))
+    # Подключаем роутер для GPT-ассистента
+    dp.include_router(edit_flow_router)
+    
+    # Закоментированы в пользу новой реализации через GPT
+    # dp.message.register(handle_free_edit_text, EditFree.awaiting_input)
+    # dp.callback_query.register(confirm_fuzzy_name, F.data.startswith("fuzzy:confirm:"))
+    # dp.callback_query.register(reject_fuzzy_name, F.data.startswith("fuzzy:reject:"))
 
 
 # Remove any handler registration from the module/global scope.
@@ -1152,151 +1158,152 @@ async def handle_edit_reply(message):
     report, has_errors = build_report(parsed_data, match_results)
     await message.reply(f"✏️ Updated line {idx+1}.\n" + report)
     
-    
-from app.edit.free_parser import detect_intent, apply_edit
-from app.keyboards import build_main_kb
-from rapidfuzz import process as fuzzy_process
-
-
-async def handle_free_edit_text(message: types.Message, state: FSMContext):
-    """
-    Обработчик текстовых сообщений в режиме свободного редактирования.
-    Парсит команду и применяет соответствующее изменение к инвойсу.
-    
-    Args:
-        message: Сообщение с командой редактирования
-        state: Состояние FSM для пользователя
-    """
-    text = message.text.strip()
-    user_id = message.from_user.id
-    
-    # Проверка на команду отмены
-    if text.lower() in ["отмена", "cancel"]:
-        await state.set_state(NotaStates.editing)
-        await message.answer("Редактирование отменено")
-        return
-    
-    # Получаем данные из state
-    data = await state.get_data()
-    edit_msg_id = data.get("edit_msg_id")
-    
-    if not edit_msg_id:
-        await message.answer("Ошибка: данные инвойса не найдены.")
-        await state.set_state(NotaStates.editing)
-        return
-        
-    # Получаем данные инвойса
-    key = (user_id, edit_msg_id)
-    
-    if key not in user_matches:
-        # Попробуем найти по user_id, если нет точного ключа
-        alt_keys = [k for k in user_matches.keys() if k[0] == user_id]
-        if alt_keys:
-            key = max(alt_keys, key=lambda k: k[1])
-        else:
-            await message.answer("Ошибка: данные инвойса не найдены.")
-            await state.set_state(NotaStates.editing)
-            return
-    
-    entry = user_matches[key]
-    
-    # Определяем намерение пользователя
-    intent = detect_intent(text)
-    
-    # Если это редактирование имени (name), проверяем fuzzy match
-    if intent["action"] == "edit_line_field" and intent["field"] in ["name", "имя"]:
-        field_value = intent["value"]
-        line_idx = intent["line"] - 1
-        
-        # Загружаем базу продуктов
-        products = data_loader.load_products("data/base_products.csv")
-        
-        # Ищем ближайшее совпадение с порогом 0.82 (82%)
-        product_names = [p.name for p in products]
-        best_match, score = None, 0
-        
-        if product_names:
-            result = fuzzy_process.extractOne(field_value, product_names)
-            if result is not None:
-                best_match, score = result[0], result[1]
-            else:
-                best_match, score = None, 0
-        
-        # Если есть хорошее совпадение (≥82%), предлагаем пользователю подтвердить
-        if best_match and score >= 82:
-            # Сохраняем контекст для подтверждения
-            await state.update_data(
-                fuzzy_original=field_value,
-                fuzzy_match=best_match,
-                fuzzy_line=line_idx,
-                fuzzy_msg_id=edit_msg_id
-            )
-            
-            # Создаем клавиатуру для подтверждения
-            keyboard = InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text="✓ Да", callback_data=f"fuzzy:confirm:{line_idx}"
-                        ),
-                        InlineKeyboardButton(
-                            text="✗ Нет", callback_data=f"fuzzy:reject:{line_idx}"
-                        )
-                    ]
-                ]
-            )
-            
-            # Отправляем вопрос с кнопками подтверждения
-            await message.answer(
-                f"Наверное, вы имели в виду \"{best_match}\"?",
-                reply_markup=keyboard
-            )
-            
-            # Переходим в состояние ожидания подтверждения
-            await state.set_state(EditFree.awaiting_free_edit)
-            return
-    
-    # Применяем изменения
-    try:
-        # Подготавливаем контекст
-        ctx = {
-            "parsed_data": entry["parsed_data"],
-            "match_results": entry["match_results"],
-            "positions": entry["match_results"]
-        }
-        
-        # Применяем изменения
-        updated_ctx = apply_edit(ctx, intent)
-        
-        # Обновляем данные
-        entry["match_results"] = updated_ctx["positions"]
-        
-        # Формируем новый отчет
-        report, has_errors = build_report(entry["parsed_data"], entry["match_results"], escape_html=True)
-        
-        # Отправляем сообщение с обновленным отчетом
-        result = await message.answer(
-            report,
-            reply_markup=build_main_kb(has_errors=has_errors),
-            parse_mode=ParseMode.HTML
-        )
-        
-        # Обновляем ссылку в user_matches с новым ID сообщения
-        new_msg_id = result.message_id
-        new_key = (user_id, new_msg_id)
-        user_matches[new_key] = entry.copy()
-        
-        # Сохраняем новый message_id в state
-        await state.update_data(edit_msg_id=new_msg_id)
-        
-        # Возвращаемся в режим обычного редактирования
-        await state.set_state(NotaStates.editing)
-        
-    except Exception as e:
-        logger.error(f"Error in free edit: {e}")
-        await message.answer(
-            f"Ошибка при редактировании: {str(e)}. Попробуйте еще раз."
-        )
+#     
+# from app.edit.free_parser import detect_intent, apply_edit
+# from app.keyboards import build_main_kb
+# from rapidfuzz import process as fuzzy_process
+# 
+# 
+# # Функция перенесена в app/handlers/edit_flow.py
+# # async def handle_free_edit_text(message: types.Message, state: FSMContext):
+# #     """
+# #     Обработчик текстовых сообщений в режиме свободного редактирования.
+# #     Парсит команду и применяет соответствующее изменение к инвойсу.
+# #     
+# #     Args:
+# #         message: Сообщение с командой редактирования
+# #         state: Состояние FSM для пользователя
+# #     """
+# #     text = message.text.strip()
+# #     user_id = message.from_user.id
+# #     
+# #     # Проверка на команду отмены
+# #     if text.lower() in ["отмена", "cancel"]:
+# #         await state.set_state(NotaStates.editing)
+# #         await message.answer("Редактирование отменено")
+# #         return
+# #     
+# #     # Получаем данные из state
+# #     data = await state.get_data()
+# #     edit_msg_id = data.get("edit_msg_id")
+# #     
+# #     if not edit_msg_id:
+# #         await message.answer("Ошибка: данные инвойса не найдены.")
+# #         await state.set_state(NotaStates.editing)
+# #         return
+# #         
+# #     # Получаем данные инвойса
+# #     key = (user_id, edit_msg_id)
+#     
+# #     if key not in user_matches:
+# #         # Попробуем найти по user_id, если нет точного ключа
+# #         alt_keys = [k for k in user_matches.keys() if k[0] == user_id]
+# #         if alt_keys:
+# #             key = max(alt_keys, key=lambda k: k[1])
+# #         else:
+# #             await message.answer("Ошибка: данные инвойса не найдены.")
+# #             await state.set_state(NotaStates.editing)
+# #             return
+# #     
+# #     entry = user_matches[key]
+# #     
+# #     # Определяем намерение пользователя
+# #     intent = detect_intent(text)
+#     
+#     # Если это редактирование имени (name), проверяем fuzzy match
+#     if intent["action"] == "edit_line_field" and intent["field"] in ["name", "имя"]:
+#         field_value = intent["value"]
+#         line_idx = intent["line"] - 1
+#         
+#         # Загружаем базу продуктов
+#         products = data_loader.load_products("data/base_products.csv")
+#         
+#         # Ищем ближайшее совпадение с порогом 0.82 (82%)
+#         product_names = [p.name for p in products]
+#         best_match, score = None, 0
+#         
+#         if product_names:
+#             result = fuzzy_process.extractOne(field_value, product_names)
+#             if result is not None:
+#                 best_match, score = result[0], result[1]
+#             else:
+#                 best_match, score = None, 0
+#         
+#         # Если есть хорошее совпадение (≥82%), предлагаем пользователю подтвердить
+#         if best_match and score >= 82:
+#             # Сохраняем контекст для подтверждения
+#             await state.update_data(
+#                 fuzzy_original=field_value,
+#                 fuzzy_match=best_match,
+#                 fuzzy_line=line_idx,
+#                 fuzzy_msg_id=edit_msg_id
+#             )
+#             
+#             # Создаем клавиатуру для подтверждения
+#             keyboard = InlineKeyboardMarkup(
+#                 inline_keyboard=[
+#                     [
+#                         InlineKeyboardButton(
+#                             text="✓ Да", callback_data=f"fuzzy:confirm:{line_idx}"
+#                         ),
+#                         InlineKeyboardButton(
+#                             text="✗ Нет", callback_data=f"fuzzy:reject:{line_idx}"
+#                         )
+#                     ]
+#                 ]
+#             )
+#             
+#             # Отправляем вопрос с кнопками подтверждения
+#             await message.answer(
+#                 f"Наверное, вы имели в виду \"{best_match}\"?",
+#                 reply_markup=keyboard
+#             )
+#             
+#             # Переходим в состояние ожидания подтверждения
+#             await state.set_state(EditFree.awaiting_free_edit)
+#             return
+#     
+#     # Применяем изменения
+#     try:
+#         # Подготавливаем контекст
+#         ctx = {
+#             "parsed_data": entry["parsed_data"],
+#             "match_results": entry["match_results"],
+#             "positions": entry["match_results"]
+#         }
+#         
+#         # Применяем изменения
+#         updated_ctx = apply_edit(ctx, intent)
+#         
+#         # Обновляем данные
+#         entry["match_results"] = updated_ctx["positions"]
+#         
+#         # Формируем новый отчет
+#         report, has_errors = build_report(entry["parsed_data"], entry["match_results"], escape_html=True)
+#         
+#         # Отправляем сообщение с обновленным отчетом
+#         result = await message.answer(
+#             report,
+#             reply_markup=build_main_kb(has_errors=has_errors),
+#             parse_mode=ParseMode.HTML
+#         )
+#         
+#         # Обновляем ссылку в user_matches с новым ID сообщения
+#         new_msg_id = result.message_id
+#         new_key = (user_id, new_msg_id)
+#         user_matches[new_key] = entry.copy()
+#         
+#         # Сохраняем новый message_id в state
+#         await state.update_data(edit_msg_id=new_msg_id)
+#         
+#         # Возвращаемся в режим обычного редактирования
+#         await state.set_state(NotaStates.editing)
+#         
+#     except Exception as e:
+#         logger.error(f"Error in free edit: {e}")
+#         await message.answer(
+#             f"Ошибка при редактировании: {str(e)}. Попробуйте еще раз."
+#         )
 
 
 async def confirm_fuzzy_name(callback: CallbackQuery, state: FSMContext):

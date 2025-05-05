@@ -6,4 +6,5 @@ rapidfuzz>=3.0.0  # for fuzzy name matching
 python-dotenv # dev only
 pytest # for testing
 pytest-vcr
-openai>=1.13
+pytest-asyncio # for testing async code
+openai>=1.13 # для OCR и Assistant API
