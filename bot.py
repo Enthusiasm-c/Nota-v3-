@@ -81,8 +81,7 @@ def create_bot_and_dispatcher():
     dp = Dispatcher(storage=storage)
     dp.message.middleware(TracingLogMiddleware())
     dp.callback_query.middleware(TracingLogMiddleware())
-    # Регистрация роутеров
-    dp.include_router(edit_flow_router)
+    # Регистрация роутеров теперь только в register_handlers
     return bot, dp
 
 
