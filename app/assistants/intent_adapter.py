@@ -279,11 +279,18 @@ class IntentAdapter:
         try:
             # Обработка общих преобразований
             
-            # 1. Преобразование line -> line_index (из 1-based в 0-based)
+            # 1. Преобразование line/row -> line_index (из 1-based в 0-based)
             if "line" in intent and "line_index" not in intent:
                 try:
                     # Отнимаем 1, чтобы преобразовать из 1-based в 0-based
                     normalized["line_index"] = int(intent["line"]) - 1
+                except (ValueError, TypeError):
+                    normalized["line_index"] = 0  # Значение по умолчанию
+            elif "row" in intent and "line_index" not in intent:
+                try:
+                    # Отнимаем 1, чтобы преобразовать из 1-based в 0-based
+                    normalized["line_index"] = int(intent["row"]) - 1
+                    logger.info(f"Преобразовано поле 'row' в 'line_index': {normalized['line_index']}")
                 except (ValueError, TypeError):
                     normalized["line_index"] = 0  # Значение по умолчанию
             elif "line_index" in intent:

@@ -81,3 +81,19 @@ def test_intent_normalization_with_actions_array():
     assert "line_index" in result  # line должен быть преобразован в line_index (индекс с 0)
     assert result["line_index"] == 1  # 2-1 = 1 (конвертация из 1-based в 0-based)
     assert "value" in result  # price должен быть преобразован в value
+
+
+def test_row_field_converted_to_line_index():
+    """Проверяет конвертацию поля row в line_index."""
+    # Тестовый JSON с полем row вместо line
+    test_json = """{"actions":[{"action":"set_name","row":1,"name":"basil"}]}"""
+    
+    # Адаптация интента
+    result = adapt_intent(test_json)
+    
+    # Проверяем, что row преобразовано в line_index
+    assert result["action"] == "set_name"
+    assert "line_index" in result
+    assert result["line_index"] == 0  # row 1 должен стать line_index 0 (0-based)
+    assert "value" in result
+    assert result["value"] == "basil"
