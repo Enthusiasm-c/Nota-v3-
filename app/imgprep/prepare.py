@@ -3,17 +3,102 @@ Image preprocessing module for enhancing scanned invoices before OCR.
 """
 
 import io
-import cv2
-import numpy as np
 import logging
-from PIL import Image
+import numpy as np
 from typing import Optional, Tuple, List
+from PIL import Image, ImageEnhance, ImageFilter
+
+# Try to import OpenCV, fall back to PIL-only mode if not available
+try:
+    import cv2
+    OPENCV_AVAILABLE = True
+except ImportError:
+    OPENCV_AVAILABLE = False
+    logging.getLogger(__name__).warning("OpenCV (cv2) not available, using PIL fallback")
 
 logger = logging.getLogger(__name__)
 
 def prepare_for_ocr(path: str) -> bytes:
     """
     Prepare image for OCR by applying a series of enhancements.
+    
+    Args:
+        path: Path to the source image file
+        
+    Returns:
+        Processed image as bytes in WebP format
+    """
+    # Use OpenCV if available, otherwise use PIL fallback
+    if OPENCV_AVAILABLE:
+        return prepare_with_opencv(path)
+    else:
+        return prepare_with_pil(path)
+
+def prepare_with_pil(path: str) -> bytes:
+    """
+    PIL-only version of image preprocessing for systems without OpenCV.
+    
+    Args:
+        path: Path to the source image file
+        
+    Returns:
+        Processed image as bytes
+    """
+    try:
+        # Open image with PIL
+        image = Image.open(path)
+        
+        # Step 1: Resize if needed (max dimension 1200px)
+        width, height = image.size
+        max_dim = 1200
+        if max(width, height) > max_dim:
+            if width > height:
+                new_width = max_dim
+                new_height = int(height * (max_dim / width))
+            else:
+                new_height = max_dim
+                new_width = int(width * (max_dim / height))
+            image = image.resize((new_width, new_height), Image.LANCZOS)
+            logger.info(f"Resized image from {width}x{height} to {new_width}x{new_height}")
+        
+        # Step 2: Convert to grayscale
+        if image.mode != 'L':
+            image = image.convert('L')
+        
+        # Step 3: Enhance contrast
+        enhancer = ImageEnhance.Contrast(image)
+        image = enhancer.enhance(1.5)
+        
+        # Step 4: Apply sharpening filter
+        image = image.filter(ImageFilter.SHARPEN)
+        
+        # Step 5: Apply additional enhancement for text documents
+        enhancer = ImageEnhance.Brightness(image)
+        image = enhancer.enhance(1.1)  # Slightly increase brightness
+        
+        # Step 6: Save to bytes (WebP format if supported)
+        buffer = io.BytesIO()
+        if hasattr(Image, 'WEBP'):
+            image.save(buffer, format="WebP", quality=90)
+        else:
+            image.save(buffer, format="PNG", optimize=True)
+        
+        logger.info("Image processed with PIL (OpenCV not available)")
+        return buffer.getvalue()
+        
+    except Exception as e:
+        logger.error(f"Error preprocessing image with PIL: {str(e)}")
+        # Return original image if processing fails
+        try:
+            with open(path, "rb") as f:
+                return f.read()
+        except Exception as read_error:
+            logger.error(f"Error reading original image: {str(read_error)}")
+            raise
+
+def prepare_with_opencv(path: str) -> bytes:
+    """
+    OpenCV-based image preprocessing for enhanced OCR results.
     
     Args:
         path: Path to the source image file
@@ -50,7 +135,7 @@ def prepare_for_ocr(path: str) -> bytes:
         return save_to_webp(binary_img)
         
     except Exception as e:
-        logger.error(f"Error preprocessing image: {str(e)}")
+        logger.error(f"Error preprocessing image with OpenCV: {str(e)}")
         # Return original image if processing fails
         try:
             with open(path, "rb") as f:
@@ -59,6 +144,7 @@ def prepare_for_ocr(path: str) -> bytes:
             logger.error(f"Error reading original image: {str(read_error)}")
             raise
 
+# The remaining OpenCV functions are only used when OpenCV is available
 
 def resize_if_needed(img: np.ndarray, max_size: int = 1600, quality: int = 85) -> np.ndarray:
     """
