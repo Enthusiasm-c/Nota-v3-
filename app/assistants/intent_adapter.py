@@ -145,10 +145,15 @@ class IntentAdapter:
                     # Проверяем, содержит ли JSON поле actions или action
                     if isinstance(parsed_json, dict):
                         if "actions" in parsed_json or "action" in parsed_json:
-                            logger.info(f"Успешно извлечен JSON с полем actions/action: {json_str[:100]}...")
+                            # Уменьшаем логи в production - записываем только базовую информацию
+                            logger.info(f"Успешно извлечен JSON с полем actions/action")
+                            if logger.isEnabledFor(logging.DEBUG):
+                                logger.debug(f"Содержимое JSON: {json_str[:100]}...")
                             return parsed_json
                         else:
-                            logger.debug(f"Извлеченный JSON не содержит поля actions/action: {parsed_json}")
+                            # Записываем debug информацию только при включенном DEBUG уровне
+                            if logger.isEnabledFor(logging.DEBUG):
+                                logger.debug(f"Извлеченный JSON не содержит поля actions/action: {parsed_json}")
                     return parsed_json
                 except json.JSONDecodeError:
                     logger.warning(f"Не удалось распарсить основной JSON фрагмент: {json_str[:100]}...")
@@ -174,11 +179,13 @@ class IntentAdapter:
                             # Проверяем, содержит ли JSON поле actions или action
                             if isinstance(parsed_json, dict):
                                 if "actions" in parsed_json or "action" in parsed_json:
-                                    logger.info(f"Успешно извлечен альтернативный JSON с полем actions/action: {json_candidate[:100]}...")
+                                    logger.info(f"Успешно извлечен альтернативный JSON с полем actions/action")
+                                    if logger.isEnabledFor(logging.DEBUG):
+                                        logger.debug(f"Содержимое JSON: {json_candidate[:100]}...")
                                     return parsed_json
                             
                             # Если нашли любой валидный JSON, возвращаем его
-                            logger.info(f"Успешно извлечен альтернативный JSON: {json_candidate[:100]}...")
+                            logger.info(f"Успешно извлечен альтернативный JSON")
                             return parsed_json
                         except json.JSONDecodeError:
                             continue

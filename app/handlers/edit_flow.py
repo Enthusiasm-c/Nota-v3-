@@ -7,7 +7,7 @@ from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from app.fsm.states import EditFree
-from app.assistants.client import run_thread_safe
+from app.assistants.client import run_thread_safe, run_thread_safe_async
 from app.edit.apply_intent import apply_intent
 from app.formatters import report
 from app.matcher import match_positions
@@ -55,7 +55,8 @@ async def handle_free_edit_text(message: Message, state: FSMContext):
     
     try:
         logger.info("[edit_flow] Отправка текста пользователя в OpenAI", extra={"data": {"user_text": user_text}})
-        intent = run_thread_safe(user_text)
+        # Используем асинхронную версию для лучшей производительности
+        intent = await run_thread_safe_async(user_text)
         logger.info("[edit_flow] Ответ OpenAI получен", extra={"data": {"intent": intent}})
         
         # Проверяем успешность разбора

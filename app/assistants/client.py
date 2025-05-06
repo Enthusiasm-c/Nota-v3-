@@ -7,6 +7,7 @@ import json
 import logging
 import time
 import re
+import asyncio
 from typing import Dict, Any, Optional, List, Union
 import os
 import openai
@@ -16,6 +17,7 @@ from app.utils.redis_cache import cache_get, cache_set
 from app.assistants.intent_adapter import adapt_intent
 
 from pydantic import BaseModel, ValidationError, field_validator
+from functools import wraps
 
 logger = logging.getLogger(__name__)
 
@@ -216,26 +218,55 @@ logger = logging.getLogger(__name__)
 # Инициализация OpenAI API клиента
 client = openai.OpenAI(api_key=os.getenv("OPENAI_CHAT_KEY", getattr(settings, "OPENAI_CHAT_KEY", "")))
 
-# Уменьшаем уровень логирования для httpx и httpcore, чтобы избежать избыточных логов
-def reduce_http_logging():
+# Уменьшаем уровень логирования для избыточных логов
+def optimize_logging():
     """
-    Уменьшает уровень логирования для HTTP-библиотек, используемых OpenAI.
-    Это помогает избежать избыточных логов от httpcore и httpx.
+    Оптимизирует уровень логирования для различных модулей,
+    чтобы уменьшить количество логов в production окружении.
+    Это помогает улучшить производительность и снизить нагрузку на диск.
     """
+    # HTTP клиенты (отключаем отладочные логи)
     for module in ["httpx", "httpcore", "httpcore.http11", "httpcore.connection"]:
         logger = logging.getLogger(module)
         logger.setLevel(logging.WARNING)
+    
+    # Установка более строгого уровня логирования для аутентификации
+    # и обычных сообщений о статусе запросов
+    auth_logger = logging.getLogger("openai.auth")
+    if auth_logger:
+        auth_logger.setLevel(logging.ERROR)
+    
+    # Отключаем ненужные дебаг логи от aiogram в production
+    aiogram_logger = logging.getLogger("aiogram")
+    if aiogram_logger:
+        aiogram_logger.setLevel(logging.INFO)
+    
+    # Снижаем уровень детализации в openai API
+    openai_logger = logging.getLogger("openai")
+    if openai_logger:
+        openai_logger.setLevel(logging.WARNING)
         
 # Применяем настройки логирования при импорте модуля
-reduce_http_logging()
+optimize_logging()
 
 # ID ассистента для обработки команд редактирования
 ASSISTANT_ID = os.getenv("OPENAI_ASSISTANT_ID", getattr(settings, "OPENAI_ASSISTANT_ID", ""))
 
-@trace_openai
-def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
+# Хелпер для запуска асинхронного кода в синхронной функции
+def run_async(func):
     """
-    Безопасный запуск OpenAI Thread с обработкой ошибок и таймаутом.
+    Декоратор для запуска асинхронных функций в синхронном контексте.
+    Полезно для обратной совместимости.
+    """
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        return asyncio.run(func(*args, **kwargs))
+    return wrapper
+
+@trace_openai
+async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str, Any]:
+    """
+    Асинхронная версия безопасного запуска OpenAI Thread с обработкой ошибок и таймаутом.
     
     Args:
         user_input: Текстовая команда пользователя
@@ -254,9 +285,9 @@ def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
             thread = client.beta.threads.create()
             thread_id = thread.id
             cache_set(thread_key, thread_id, ex=300)
-            logger.info(f"[run_thread_safe] Created new thread: {thread_id}")
+            logger.info(f"[run_thread_safe_async] Created new thread: {thread_id}")
         else:
-            logger.info(f"[run_thread_safe] Using cached thread: {thread_id}")
+            logger.info(f"[run_thread_safe_async] Using cached thread: {thread_id}")
         
         # Кешируем assistant_id (на 5 минут)
         assistant_key = "openai:assistant_id"
@@ -264,19 +295,22 @@ def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
         if not cached_assistant_id:
             cache_set(assistant_key, ASSISTANT_ID, ex=300)
             cached_assistant_id = ASSISTANT_ID
-            logger.info(f"[run_thread_safe] Using assistant ID: {cached_assistant_id}")
+            logger.info(f"[run_thread_safe_async] Using assistant ID: {cached_assistant_id}")
 
         # Добавляем сообщение пользователя
-        logger.info(f"[run_thread_safe] Adding user message: '{user_input}'")
-        message = client.beta.threads.messages.create(
+        logger.info(f"[run_thread_safe_async] Adding user message: '{user_input}'")
+        # Используем asyncio.to_thread для выполнения синхронных операций в отдельном потоке
+        message = await asyncio.to_thread(
+            client.beta.threads.messages.create,
             thread_id=thread_id,
             role="user",
             content=user_input
         )
 
         # Запускаем ассистента (используем кэшированный id)
-        logger.info(f"[run_thread_safe] Creating run with assistant ID: {cached_assistant_id}")
-        run = client.beta.threads.runs.create(
+        logger.info(f"[run_thread_safe_async] Creating run with assistant ID: {cached_assistant_id}")
+        run = await asyncio.to_thread(
+            client.beta.threads.runs.create,
             thread_id=thread_id,
             assistant_id=cached_assistant_id
         )
@@ -292,23 +326,25 @@ def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
             logger.info(f"[LATENCY] OpenAI response time: {latency:.2f} sec", extra={"latency": latency})
         
         # Ожидаем завершения с таймаутом
-        logger.info(f"[run_thread_safe] Waiting for run completion, run ID: {run.id}")
+        logger.info(f"[run_thread_safe_async] Waiting for run completion, run ID: {run.id}")
         while run.status in ["queued", "in_progress"]:
             if time.time() - start_time > timeout:
-                logger.error(f"[run_thread_safe] Timeout waiting for Assistant API response after {timeout}s")
+                logger.error(f"[run_thread_safe_async] Timeout waiting for Assistant API response after {timeout}s")
                 return {"action": "unknown", "error": "timeout", "user_message": "Превышено время ожидания ответа от OpenAI. Пожалуйста, попробуйте еще раз."}
             
-            time.sleep(1)
-            run = client.beta.threads.runs.retrieve(
+            # Используем асинхронную задержку вместо блокирования потока
+            await asyncio.sleep(1)
+            run = await asyncio.to_thread(
+                client.beta.threads.runs.retrieve,
                 thread_id=thread_id,
                 run_id=run.id
             )
-            logger.debug(f"[run_thread_safe] Current run status: {run.status}")
+            logger.debug(f"[run_thread_safe_async] Current run status: {run.status}")
         
         # Обрабатываем результат
         if run.status == "requires_action":
             # Обработка случая, когда ассистент хочет вызвать функцию
-            logger.info(f"[run_thread_safe] Run requires action, providing tool outputs")
+            logger.info(f"[run_thread_safe_async] Run requires action, providing tool outputs")
             tool_calls = run.required_action.submit_tool_outputs.tool_calls
             tool_outputs = []
             
@@ -316,63 +352,66 @@ def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
                 # Здесь можно добавить обработку разных функций по их именам
                 function_name = tool_call.function.name
                 function_args = json.loads(tool_call.function.arguments)
-                logger.info(f"[run_thread_safe] Tool call: {function_name} with args: {function_args}")
+                logger.info(f"[run_thread_safe_async] Tool call: {function_name} with args: {function_args}")
                 
                 if function_name == "parse_edit_command":
                     results = parse_edit_command(function_args.get("command", ""), function_args.get("invoice_lines"))
                     tool_outputs.append({"tool_call_id": tool_call.id, "output": json.dumps(results, ensure_ascii=False)})
-                    logger.info(f"[run_thread_safe] parse_edit_command result: {results}")
+                    logger.info(f"[run_thread_safe_async] parse_edit_command result: {results}")
                     continue
                 else:
                     # Для неизвестных функций возвращаем ошибку
-                    logger.warning(f"[run_thread_safe] Unsupported function: {function_name}")
+                    logger.warning(f"[run_thread_safe_async] Unsupported function: {function_name}")
                     tool_outputs.append({
                         "tool_call_id": tool_call.id,
                         "output": json.dumps({"action": "unknown", "error": "unsupported_function"})
                     })
             
             # Отправляем результаты выполнения функций обратно ассистенту
-            logger.info(f"[run_thread_safe] Submitting tool outputs: {tool_outputs}")
-            run = client.beta.threads.runs.submit_tool_outputs(
+            logger.info(f"[run_thread_safe_async] Submitting tool outputs: {tool_outputs}")
+            run = await asyncio.to_thread(
+                client.beta.threads.runs.submit_tool_outputs,
                 thread_id=thread_id,
                 run_id=run.id,
                 tool_outputs=tool_outputs
             )
             
             # Ждем завершения после отправки результатов функций
-            logger.info(f"[run_thread_safe] Waiting for run completion after tool outputs")
+            logger.info(f"[run_thread_safe_async] Waiting for run completion after tool outputs")
             while run.status in ["queued", "in_progress"]:
                 if time.time() - start_time > timeout:
-                    logger.error(f"[run_thread_safe] Timeout waiting for Assistant API response after tool outputs, {timeout}s")
+                    logger.error(f"[run_thread_safe_async] Timeout waiting for Assistant API response after tool outputs, {timeout}s")
                     return {"action": "unknown", "error": "timeout_after_tools", "user_message": "Превышено время ожидания ответа от OpenAI после вызова инструментов. Пожалуйста, попробуйте еще раз."}
                 
-                time.sleep(1)
-                run = client.beta.threads.runs.retrieve(
+                # Используем асинхронную задержку вместо блокирования потока
+                await asyncio.sleep(1)
+                run = await asyncio.to_thread(
+                    client.beta.threads.runs.retrieve,
                     thread_id=thread_id,
                     run_id=run.id
                 )
-                logger.debug(f"[run_thread_safe] Current run status after tool outputs: {run.status}")
+                logger.debug(f"[run_thread_safe_async] Current run status after tool outputs: {run.status}")
             
             # Проверяем статус после отправки результатов функций
             if run.status == "requires_action":
                 # Если ассистент снова запрашивает функции, пробуем извлечь команду из запроса пользователя
-                logger.info("[run_thread_safe] Assistant requires more actions, attempting to extract command from user input")
+                logger.info("[run_thread_safe_async] Assistant requires more actions, attempting to extract command from user input")
                 
                 # Используем наш адаптер для извлечения команды из исходного запроса
                 extracted_intent = adapt_intent(user_input)
                 if extracted_intent.get("action") != "unknown":
-                    logger.info(f"[run_thread_safe] Successfully extracted intent from user input: {extracted_intent}")
+                    logger.info(f"[run_thread_safe_async] Successfully extracted intent from user input: {extracted_intent}")
                     return extracted_intent
                 
                 # Если не удалось извлечь команду, возвращаем ошибку
-                logger.error("[run_thread_safe] Failed to extract command from user input")
+                logger.error("[run_thread_safe_async] Failed to extract command from user input")
                 return {
                     "action": "unknown", 
                     "error": "multiple_tool_requests", 
                     "user_message": "Не удалось обработать вашу команду. Пожалуйста, попробуйте сформулировать запрос четче."
                 }
             elif run.status != "completed":
-                logger.error(f"[run_thread_safe] Run failed after tool outputs with status: {run.status}")
+                logger.error(f"[run_thread_safe_async] Run failed after tool outputs with status: {run.status}")
                 return {
                     "action": "unknown", 
                     "error": f"run_failed_after_tools: {run.status}",
@@ -381,8 +420,9 @@ def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
                 
         if run.status == "completed":
             # Получаем последнее сообщение ассистента
-            logger.info(f"[run_thread_safe] Run completed, retrieving assistant messages")
-            messages = client.beta.threads.messages.list(
+            logger.info(f"[run_thread_safe_async] Run completed, retrieving assistant messages")
+            messages = await asyncio.to_thread(
+                client.beta.threads.messages.list,
                 thread_id=thread_id
             )
             
@@ -393,7 +433,7 @@ def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
             ]
             
             if not assistant_messages:
-                logger.error("[run_thread_safe] Assistant did not generate any response")
+                logger.error("[run_thread_safe_async] Assistant did not generate any response")
                 return {
                     "action": "unknown", 
                     "error": "no_response",
@@ -403,13 +443,13 @@ def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
             # Извлекаем ответ из сообщения
             try:
                 content = assistant_messages[0].content[0].text.value
-                logger.info(f"[run_thread_safe] Assistant response: '{content[:100]}...'")
+                logger.info(f"[run_thread_safe_async] Assistant response: '{content[:100]}...'")
                 
                 # Используем наш адаптер для обработки ответа
                 result = adapt_intent(content)
                 
                 # Логируем результат адаптации
-                logger.info(f"[run_thread_safe] Adapted intent: {result}")
+                logger.info(f"[run_thread_safe_async] Adapted intent: {result}")
                 
                 # Если адаптер вернул ошибку, но есть user_message для отображения, возвращаем его
                 if result.get("action") == "unknown" and "user_message" not in result:
@@ -417,11 +457,11 @@ def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
                 
                 # Лог успешного завершения
                 elapsed = time.time() - start_time
-                logger.info(f"[run_thread_safe] Assistant run ok in {elapsed:.1f} s, action={result.get('action')}")
+                logger.info(f"[run_thread_safe_async] Assistant run ok in {elapsed:.1f} s, action={result.get('action')}")
                 return result
                 
             except Exception as e:
-                logger.exception(f"[run_thread_safe] Error parsing assistant response: {e}")
+                logger.exception(f"[run_thread_safe_async] Error parsing assistant response: {e}")
                 return {
                     "action": "unknown", 
                     "error": f"parse_error: {str(e)}",
@@ -429,7 +469,7 @@ def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
                 }
         else:
             # Обрабатываем неуспешные статусы
-            logger.error(f"[run_thread_safe] Run failed with status: {run.status}")
+            logger.error(f"[run_thread_safe_async] Run failed with status: {run.status}")
             return {
                 "action": "unknown", 
                 "error": f"run_failed: {run.status}",
@@ -438,7 +478,7 @@ def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
             
     except openai.RateLimitError as e:
         # Ошибка лимита запросов
-        logger.exception(f"[run_thread_safe] OpenAI rate limit error: {e}")
+        logger.exception(f"[run_thread_safe_async] OpenAI rate limit error: {e}")
         return {
             "action": "unknown", 
             "error": "rate_limit_error",
@@ -446,7 +486,7 @@ def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
         }
     except openai.APIConnectionError as e:
         # Ошибка соединения с API
-        logger.exception(f"[run_thread_safe] OpenAI API connection error: {e}")
+        logger.exception(f"[run_thread_safe_async] OpenAI API connection error: {e}")
         return {
             "action": "unknown", 
             "error": "api_connection_error",
@@ -454,7 +494,7 @@ def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
         }
     except openai.AuthenticationError as e:
         # Ошибка аутентификации
-        logger.exception(f"[run_thread_safe] OpenAI authentication error: {e}")
+        logger.exception(f"[run_thread_safe_async] OpenAI authentication error: {e}")
         return {
             "action": "unknown", 
             "error": "authentication_error",
@@ -462,9 +502,26 @@ def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
         }
     except Exception as e:
         # Общая обработка ошибок
-        logger.exception(f"[run_thread_safe] Error in OpenAI Assistant API call: {e}")
+        logger.exception(f"[run_thread_safe_async] Error in OpenAI Assistant API call: {e}")
         return {
             "action": "unknown", 
             "error": str(e),
             "user_message": "Произошла ошибка при обработке запроса. Пожалуйста, попробуйте еще раз."
         }
+
+
+@trace_openai
+def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
+    """
+    Безопасный запуск OpenAI Thread с обработкой ошибок и таймаутом.
+    Синхронная обертка вокруг асинхронной функции для обратной совместимости.
+    
+    Args:
+        user_input: Текстовая команда пользователя
+        timeout: Максимальное время ожидания в секундах
+    
+    Returns:
+        Dict: JSON-объект с результатом разбора команды
+    """
+    # Используем синхронную обертку для асинхронной функции
+    return asyncio.run(run_thread_safe_async(user_input, timeout))
