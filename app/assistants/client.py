@@ -11,6 +11,7 @@ from typing import Dict, Any, Optional, List, Union
 import os
 import openai
 from app.config import settings
+from app.assistants.trace_openai import trace_openai
 
 from pydantic import BaseModel, ValidationError, field_validator
 
@@ -44,20 +45,24 @@ def parse_assistant_output(raw: str) -> List[EditCommand]:
     Принимает JSON-строку от Assistant и возвращает список EditCommand.
     Бросает ValueError, если в любом элементе нет поля 'action'.
     """
-    logger.debug(f"[RAW assistant output]: {raw}")
+    logger.info("[parse_assistant_output] Начало разбора ассистент-ответа", extra={"data": {"raw": raw}})
     try:
         data = json.loads(raw)
+        logger.info("[parse_assistant_output] JSON успешно разобран", extra={"data": {"parsed": data}})
     except Exception as e:
+        logger.error("[parse_assistant_output] Ошибка JSON", extra={"data": {"error": str(e), "raw": raw}})
         raise ValueError(f"Invalid JSON: {e}")
 
     # Новый формат: actions
     if isinstance(data, dict) and "actions" in data:
         actions = data["actions"]
         if not isinstance(actions, list):
+            logger.error("[parse_assistant_output] 'actions' не список", extra={"data": {"actions": actions}})
             raise ValueError("'actions' must be a list")
         cmds = []
         for i, item in enumerate(actions):
             if not isinstance(item, dict):
+                logger.error(f"[parse_assistant_output] Action не dict", extra={"data": {"index": i, "item": item}})
                 raise ValueError(f"Action at index {i} is not a dict")
             if "action" not in item:
                 raise ValueError("Missing 'action' field in response")
@@ -84,6 +89,7 @@ client = openai.OpenAI(api_key=os.getenv("OPENAI_CHAT_KEY", getattr(settings, "O
 # ID ассистента для обработки команд редактирования
 ASSISTANT_ID = os.getenv("OPENAI_ASSISTANT_ID", getattr(settings, "OPENAI_ASSISTANT_ID", ""))
 
+@trace_openai
 def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
     """
     Безопасный запуск OpenAI Thread с обработкой ошибок и таймаутом.

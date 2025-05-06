@@ -30,28 +30,31 @@ async def handle_free_edit_text(message: Message, state: FSMContext):
         state: FSM-контекст
     """
     user_text = message.text.strip()
+    logger.info("[edit_flow] Новый ввод пользователя", extra={"data": {"user_text": user_text}})
     
     # Получаем данные из состояния
     data = await state.get_data()
-    logger.info(f"[DEBUG] State at handler start: {data}")
+    logger.info("[edit_flow] State at handler start", extra={"data": data})
     invoice = data.get("invoice")
     
     if not invoice:
+        logger.warning("[edit_flow] Нет инвойса в состоянии пользователя")
         await message.answer("Сессия истекла. Пожалуйста, загрузите инвойс заново.")
         await state.clear()
         return
     
     try:
-        # Отправляем текст пользователя в OpenAI Assistant
+        logger.info("[edit_flow] Отправка текста пользователя в OpenAI", extra={"data": {"user_text": user_text}})
         intent = run_thread_safe(user_text)
+        logger.info("[edit_flow] Ответ OpenAI получен", extra={"data": {"intent": intent}})
     except Exception as e:
-        logger.warning(f"Не удалось разобрать команду: {e}")
+        logger.error("[edit_flow] Ошибка при разборе команды", extra={"data": {"error": str(e)}})
         intent = {"action": "unknown", "error": str(e)}
     
     # Проверяем успешность разбора
     if intent.get("action") == "unknown":
         error = intent.get("error", "unknown_error")
-        logger.warning(f"Не удалось разобрать команду: {error}")
+        logger.warning("[edit_flow] Не удалось разобрать команду", extra={"data": {"error": error}})
         await message.answer(
             "Не понял, что нужно изменить. Попробуйте переформулировать, например:\n"
             "• дата 16 апреля\n"

@@ -10,6 +10,8 @@ import shutil
 from datetime import datetime
 from typing import Dict, Any
 from pathlib import Path
+from json_trace_logger import setup_json_trace_logger
+from app.handlers.tracing_log_middleware import TracingLogMiddleware
 
 # Aiogram импорты
 from aiogram import Bot, Dispatcher, types, F
@@ -71,8 +73,14 @@ atexit.register(cleanup_tmp)
 
 
 def create_bot_and_dispatcher():
-    bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
-    dp = Dispatcher(storage=MemoryStorage())
+    setup_json_trace_logger()
+    storage = MemoryStorage()
+    bot = Bot(token=settings.TELEGRAM_BOT_TOKEN, parse_mode=ParseMode.HTML)
+    dp = Dispatcher(storage=storage)
+    dp.message.middleware(TracingLogMiddleware())
+    dp.callback_query.middleware(TracingLogMiddleware())
+    # Регистрация роутеров
+    dp.include_router(edit_flow_router)
     return bot, dp
 
 
