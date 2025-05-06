@@ -40,6 +40,8 @@ class EditCommand(BaseModel):
                 raise ValueError(f"row must be >= 1 for action {action}")
         return v
 
+from app.utils.monitor import parse_action_monitor
+
 def parse_assistant_output(raw: str) -> List[EditCommand]:
     """
     Принимает JSON-строку от Assistant.
@@ -57,7 +59,9 @@ def parse_assistant_output(raw: str) -> List[EditCommand]:
     # Универсальная логика: actions[] или одиночный action
     # Проверка наличия 'actions' или 'action'
     if not (isinstance(data, dict) and ("actions" in data or "action" in data)):
-        raise ValueError("Neither 'action' nor 'actions' found")
+        logger.warning("Assistant output: ни 'action', ни 'actions' не найдено, требуется уточнение", extra={"data": data})
+        parse_action_monitor.record_error()
+        raise ValueError("Missing 'action' field in response")
 
     actions = data.get("actions") if isinstance(data, dict) and "actions" in data else None
     if actions is None:
@@ -72,6 +76,8 @@ def parse_assistant_output(raw: str) -> List[EditCommand]:
             logger.error(f"[parse_assistant_output] Action не dict", extra={"data": {"index": i, "item": obj}})
             raise ValueError(f"Action at index {i} is not a dict")
         if "action" not in obj:
+            # Мониторинг частых ошибок
+            parse_action_monitor.record_error()
             raise ValueError("Missing 'action' field in response")
         try:
             cmds.append(EditCommand(**obj))

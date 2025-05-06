@@ -17,6 +17,13 @@ class TracingLogMiddleware(BaseMiddleware):
             user_text = event.message.text
         elif hasattr(event, 'callback_query') and event.callback_query:
             user_text = event.callback_query.data
-        logging.info("User input", extra={"trace_id": trace_id, "data": {"user_text": user_text}})
+        # Безопасное логирование: сериализация сложных объектов
+        try:
+            data_to_log = user_text
+            if hasattr(user_text, 'model_dump'):
+                data_to_log = user_text.model_dump()
+            logging.info("User input", extra={"trace_id": trace_id, "data": {"user_text": data_to_log}})
+        except TypeError:
+            logging.info("User input", extra={"trace_id": trace_id, "data": {"user_text": str(user_text)}})
         data["trace_id"] = trace_id
         return await handler(event, data)
