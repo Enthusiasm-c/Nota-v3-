@@ -342,8 +342,12 @@ def register_handlers(dp, bot=None):
     dp.message.register(cancel_command, Command("cancel"))
     dp.message.register(handle_edit_reply, F.reply_to_message)
     
-    # Подключаем роутер для GPT-ассистента
-    dp.include_router(edit_flow_router)
+    # Подключаем роутер для GPT-ассистента (только если не был зарегистрирован ранее)
+    if not hasattr(dp, '_registered_routers'):
+        dp._registered_routers = set()
+    if 'edit_flow_router' not in dp._registered_routers:
+        dp.include_router(edit_flow_router)
+        dp._registered_routers.add('edit_flow_router')
     
     # Закоментированы в пользу новой реализации через GPT
     # dp.message.register(handle_free_edit_text, EditFree.awaiting_input)
