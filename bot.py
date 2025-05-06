@@ -16,7 +16,6 @@ from app.handlers.tracing_log_middleware import TracingLogMiddleware
 
 # Aiogram импорты
 from aiogram import Bot, Dispatcher, F
-from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -24,8 +23,8 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.enums import ParseMode
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup
 
-# Импортируем состояния для свободного редактирования
-from app.fsm.states import EditFree
+# Импортируем состояния
+from app.fsm.states import EditFree, NotaStates
 
 # Импорты приложения
 from app import ocr, matcher, data_loader
@@ -91,15 +90,6 @@ dp = None
 # Глобальный кэш для отредактированных сообщений
 _edit_cache: Dict[str, Dict[str, Any]] = {}
 # assistant_thread_id убран из глобальных переменных и перенесен в FSMContext
-
-
-class NotaStates(StatesGroup):
-    lang = State()
-    main_menu = State()
-    awaiting_file = State()
-    progress = State()
-    editing = State()
-    help = State()
 
 
 user_matches = {}

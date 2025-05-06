@@ -17,8 +17,10 @@ from app.utils.incremental_ui import IncrementalUI
 from app import ocr, matcher, data_loader
 from app.formatters.report import build_report
 from app.keyboards import build_main_kb
-from app.fsm.states import NotaStates
 from app.utils.md import clean_html
+
+# Импортируем NotaStates из модуля состояний
+from app.fsm.states import NotaStates
 
 logger = logging.getLogger(__name__)
 
