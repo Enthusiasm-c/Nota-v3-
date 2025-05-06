@@ -1,64 +1,70 @@
 """
-Internationalization (i18n) module for Nota AI.
-Provides translation functions for multi-language support.
+Simple English-only text module for Nota AI.
 """
 
-import os
 import logging
 import yaml
-from typing import Dict, Any, Optional
+import os
 from pathlib import Path
+from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
-# Dictionary to store loaded translations
-_translations: Dict[str, Dict[str, Any]] = {}
+# Cached translations dictionary
+_translations = {}
 
-def load_translations(lang: str) -> Dict[str, Any]:
+def t(key: str, params: dict = None, lang: str = None) -> str:
     """
-    Load translations for the specified language.
+    Get a string for the given key, with simple parameter substitution.
     
     Args:
-        lang: The language code to load (e.g., 'en', 'ru')
+        key: The translation key (e.g., 'status.text_recognized')
+        params: Parameters for string formatting (e.g., {"count": 5})
+        lang: Ignored parameter for backward compatibility
         
     Returns:
-        Dictionary with translation keys
+        The English string, or the key itself if not found
     """
-    if lang in _translations:
-        return _translations[lang]
+    global _translations
     
-    try:
-        # Get the directory of this file
-        current_dir = Path(os.path.dirname(os.path.abspath(__file__)))
-        file_path = current_dir / f"texts_{lang}.yaml"
-        
-        if not file_path.exists():
-            logger.warning(f"Translation file for language '{lang}' not found: {file_path}")
-            # Fall back to English if the requested language is not available
-            if lang != "en":
-                return load_translations("en")
-            return {}
-        
-        with open(file_path, 'r', encoding='utf-8') as f:
-            translations = yaml.safe_load(f)
-            _translations[lang] = translations
-            return translations
-    except Exception as e:
-        logger.error(f"Error loading translations for '{lang}': {str(e)}")
-        # Fall back to empty dict in case of errors
-        return {}
+    # Load translations if not already loaded
+    if not _translations:
+        try:
+            # Get the directory of this file
+            current_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+            file_path = current_dir / "texts_en.yaml"
+            
+            if not file_path.exists():
+                logger.warning(f"Translation file not found: {file_path}")
+                return key
+                
+            with open(file_path, 'r', encoding='utf-8') as f:
+                _translations = yaml.safe_load(f) or {}
+        except Exception as e:
+            logger.error(f"Error loading translations: {str(e)}")
+            return key
+    
+    # Get the value from the nested dictionary
+    value = _get_nested_value(_translations, key)
+    
+    if value is None:
+        return key
+    
+    # Apply string formatting if params are provided
+    if params:
+        try:
+            return value.format(**params)
+        except Exception as e:
+            logger.error(f"Error formatting translation: {str(e)}")
+            return value
+    
+    return value
 
-def get_nested_value(data: Dict[str, Any], key_path: str) -> Optional[str]:
-    """
-    Get a nested value from a dictionary using dot notation.
-    
-    Args:
-        data: The dictionary to search in
-        key_path: The path to the value (e.g., 'button.edit')
+def _get_nested_value(data: Dict[str, Any], key_path: str) -> Optional[str]:
+    """Get a nested value from a dictionary using dot notation."""
+    if not data:
+        return None
         
-    Returns:
-        The value if found, None otherwise
-    """
     keys = key_path.split('.')
     result = data
     
@@ -69,35 +75,3 @@ def get_nested_value(data: Dict[str, Any], key_path: str) -> Optional[str]:
             return None
     
     return result if isinstance(result, str) else None
-
-def t(key: str, params: dict = None, *, lang: str = "en") -> str:
-    """
-    Get a translated string for the given key and language.
-    
-    Args:
-        key: The translation key (e.g., 'button.edit')
-        params: Parameters for string formatting (e.g., {"count": 5})
-        lang: The language code (default: 'en'), keyword-only argument
-        
-    Returns:
-        The translated string, or the key itself if not found
-    """
-    translations = load_translations(lang)
-    value = get_nested_value(translations, key)
-    
-    if value is None:
-        logger.warning(f"Translation key '{key}' not found for language '{lang}'")
-        return key
-    
-    # Apply string formatting if params are provided
-    if params:
-        try:
-            return value.format(**params)
-        except KeyError as e:
-            logger.error(f"Missing format argument in translation: {str(e)}")
-            return value
-        except Exception as e:
-            logger.error(f"Error formatting translation: {str(e)}")
-            return value
-    
-    return value
