@@ -13,6 +13,7 @@ import openai
 from app.config import settings
 from app.assistants.trace_openai import trace_openai
 from app.utils.redis_cache import cache_get, cache_set
+from app.assistants.intent_adapter import adapt_intent
 
 from pydantic import BaseModel, ValidationError, field_validator
 
@@ -48,7 +49,8 @@ __all__ = [
     "EditCommand",
     "parse_assistant_output",
     "run_thread_safe",
-    "parse_edit_command"
+    "parse_edit_command",
+    "adapt_intent",  # экспортируем функцию адаптера для удобства
 ]
 
 def parse_edit_command(user_input: str, invoice_lines=None) -> list:
@@ -218,6 +220,9 @@ def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
             thread = client.beta.threads.create()
             thread_id = thread.id
             cache_set(thread_key, thread_id, ex=300)
+            logger.info(f"[run_thread_safe] Created new thread: {thread_id}")
+        else:
+            logger.info(f"[run_thread_safe] Using cached thread: {thread_id}")
         
         # Кешируем assistant_id (на 5 минут)
         assistant_key = "openai:assistant_id"
@@ -225,8 +230,10 @@ def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
         if not cached_assistant_id:
             cache_set(assistant_key, ASSISTANT_ID, ex=300)
             cached_assistant_id = ASSISTANT_ID
+            logger.info(f"[run_thread_safe] Using assistant ID: {cached_assistant_id}")
 
         # Добавляем сообщение пользователя
+        logger.info(f"[run_thread_safe] Adding user message: '{user_input}'")
         message = client.beta.threads.messages.create(
             thread_id=thread_id,
             role="user",
@@ -234,10 +241,13 @@ def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
         )
 
         # Запускаем ассистента (используем кэшированный id)
+        logger.info(f"[run_thread_safe] Creating run with assistant ID: {cached_assistant_id}")
         run = client.beta.threads.runs.create(
             thread_id=thread_id,
             assistant_id=cached_assistant_id
         )
+        
+        # Измеряем и логируем латенцию для создания запроса
         latency = time.time() - start_time
         from app.utils.monitor import latency_monitor
         latency_monitor.record_latency(latency * 1000)
@@ -248,20 +258,23 @@ def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
             logger.info(f"[LATENCY] OpenAI response time: {latency:.2f} sec", extra={"latency": latency})
         
         # Ожидаем завершения с таймаутом
+        logger.info(f"[run_thread_safe] Waiting for run completion, run ID: {run.id}")
         while run.status in ["queued", "in_progress"]:
             if time.time() - start_time > timeout:
-                logger.error(f"Timeout waiting for Assistant API response after {timeout}s")
-                return {"action": "unknown", "error": "timeout"}
+                logger.error(f"[run_thread_safe] Timeout waiting for Assistant API response after {timeout}s")
+                return {"action": "unknown", "error": "timeout", "user_message": "Превышено время ожидания ответа от OpenAI. Пожалуйста, попробуйте еще раз."}
             
             time.sleep(1)
             run = client.beta.threads.runs.retrieve(
-                thread_id=thread.id,
+                thread_id=thread_id,
                 run_id=run.id
             )
+            logger.debug(f"[run_thread_safe] Current run status: {run.status}")
         
         # Обрабатываем результат
         if run.status == "requires_action":
             # Обработка случая, когда ассистент хочет вызвать функцию
+            logger.info(f"[run_thread_safe] Run requires action, providing tool outputs")
             tool_calls = run.required_action.submit_tool_outputs.tool_calls
             tool_outputs = []
             
@@ -269,82 +282,74 @@ def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
                 # Здесь можно добавить обработку разных функций по их именам
                 function_name = tool_call.function.name
                 function_args = json.loads(tool_call.function.arguments)
+                logger.info(f"[run_thread_safe] Tool call: {function_name} with args: {function_args}")
+                
                 if function_name == "parse_edit_command":
                     results = parse_edit_command(function_args.get("command", ""), function_args.get("invoice_lines"))
                     tool_outputs.append({"tool_call_id": tool_call.id, "output": json.dumps(results, ensure_ascii=False)})
+                    logger.info(f"[run_thread_safe] parse_edit_command result: {results}")
                     continue
                 else:
                     # Для неизвестных функций возвращаем ошибку
+                    logger.warning(f"[run_thread_safe] Unsupported function: {function_name}")
                     tool_outputs.append({
                         "tool_call_id": tool_call.id,
                         "output": json.dumps({"action": "unknown", "error": "unsupported_function"})
                     })
             
             # Отправляем результаты выполнения функций обратно ассистенту
+            logger.info(f"[run_thread_safe] Submitting tool outputs: {tool_outputs}")
             run = client.beta.threads.runs.submit_tool_outputs(
-                thread_id=thread.id,
+                thread_id=thread_id,
                 run_id=run.id,
                 tool_outputs=tool_outputs
             )
             
             # Ждем завершения после отправки результатов функций
+            logger.info(f"[run_thread_safe] Waiting for run completion after tool outputs")
             while run.status in ["queued", "in_progress"]:
                 if time.time() - start_time > timeout:
-                    logger.error(f"Timeout waiting for Assistant API response after tool outputs, {timeout}s")
-                    return {"action": "unknown", "error": "timeout_after_tools"}
+                    logger.error(f"[run_thread_safe] Timeout waiting for Assistant API response after tool outputs, {timeout}s")
+                    return {"action": "unknown", "error": "timeout_after_tools", "user_message": "Превышено время ожидания ответа от OpenAI после вызова инструментов. Пожалуйста, попробуйте еще раз."}
                 
                 time.sleep(1)
                 run = client.beta.threads.runs.retrieve(
-                    thread_id=thread.id,
+                    thread_id=thread_id,
                     run_id=run.id
                 )
+                logger.debug(f"[run_thread_safe] Current run status after tool outputs: {run.status}")
             
             # Проверяем статус после отправки результатов функций
             if run.status == "requires_action":
-                # Если ассистент снова запрашивает функции, обрабатываем их еще раз
-                logger.info("Assistant requires more actions, returning simple success response")
-                # Возвращаем простой успешный ответ для установки даты
-                # Это упрощение, но оно должно работать для большинства случаев
-                # Ищем дату в исходной команде пользователя
-                words = user_input.lower().split()
-                months = {
-                    "января": 1, "февраля": 2, "марта": 3, "апреля": 4, 
-                    "мая": 5, "июня": 6, "июля": 7, "августа": 8, 
-                    "сентября": 9, "октября": 10, "ноября": 11, "декабря": 12,
-                    "январь": 1, "февраль": 2, "март": 3, "апрель": 4, 
-                    "май": 5, "июнь": 6, "июль": 7, "август": 8, 
-                    "сентябрь": 9, "октябрь": 10, "ноябрь": 11, "декабрь": 12
+                # Если ассистент снова запрашивает функции, пробуем извлечь команду из запроса пользователя
+                logger.info("[run_thread_safe] Assistant requires more actions, attempting to extract command from user input")
+                
+                # Используем наш адаптер для извлечения команды из исходного запроса
+                extracted_intent = adapt_intent(user_input)
+                if extracted_intent.get("action") != "unknown":
+                    logger.info(f"[run_thread_safe] Successfully extracted intent from user input: {extracted_intent}")
+                    return extracted_intent
+                
+                # Если не удалось извлечь команду, возвращаем ошибку
+                logger.error("[run_thread_safe] Failed to extract command from user input")
+                return {
+                    "action": "unknown", 
+                    "error": "multiple_tool_requests", 
+                    "user_message": "Не удалось обработать вашу команду. Пожалуйста, попробуйте сформулировать запрос четче."
                 }
-                
-                day = None
-                month = None
-                
-                # Ищем день (число)
-                for word in words:
-                    if word.isdigit() and 1 <= int(word) <= 31 and day is None:
-                        day = int(word)
-                
-                # Ищем месяц (название)
-                for word in words:
-                    if word in months:
-                        month = months[word]
-                        break
-                
-                # Если нашли и день, и месяц
-                if day and month:
-                    return {"action": "set_date", "date": f"{day} {month}"}
-                else:
-                    # Если не нашли дату, возвращаем ошибку
-                    logger.error("Could not extract date from user input")
-                    return {"action": "unknown", "error": "date_not_found"}
             elif run.status != "completed":
-                logger.error(f"Assistant run failed after tool outputs with status: {run.status}")
-                return {"action": "unknown", "error": f"run_failed_after_tools: {run.status}"}
+                logger.error(f"[run_thread_safe] Run failed after tool outputs with status: {run.status}")
+                return {
+                    "action": "unknown", 
+                    "error": f"run_failed_after_tools: {run.status}",
+                    "user_message": "Произошла ошибка при обработке вашего запроса. Пожалуйста, попробуйте еще раз."
+                }
                 
         if run.status == "completed":
             # Получаем последнее сообщение ассистента
+            logger.info(f"[run_thread_safe] Run completed, retrieving assistant messages")
             messages = client.beta.threads.messages.list(
-                thread_id=thread.id
+                thread_id=thread_id
             )
             
             # Находим последнее сообщение от ассистента
@@ -354,89 +359,78 @@ def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
             ]
             
             if not assistant_messages:
-                logger.error("Assistant did not generate any response")
-                return {"action": "unknown", "error": "no_response"}
+                logger.error("[run_thread_safe] Assistant did not generate any response")
+                return {
+                    "action": "unknown", 
+                    "error": "no_response",
+                    "user_message": "Ассистент не сгенерировал ответ. Пожалуйста, попробуйте еще раз."
+                }
             
             # Извлекаем ответ из сообщения
             try:
                 content = assistant_messages[0].content[0].text.value
+                logger.info(f"[run_thread_safe] Assistant response: '{content[:100]}...'")
                 
-                # Проверяем, есть ли JSON в тексте
-                if "{" in content and "}" in content:
-                    # Извлекаем только JSON-часть ответа
-                    json_start = content.find("{")
-                    json_end = content.rfind("}") + 1
-                    json_str = content[json_start:json_end]
-                    try:
-                        result = json.loads(json_str)
-                    except Exception as e:
-                        logger.error(f"Ошибка парсинга JSON из ответа ассистента: {e}, raw={json_str}")
-                        return {"action": "unknown", "error": "json_parse_error", "raw": json_str}
-                    # Проверка необходимых полей
-                    if "action" not in result:
-                        logger.error(f"Ответ OpenAI assistant без поля 'action': {result}")
-                        return {"action": "unknown", "error": "missing_action_field", **result}
-                    # Лог успешного завершения
-                    elapsed = time.time() - start_time
-                    logger.info(f"Assistant run ok in {elapsed:.1f} s")
-                    return result
-                else:
-                    # Если нет JSON в ответе, пытаемся распарсить текстовый ответ
-                    logger.info(f"Parsing text response: {content}")
-                    
-                    # Пытаемся распознать команды в тексте
-                    content_lower = content.lower()
-                    
-                    # Распознаем команду изменения даты
-                    if ("дат" in content_lower or "date" in content_lower) and ("изменить" in content_lower or "исправить" in content_lower):
-                        # Ищем числа (день) и месяцы в тексте
-                        words = content_lower.split()
-                        months = {
-                            "января": 1, "февраля": 2, "марта": 3, "апреля": 4, 
-                            "мая": 5, "июня": 6, "июля": 7, "августа": 8, 
-                            "сентября": 9, "октября": 10, "ноября": 11, "декабря": 12,
-                            "январь": 1, "февраль": 2, "март": 3, "апрель": 4, 
-                            "май": 5, "июнь": 6, "июль": 7, "август": 8, 
-                            "сентябрь": 9, "октябрь": 10, "ноябрь": 11, "декабрь": 12
-                        }
-                        
-                        day = None
-                        month = None
-                        year = None
-                        
-                        # Ищем день (число)
-                        for word in words:
-                            if word.isdigit() and 1 <= int(word) <= 31 and day is None:
-                                day = int(word)
-                            elif word.isdigit() and int(word) > 2000 and year is None:
-                                year = int(word)
-                        
-                        # Ищем месяц (название)
-                        for word in words:
-                            if word in months:
-                                month = months[word]
-                                break
-                        
-                        # Если нашли и день, и месяц
-                        if day and month:
-                            date_str = f"{day} {month}"
-                            if year:
-                                date_str += f" {year}"
-                                
-                            return {"action": "set_date", "date": date_str}
-                    
-                    # Если не удалось распознать команду, возвращаем ошибку
-                    logger.error(f"Could not parse text response: {content}")
-                    return {"action": "unknown", "error": "unparseable_text_response"}
+                # Используем наш адаптер для обработки ответа
+                result = adapt_intent(content)
+                
+                # Логируем результат адаптации
+                logger.info(f"[run_thread_safe] Adapted intent: {result}")
+                
+                # Если адаптер вернул ошибку, но есть user_message для отображения, возвращаем его
+                if result.get("action") == "unknown" and "user_message" not in result:
+                    result["user_message"] = "Не удалось распознать команду. Пожалуйста, попробуйте сформулировать запрос четче."
+                
+                # Лог успешного завершения
+                elapsed = time.time() - start_time
+                logger.info(f"[run_thread_safe] Assistant run ok in {elapsed:.1f} s, action={result.get('action')}")
+                return result
+                
             except Exception as e:
-                logger.exception(f"Error parsing assistant response: {e}")
-                return {"action": "unknown", "error": f"parse_error: {str(e)}"}
+                logger.exception(f"[run_thread_safe] Error parsing assistant response: {e}")
+                return {
+                    "action": "unknown", 
+                    "error": f"parse_error: {str(e)}",
+                    "user_message": "Произошла ошибка при разборе ответа ассистента. Пожалуйста, попробуйте еще раз."
+                }
         else:
             # Обрабатываем неуспешные статусы
-            logger.error(f"Assistant run failed with status: {run.status}")
-            return {"action": "unknown", "error": f"run_failed: {run.status}"}
+            logger.error(f"[run_thread_safe] Run failed with status: {run.status}")
+            return {
+                "action": "unknown", 
+                "error": f"run_failed: {run.status}",
+                "user_message": "Запрос к OpenAI не выполнен. Пожалуйста, попробуйте еще раз позже."
+            }
             
+    except openai.RateLimitError as e:
+        # Ошибка лимита запросов
+        logger.exception(f"[run_thread_safe] OpenAI rate limit error: {e}")
+        return {
+            "action": "unknown", 
+            "error": "rate_limit_error",
+            "user_message": "Превышен лимит запросов к OpenAI. Пожалуйста, попробуйте позже."
+        }
+    except openai.APIConnectionError as e:
+        # Ошибка соединения с API
+        logger.exception(f"[run_thread_safe] OpenAI API connection error: {e}")
+        return {
+            "action": "unknown", 
+            "error": "api_connection_error",
+            "user_message": "Ошибка соединения с OpenAI. Пожалуйста, проверьте подключение к интернету."
+        }
+    except openai.AuthenticationError as e:
+        # Ошибка аутентификации
+        logger.exception(f"[run_thread_safe] OpenAI authentication error: {e}")
+        return {
+            "action": "unknown", 
+            "error": "authentication_error",
+            "user_message": "Ошибка аутентификации в OpenAI. Пожалуйста, обратитесь к администратору."
+        }
     except Exception as e:
         # Общая обработка ошибок
-        logger.exception(f"Error in OpenAI Assistant API call: {e}")
-        return {"action": "unknown", "error": str(e)}
+        logger.exception(f"[run_thread_safe] Error in OpenAI Assistant API call: {e}")
+        return {
+            "action": "unknown", 
+            "error": str(e),
+            "user_message": "Произошла ошибка при обработке запроса. Пожалуйста, попробуйте еще раз."
+        }

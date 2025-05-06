@@ -221,6 +221,35 @@ S-05	Multi-tenant, i18n, price anomaly alerts, dashboard (Grafana/Metabase).
 - **Fuzzy matching**: Uses rapidfuzz with 82% threshold for name suggestions
 - **Extensive test coverage**: Added dedicated tests for new keyboard layout and fuzzy confirmation flow
 
+## Sprint C-5: GPT-3.5-turbo Dialogue Editing (2025-05-06)
+
+### Features
+- **Natural language understanding**: Complete transition from RegEx-based parsing to GPT-3.5-turbo for understanding user commands
+- **Adaptive command processing**: System understands a wider variety of command formats and phrasings
+- **Robust error handling**: Comprehensive system for handling API errors and providing helpful user feedback
+- **Intent normalization**: Advanced middleware layer to adapt API responses to system requirements
+- **Interactive fuzzy matching**: Enhanced UI for confirming product name suggestions with one-click actions
+- **Detailed logging**: Extensive logging for diagnostics and API call monitoring
+- **TDD methodology**: Implemented using Test-Driven Development with dedicated test files
+
+### Benefits
+- **Improved accuracy**: Better recognition of user intentions even with unclear or ambiguous commands
+- **Reduced need for precise syntax**: Users can write commands in a more natural way
+- **System resilience**: Graceful handling of API outages, timeouts, and format errors
+- **Better user feedback**: Clear error messages and guidance when commands cannot be processed
+- **Enhanced maintainability**: Modular architecture separates concerns between API interaction, intent processing, and UI
+
+### Technical Implementation
+- **New components**:
+  - `app/assistants/client.py`: Interface to OpenAI Assistant API with error handling
+  - `app/assistants/intent_adapter.py`: Middleware to normalize API responses
+  - `app/handlers/edit_flow.py`: Command processing and UI interaction
+  - `app/edit/apply_intent.py`: Application of structured commands to invoice data
+- **Enhanced prompts**: Special instructions to GPT-3.5-turbo for consistent, structured outputs
+- **Adaptive formats**: Flexible handling of dates, prices, and other field types with format normalization
+- **Stateful interactions**: Improved FSM design for handling multi-step user interactions
+- **Comprehensive tests**: Test suite for all components of the dialogue editing system
+
 ---
 
 ## 6 • Тестирование и поддержка
