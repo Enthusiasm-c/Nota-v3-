@@ -75,7 +75,9 @@ atexit.register(cleanup_tmp)
 def create_bot_and_dispatcher():
     setup_json_trace_logger()
     storage = MemoryStorage()
-    bot = Bot(token=settings.TELEGRAM_BOT_TOKEN, parse_mode=ParseMode.HTML)
+    # Исправлено для совместимости с aiogram 3.7.0+
+    from aiogram.client.default import DefaultBotProperties
+    bot = Bot(token=settings.TELEGRAM_BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher(storage=storage)
     dp.message.middleware(TracingLogMiddleware())
     dp.callback_query.middleware(TracingLogMiddleware())
