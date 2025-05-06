@@ -160,40 +160,74 @@ def parse_assistant_output(raw: str) -> List[EditCommand]:
 
     # Универсальная логика: actions[] или одиночный action
     # Проверка наличия 'actions' или 'action'
-    if not (isinstance(data, dict) and ("actions" in data or "action" in data)):
+    if not isinstance(data, dict):
+        logger.error("[parse_assistant_output] Данные не являются словарем", extra={"data": data})
+        parse_action_monitor.record_error()
+        return [EditCommand(action="clarification_needed", error=raw)]
+    
+    # Обработка массива actions
+    if "actions" in data and isinstance(data["actions"], list) and len(data["actions"]) > 0:
+        actions = data["actions"]
+        logger.info("[parse_assistant_output] Обнаружен массив actions с %d элементами", len(actions))
+    # Обработка одиночного action
+    elif "action" in data:
+        actions = [data]
+        logger.info("[parse_assistant_output] Обнаружен одиночный action")
+    else:
         logger.warning("Assistant output: ни 'action', ни 'actions' не найдено, требуется уточнение", extra={"data": data})
         parse_action_monitor.record_error()
         return [EditCommand(action="clarification_needed", error=raw)]
 
-    actions = data.get("actions") if isinstance(data, dict) and "actions" in data else None
-    if actions is None:
-        actions = [data]
     if not isinstance(actions, list):
         logger.error("[parse_assistant_output] 'actions' не список", extra={"data": {"actions": actions}})
         return [EditCommand(action="clarification_needed", error=raw)]
+    
     logger.debug("Assistant parsed actions: %s", actions)
     cmds = []
+    
     for i, obj in enumerate(actions):
         if not isinstance(obj, dict):
             logger.error(f"[parse_assistant_output] Action не dict", extra={"data": {"index": i, "item": obj}})
-            return [EditCommand(action="clarification_needed", error=raw)]
+            continue  # Пропускаем некорректный элемент, но продолжаем обработку
+            
         if "action" not in obj:
-            parse_action_monitor.record_error()
-            return [EditCommand(action="clarification_needed", error=raw)]
+            logger.error(f"[parse_assistant_output] Элемент {i} не содержит поле 'action'", extra={"data": {"item": obj}})
+            continue  # Пропускаем элемент без action, но продолжаем обработку
+            
         try:
             cmds.append(EditCommand(**obj))
+            logger.info(f"[parse_assistant_output] Добавлена команда {obj.get('action')} из элемента {i}")
         except ValidationError as ve:
             logger.error(f"[parse_assistant_output] Validation error", extra={"data": {"index": i, "item": obj, "error": str(ve)}})
-            return [EditCommand(action="clarification_needed", error=raw)]
+            # Продолжаем обработку остальных элементов
         except ValueError as ve:
             logger.error(f"[parse_assistant_output] Validation error (row check)", extra={"data": {"index": i, "item": obj, "error": str(ve)}})
-            return [EditCommand(action="clarification_needed", error=raw)]
+            # Продолжаем обработку остальных элементов
+    
+    # Если не удалось получить ни одной команды, возвращаем ошибку
+    if not cmds:
+        parse_action_monitor.record_error()
+        return [EditCommand(action="clarification_needed", error="Не удалось извлечь ни одну валидную команду")]
+        
     return cmds
 
 logger = logging.getLogger(__name__)
 
 # Инициализация OpenAI API клиента
 client = openai.OpenAI(api_key=os.getenv("OPENAI_CHAT_KEY", getattr(settings, "OPENAI_CHAT_KEY", "")))
+
+# Уменьшаем уровень логирования для httpx и httpcore, чтобы избежать избыточных логов
+def reduce_http_logging():
+    """
+    Уменьшает уровень логирования для HTTP-библиотек, используемых OpenAI.
+    Это помогает избежать избыточных логов от httpcore и httpx.
+    """
+    for module in ["httpx", "httpcore", "httpcore.http11", "httpcore.connection"]:
+        logger = logging.getLogger(module)
+        logger.setLevel(logging.WARNING)
+        
+# Применяем настройки логирования при импорте модуля
+reduce_http_logging()
 
 # ID ассистента для обработки команд редактирования
 ASSISTANT_ID = os.getenv("OPENAI_ASSISTANT_ID", getattr(settings, "OPENAI_ASSISTANT_ID", ""))

@@ -69,8 +69,25 @@ class IntentAdapter:
             else:
                 intent = response
                 
-            # Проверяем, есть ли поле action
-            if not isinstance(intent, dict) or "action" not in intent:
+            # Проверяем, есть ли поле action или actions
+            if not isinstance(intent, dict):
+                logger.error(f"Ответ не является словарем: {intent}")
+                return {"action": "unknown", "error": "not_a_dict"}
+                
+            # Обработка массива actions
+            if "actions" in intent and isinstance(intent["actions"], list) and len(intent["actions"]) > 0:
+                logger.info(f"Найден массив actions, извлекаем первое действие: {intent['actions'][0]}")
+                # Извлекаем первое действие из массива
+                action_item = intent["actions"][0]
+                if isinstance(action_item, dict) and "action" in action_item:
+                    # Используем первое действие из массива
+                    intent = action_item
+                else:
+                    logger.error(f"Элемент массива actions не содержит поле 'action': {action_item}")
+                    return {"action": "unknown", "error": "invalid_action_in_array"}
+            
+            # Финальная проверка на наличие поля action
+            if "action" not in intent:
                 logger.error(f"Ответ не содержит поле 'action': {intent}")
                 return {"action": "unknown", "error": "missing_action_field"}
                 
@@ -123,20 +140,48 @@ class IntentAdapter:
                 json_str = text[start:end]
                 
                 try:
-                    return json.loads(json_str)
+                    parsed_json = json.loads(json_str)
+                    
+                    # Проверяем, содержит ли JSON поле actions или action
+                    if isinstance(parsed_json, dict):
+                        if "actions" in parsed_json or "action" in parsed_json:
+                            logger.info(f"Успешно извлечен JSON с полем actions/action: {json_str[:100]}...")
+                            return parsed_json
+                        else:
+                            logger.debug(f"Извлеченный JSON не содержит поля actions/action: {parsed_json}")
+                    return parsed_json
                 except json.JSONDecodeError:
+                    logger.warning(f"Не удалось распарсить основной JSON фрагмент: {json_str[:100]}...")
                     # Если основной фрагмент не распарсился, попробуем найти другие JSON-фрагменты
                     all_start_indices = [i for i, char in enumerate(text) if char == "{"]
                     all_end_indices = [i + 1 for i, char in enumerate(text) if char == "}"]
                     
+                    # Сортируем фрагменты по размеру (сначала проверяем большие фрагменты)
+                    fragments = []
                     for s in all_start_indices:
                         for e in all_end_indices:
                             if s < e:
-                                try:
-                                    json_candidate = text[s:e]
-                                    return json.loads(json_candidate)
-                                except json.JSONDecodeError:
-                                    continue
+                                fragments.append((s, e, e - s))
+                    
+                    # Сортируем по размеру (от большего к меньшему)
+                    fragments.sort(key=lambda x: x[2], reverse=True)
+                    
+                    for s, e, _ in fragments:
+                        try:
+                            json_candidate = text[s:e]
+                            parsed_json = json.loads(json_candidate)
+                            
+                            # Проверяем, содержит ли JSON поле actions или action
+                            if isinstance(parsed_json, dict):
+                                if "actions" in parsed_json or "action" in parsed_json:
+                                    logger.info(f"Успешно извлечен альтернативный JSON с полем actions/action: {json_candidate[:100]}...")
+                                    return parsed_json
+                            
+                            # Если нашли любой валидный JSON, возвращаем его
+                            logger.info(f"Успешно извлечен альтернативный JSON: {json_candidate[:100]}...")
+                            return parsed_json
+                        except json.JSONDecodeError:
+                            continue
             
             # Если JSON не найден, пытаемся распознать команды в тексте
             return cls._parse_text_intent(text)
