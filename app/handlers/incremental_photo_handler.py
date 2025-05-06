@@ -113,7 +113,7 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         
         ui.stop_spinner()
         positions_count = len(ocr_result.positions) if ocr_result.positions else 0
-        await ui.update(t("status.text_recognized", lang, {"count": positions_count}) or 
+        await ui.update(t("status.text_recognized", {"count": positions_count}, lang=lang) or 
                        f"✅ Text recognized: found {positions_count} items")
         logger.info(f"[{req_id}] OCR completed successfully, found {positions_count} items")
         
@@ -134,8 +134,8 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         
         ui.stop_spinner()
         await ui.update(t("status.matching_completed", 
-                         lang,
-                         {"ok": ok_count, "unknown": unknown_count, "partial": partial_count}) or 
+                         {"ok": ok_count, "unknown": unknown_count, "partial": partial_count},
+                         lang=lang) or 
                        f"✅ Matching completed: {ok_count} ✓, {unknown_count} ❌, {partial_count} ⚠️")
         logger.info(f"[{req_id}] Matching completed: {ok_count} OK, {unknown_count} unknown, {partial_count} partial")
         
@@ -213,8 +213,8 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
                     # Last resort - send a brief summary
                     try:
                         simple_message = t("status.brief_summary", 
-                                          lang,
-                                          {"total": positions_count, "ok": ok_count, "issues": unknown_count + partial_count}) or (
+                                          {"total": positions_count, "ok": ok_count, "issues": unknown_count + partial_count},
+                                          lang=lang) or (
                             f"📋 Found {positions_count} items. "
                             f"✅ OK: {ok_count}. "
                             f"⚠️ Issues: {unknown_count + partial_count}."
