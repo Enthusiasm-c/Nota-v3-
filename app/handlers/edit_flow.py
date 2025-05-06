@@ -48,9 +48,14 @@ async def handle_free_edit_text(message: Message, state: FSMContext):
         intent = run_thread_safe(user_text)
         logger.info("[edit_flow] Ответ OpenAI получен", extra={"data": {"intent": intent}})
     except Exception as e:
-        logger.error("[edit_flow] Ошибка при разборе команды", extra={"data": {"error": str(e)}})
-        intent = {"action": "unknown", "error": str(e)}
-    
+        logger.error("[edit_flow] Критическая ошибка при разборе команды", extra={"data": {"error": str(e)}})
+        await message.answer(
+            "Сервис временно недоступен. Пожалуйста, попробуйте позже.\n"
+            "Если проблема повторяется, обратитесь к администратору."
+        )
+        await state.clear()
+        return
+
     # Проверяем успешность разбора
     if intent.get("action") == "unknown":
         error = intent.get("error", "unknown_error")

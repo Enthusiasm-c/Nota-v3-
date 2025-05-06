@@ -1,0 +1,9 @@
+/Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/logs/assistant_trace.log {
+    rotate 14
+    daily
+    compress
+    missingok
+    notifempty
+    copytruncate
+    size 50M
+}

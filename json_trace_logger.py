@@ -7,6 +7,8 @@ import os
 
 LOG_PATH = os.path.join(os.path.dirname(__file__), "logs", "assistant_trace.log")
 
+from dataclasses import is_dataclass, asdict
+
 class JsonTraceFormatter(logging.Formatter):
     def format(self, record):
         trace_id = get_trace_id() or getattr(record, "trace_id", None)
@@ -19,7 +21,12 @@ class JsonTraceFormatter(logging.Formatter):
         }
         if hasattr(record, "data"):
             log_entry["data"] = record.data
-        return json.dumps(log_entry, ensure_ascii=False)
+        # Сериализуем все нестандартные типы (например, dataclass) корректно
+        return json.dumps(
+            log_entry,
+            ensure_ascii=False,
+            default=lambda o: asdict(o) if is_dataclass(o) else str(o)
+        )
 
 def setup_json_trace_logger():
     logger = logging.getLogger()
