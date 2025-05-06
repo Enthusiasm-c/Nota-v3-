@@ -15,6 +15,7 @@ from app.config import settings
 from app.assistants.trace_openai import trace_openai
 from app.utils.redis_cache import cache_get, cache_set
 from app.assistants.intent_adapter import adapt_intent
+from app.assistants.thread_pool import get_thread, initialize_pool
 
 from pydantic import BaseModel, ValidationError, field_validator
 from functools import wraps
@@ -267,6 +268,7 @@ def run_async(func):
 async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str, Any]:
     """
     Асинхронная версия безопасного запуска OpenAI Thread с обработкой ошибок и таймаутом.
+    Использует пул предварительно созданных thread для ускорения работы.
     
     Args:
         user_input: Текстовая команда пользователя
@@ -282,10 +284,10 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
         thread_key = f"openai:thread:{hash(user_input)}"
         thread_id = cache_get(thread_key)
         if not thread_id:
-            thread = client.beta.threads.create()
-            thread_id = thread.id
+            # Получаем thread из пула или создаем новый
+            thread_id = await get_thread(client)
             cache_set(thread_key, thread_id, ex=300)
-            logger.info(f"[run_thread_safe_async] Created new thread: {thread_id}")
+            logger.info(f"[run_thread_safe_async] Using thread from pool: {thread_id}")
         else:
             logger.info(f"[run_thread_safe_async] Using cached thread: {thread_id}")
         
