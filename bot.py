@@ -7,22 +7,21 @@ import uuid
 import json
 import time
 import shutil
-from datetime import datetime
-from typing import Dict, Any
 from pathlib import Path
+import signal
+import sys
 from json_trace_logger import setup_json_trace_logger
 from app.handlers.tracing_log_middleware import TracingLogMiddleware
 
 # Aiogram импорты
-from aiogram import Bot, Dispatcher, types, F
+from aiogram import Bot, Dispatcher, F
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
-from aiogram.filters import Command
+from aiogram.filters import Command, CommandStart
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.enums import ParseMode
-from aiogram.filters import CommandStart
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup
 
 # Импортируем состояния для свободного редактирования
 from app.fsm.states import EditFree
@@ -33,7 +32,7 @@ from app.utils.md import escape_html, clean_html
 from app.config import settings
 
 # Импортируем обработчики для свободного редактирования
-from app.handlers.edit_flow import router as edit_flow_router, handle_free_edit_text
+from app.handlers.edit_flow import router as edit_flow_router
 
 # Setup logging
 logging.basicConfig(
@@ -1512,7 +1511,23 @@ async def text_fallback(message):
     )
 
 
+import signal
+import sys
+
+def _graceful_shutdown(signum, frame):
+    logger.info(f"Получен сигнал завершения ({signum}), выполняем graceful shutdown...")
+    try:
+        # Здесь можно закрыть соединения с Redis, БД и т.д.
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            loop.stop()
+    except Exception as e:
+        logger.error(f"Ошибка при завершении: {e}")
+    sys.exit(0)
+
 if __name__ == "__main__":
+    signal.signal(signal.SIGTERM, _graceful_shutdown)
+    signal.signal(signal.SIGINT, _graceful_shutdown)
 
     async def main():
         global bot, dp

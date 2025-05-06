@@ -367,16 +367,18 @@ def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
                     json_start = content.find("{")
                     json_end = content.rfind("}") + 1
                     json_str = content[json_start:json_end]
-                    result = json.loads(json_str)
-                    
+                    try:
+                        result = json.loads(json_str)
+                    except Exception as e:
+                        logger.error(f"Ошибка парсинга JSON из ответа ассистента: {e}, raw={json_str}")
+                        return {"action": "unknown", "error": "json_parse_error", "raw": json_str}
                     # Проверка необходимых полей
                     if "action" not in result:
-                        raise ValueError("Missing 'action' field in response")
-                    
+                        logger.error(f"Ответ OpenAI assistant без поля 'action': {result}")
+                        return {"action": "unknown", "error": "missing_action_field", **result}
                     # Лог успешного завершения
                     elapsed = time.time() - start_time
                     logger.info(f"Assistant run ok in {elapsed:.1f} s")
-                    
                     return result
                 else:
                     # Если нет JSON в ответе, пытаемся распарсить текстовый ответ
