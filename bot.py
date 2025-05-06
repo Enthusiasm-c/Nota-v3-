@@ -344,6 +344,12 @@ def register_handlers(dp, bot=None):
     if 'incremental_photo_router' not in dp._registered_routers:
         dp.include_router(incremental_photo_router)
         dp._registered_routers.add('incremental_photo_router')
+        
+    # Подключаем роутер для административных команд
+    from app.handlers import admin_router
+    if 'admin_router' not in dp._registered_routers:
+        dp.include_router(admin_router)
+        dp._registered_routers.add('admin_router')
     
     # Закоментированы в пользу новой реализации через GPT
     # dp.message.register(handle_free_edit_text, EditFree.awaiting_input)

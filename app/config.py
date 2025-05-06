@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     OPENAI_OCR_KEY: str = os.getenv("OPENAI_OCR_KEY", "")
     OPENAI_CHAT_KEY: str = os.getenv("OPENAI_CHAT_KEY", "")
     OPENAI_ASSISTANT_ID: str = os.getenv("OPENAI_ASSISTANT_ID", "")
+    
+    # Image preprocessing configuration
+    USE_IMAGE_PREPROCESSING: bool = True  # Set to False to disable image preprocessing
 
     # Business logic configuration
     OWN_COMPANY_ALIASES: list[str] = ["Bali Veg Ltd", "Nota AI Cafe"]

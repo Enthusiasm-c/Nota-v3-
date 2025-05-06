@@ -20,16 +20,54 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-def prepare_for_ocr(path: str) -> bytes:
+def prepare_without_preprocessing(path: str) -> bytes:
     """
-    Prepare image for OCR by applying minimal enhancements.
+    Send original image without any preprocessing.
+    Simply reads and converts to WebP format with high quality.
     
     Args:
         path: Path to the source image file
         
     Returns:
+        Original image as bytes in WebP/JPEG format
+    """
+    try:
+        # Open image with PIL
+        image = Image.open(path)
+        
+        # Save to bytes (WebP format if supported, or JPEG)
+        buffer = io.BytesIO()
+        if hasattr(Image, 'WEBP'):
+            image.save(buffer, format="WebP", quality=98)
+        else:
+            image.save(buffer, format="JPEG", quality=98)
+        
+        logger.info("Image sent without preprocessing (original)")
+        return buffer.getvalue()
+    except Exception as e:
+        logger.error(f"Error reading original image: {str(e)}")
+        try:
+            with open(path, "rb") as f:
+                return f.read()
+        except Exception as read_error:
+            logger.error(f"Error reading original image file: {str(read_error)}")
+            raise
+
+def prepare_for_ocr(path: str, use_preprocessing: bool = True) -> bytes:
+    """
+    Prepare image for OCR by applying minimal enhancements or no preprocessing.
+    
+    Args:
+        path: Path to the source image file
+        use_preprocessing: Flag to enable/disable preprocessing
+        
+    Returns:
         Processed image as bytes in WebP format
     """
+    # Skip preprocessing if disabled
+    if not use_preprocessing:
+        return prepare_without_preprocessing(path)
+        
     # Use OpenCV if available, otherwise use PIL fallback
     if OPENCV_AVAILABLE:
         return prepare_with_opencv(path)

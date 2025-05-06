@@ -21,7 +21,7 @@ from app import ocr, matcher, data_loader
 from app.formatters.report import build_report
 from app.keyboards import build_main_kb
 from app.utils.md import clean_html
-from app.imgprep import prepare_for_ocr
+from app.imgprep import prepare_for_ocr, prepare_without_preprocessing
 from app.i18n import t
 
 # Import NotaStates from states module
@@ -92,14 +92,28 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         with open(tmp_path, "wb") as f:
             f.write(img_bytes)
         
-        # Preprocess the image
-        try:
-            processed_bytes = await asyncio.to_thread(prepare_for_ocr, tmp_path)
-            logger.info(f"[{req_id}] Image preprocessed: original={len(img_bytes)}b, processed={len(processed_bytes)}b")
-            img_bytes = processed_bytes  # Use the processed image for OCR
-        except Exception as prep_err:
-            logger.warning(f"[{req_id}] Image preprocessing failed: {str(prep_err)}. Using original image.")
-            # Continue with original image if preprocessing fails
+        # Import settings to check if preprocessing is enabled
+        from app.config import settings
+        
+        # Preprocess the image (if enabled)
+        if settings.USE_IMAGE_PREPROCESSING:
+            try:
+                processed_bytes = await asyncio.to_thread(prepare_for_ocr, tmp_path, use_preprocessing=True)
+                logger.info(f"[{req_id}] Image preprocessed: original={len(img_bytes)}b, processed={len(processed_bytes)}b")
+                img_bytes = processed_bytes  # Use the processed image for OCR
+            except Exception as prep_err:
+                logger.warning(f"[{req_id}] Image preprocessing failed: {str(prep_err)}. Using original image.")
+                # Continue with original image if preprocessing fails
+        else:
+            # Skip preprocessing and use original image
+            try:
+                # Just convert to proper format without any preprocessing
+                processed_bytes = await asyncio.to_thread(prepare_without_preprocessing, tmp_path)
+                logger.info(f"[{req_id}] Image preprocessing DISABLED. Using original image.")
+                img_bytes = processed_bytes
+            except Exception as read_err:
+                logger.warning(f"[{req_id}] Error reading original image: {str(read_err)}. Using raw bytes.")
+                # Continue with completely raw bytes if even format conversion fails
         
         ui.stop_spinner()
         await ui.update(t("status.image_processed", lang=lang) or "✅ Image optimized for OCR")
