@@ -66,7 +66,13 @@ def parse_edit_command(user_input: str, invoice_lines=None) -> list:
         Список dict'ов с действиями
     """
     import re
-    commands = [c.strip() for c in user_input.replace('\n', ';').split(';') if c.strip()]
+    # Split commands by newlines, semicolons, commas, or periods
+    import re
+    # First replace newlines with semicolons, then split by semicolons, commas, or periods
+    # We use a regex to avoid splitting on periods within numbers (e.g., "3.14")
+    cleaned_input = user_input.replace('\n', ';')
+    # Split on semicolons, commas, or periods that are followed by a space or end of string
+    commands = [c.strip() for c in re.split(r'[;,.](?=\s|\Z)', cleaned_input) if c.strip()]
     results = []
     for cmd in commands:
         # --- Supplier ---

@@ -1,19 +1,20 @@
 """
-Обработчики для потока редактирования инвойса через GPT-3.5-turbo.
+Handlers for invoice editing flow via GPT-3.5-turbo.
 """
 
 import logging
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from app.fsm.states import EditFree
 from app.assistants.client import run_thread_safe, run_thread_safe_async
 from app.edit.apply_intent import apply_intent
 from app.formatters import report
-from app.matcher import match_positions
+from app.matcher import match_positions, fuzzy_find
 from app.data_loader import load_products
 from app.keyboards import build_main_kb
 from app.converters import parsed_to_dict
+from app.i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -23,209 +24,182 @@ router = Router()
 @router.message(EditFree.awaiting_input)
 async def handle_free_edit_text(message: Message, state: FSMContext):
     """
-    Обработчик свободного ввода пользователя в режиме редактирования.
-    Использует GPT-3.5-turbo для разбора естественного языка.
+    Handles free-form user input in edit mode.
+    Uses GPT-3.5-turbo for natural language parsing.
     
     Args:
-        message: Входящее сообщение Telegram
-        state: FSM-контекст
+        message: Incoming Telegram message
+        state: FSM context
     """
     user_text = message.text.strip()
-    logger.info("[edit_flow] Новый ввод пользователя", extra={"data": {"user_text": user_text}})
+    logger.info("[edit_flow] New user input", extra={"data": {"user_text": user_text}})
     
-    # Обработка команды отмены
+    # Get user language preference (default to English)
+    data = await state.get_data()
+    lang = data.get("lang", "en")
+    
+    # Handle cancel command
     if user_text.lower() in ["отмена", "cancel"]:
-        await message.answer("Редактирование отменено.")
-        await state.set_state(None)  # Возвращаемся в начальное состояние
+        await message.answer(t("status.edit_cancelled", lang=lang))
+        await state.set_state(None)  # Return to initial state
         return
     
-    # Получаем данные из состояния
-    data = await state.get_data()
+    # Get data from state
     logger.info("[edit_flow] State at handler start", extra={"data": data})
     invoice = data.get("invoice")
     
     if not invoice:
-        logger.warning("[edit_flow] Нет инвойса в состоянии пользователя")
-        await message.answer("Сессия истекла. Пожалуйста, загрузите инвойс заново.")
+        logger.warning("[edit_flow] No invoice in user state")
+        await message.answer(t("status.session_expired", lang=lang))
         await state.clear()
         return
     
-    # Отправляем индикатор обработки
-    processing_msg = await message.answer("🔄 Обрабатываю запрос...")
+    # Send processing indicator
+    processing_msg = await message.answer(t("status.processing", lang=lang))
     
     try:
-        logger.info("[edit_flow] Отправка текста пользователя в OpenAI", extra={"data": {"user_text": user_text}})
-        # Используем асинхронную версию для лучшей производительности
+        logger.info("[edit_flow] Sending user text to OpenAI", extra={"data": {"user_text": user_text}})
+        # Use async version for better performance
         intent = await run_thread_safe_async(user_text)
-        logger.info("[edit_flow] Ответ OpenAI получен", extra={"data": {"intent": intent}})
+        logger.info("[edit_flow] OpenAI response received", extra={"data": {"intent": intent}})
         
-        # Проверяем успешность разбора
+        # Check parsing success
         if intent.get("action") == "unknown":
             error = intent.get("error", "unknown_error")
-            logger.warning("[edit_flow] Не удалось разобрать команду", extra={"data": {"error": error}})
+            logger.warning("[edit_flow] Failed to parse command", extra={"data": {"error": error}})
             
-            # Удаляем сообщение о загрузке
+            # Delete loading message
             try:
                 await processing_msg.delete()
             except Exception:
                 pass
             
-            # Используем пользовательское сообщение об ошибке, если оно есть
-            error_message = intent.get("user_message", 
-                "Не понял, что нужно изменить. Попробуйте переформулировать, например:\n"
-                "• дата 16 апреля\n"
-                "• строка 2 цена 95000"
-            )
+            # Use custom error message if available
+            error_message = intent.get("user_message", t("error.parse_command", lang=lang))
             
             await message.answer(error_message)
             return
             
-        # Приведение invoice к dict через универсальный адаптер
-        from app.converters import parsed_to_dict
+        # Convert invoice to dict via universal adapter
         invoice = parsed_to_dict(invoice)
         
-        # Применяем интент к инвойсу
+        # Apply intent to invoice
         new_invoice = apply_intent(invoice, intent)
         
-        # Пересчитываем ошибки и обновляем отчёт
-        match_results = match_positions(new_invoice["positions"], load_products())
+        # Recalculate errors and update report
+        products = load_products()
+        match_results = match_positions(new_invoice["positions"], products)
         text, has_errors = report.build_report(new_invoice, match_results)
     
-        # Fuzzy-подсказка для некорректного имени позиции
-        from rapidfuzz import process as fuzzy_process
-        products = load_products()
-        product_names = [p.name for p in products]
-        
-        # Флаг, который показывает, было ли изменение
+        # Flag to show if there was a change
         was_changed = True
         
-        # Проверяем есть ли какие-то неизвестные позиции
+        # Check if there are any unknown positions for fuzzy matching
+        from app.handlers.name_picker import show_fuzzy_suggestions
+        suggestion_shown = False
+        
         for idx, item in enumerate(match_results):
             if item.get("status") == "unknown":
                 name_to_check = item.get("name", "")
-                # Ищем ближайшее совпадение
-                result = fuzzy_process.extractOne(name_to_check, product_names, score_cutoff=82)
-                if result:
-                    suggestion, score = result[0], result[1]
-                    # Сохраняем оригинал и подсказку в state для дальнейшей логики
-                    await state.update_data(
-                        fuzzy_original=name_to_check, 
-                        fuzzy_match=suggestion,
-                        fuzzy_line=idx
-                    )
+                # Try to show fuzzy suggestions with the new implementation
+                suggestion_shown = await show_fuzzy_suggestions(
+                    message, state, name_to_check, idx, lang
+                )
+                if suggestion_shown:
+                    # Update invoice in state before exiting
+                    await state.update_data(invoice=new_invoice)
                     
-                    # Удаляем сообщение о загрузке
+                    # Delete loading message
                     try:
                         await processing_msg.delete()
                     except Exception:
                         pass
-                    
-                    # Отправляем подсказку пользователю с кнопками
-                    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-                    keyboard = InlineKeyboardMarkup(
-                        inline_keyboard=[
-                            [
-                                InlineKeyboardButton(
-                                    text="✓ Да", callback_data=f"fuzzy:confirm:{idx}"
-                                ),
-                                InlineKeyboardButton(
-                                    text="✗ Нет", callback_data=f"fuzzy:reject:{idx}"
-                                )
-                            ]
-                        ]
-                    )
-                    
-                    await message.answer(
-                        f"Наверное, вы имели в виду <b>{suggestion}</b>?",
-                        parse_mode="HTML",
-                        reply_markup=keyboard
-                    )
-                    break  # Показываем только одну подсказку за раз
+                        
+                    # Stay in input state
+                    await state.set_state(EditFree.awaiting_input)
+                    return
     
-        # Подсчитываем количество оставшихся проблем
+        # Count remaining issues
         issues_count = sum(1 for item in match_results if item.get("status", "") != "ok")
     
-        # Обновляем данные в состоянии
+        # Update data in state
         await state.update_data(invoice=new_invoice, issues_count=issues_count)
     
-        # Генерируем клавиатуру в зависимости от наличия ошибок
-        keyboard = build_main_kb(has_errors)
+        # Generate keyboard based on errors presence
+        keyboard = build_main_kb(has_errors, lang=lang)
     
-        # Удаляем сообщение о загрузке
+        # Delete loading message
         try:
             await processing_msg.delete()
         except Exception:
             pass
             
-        # Отправляем обновлённый отчёт
+        # Send updated report
         await message.answer(
             text, 
             reply_markup=keyboard, 
             parse_mode="HTML"
         )
     
-        # Добавляем сообщение об успешном редактировании
+        # Add message about successful editing
         if was_changed:
-            action_name = {
-                "set_date": "дата",
-                "set_price": "цена",
-                "set_name": "название",
-                "set_quantity": "количество",
-                "set_unit": "единица измерения",
-                "add_line": "новая позиция"
-            }.get(intent.get("action", ""), "значение")
+            field_map = {
+                "set_date": "date",
+                "set_price": "price",
+                "set_name": "name",
+                "set_quantity": "quantity",
+                "set_unit": "unit",
+                "add_line": "new item"
+            }
+            field = field_map.get(intent.get("action", ""), "value")
             
-            success_message = f"✅ {action_name.capitalize()} успешно изменена!"
+            success_message = t("status.edit_success", {"field": field}, lang=lang)
             if not has_errors:
-                success_message += " Вы можете подтвердить инвойс."
+                success_message += t("status.edit_success_confirm", lang=lang)
                 
             await message.answer(success_message)
     
-        # Остаёмся в том же состоянии для продолжения редактирования
+        # Stay in the same state for continued editing
         await state.set_state(EditFree.awaiting_input)
         
     except Exception as e:
-        logger.error("[edit_flow] Критическая ошибка при обработке команды", extra={"data": {"error": str(e)}})
+        logger.error("[edit_flow] Critical error processing command", extra={"data": {"error": str(e)}})
         
-        # Удаляем сообщение о загрузке
+        # Delete loading message
         try:
             await processing_msg.delete()
         except Exception:
             pass
             
-        await message.answer(
-            "Сервис временно недоступен. Пожалуйста, попробуйте позже.\n"
-            "Если проблема повторяется, обратитесь к администратору."
-        )
-        # Не очищаем состояние, чтобы пользователь мог попробовать еще раз
+        await message.answer(t("status.service_unavailable", lang=lang))
+        # Don't clear state so user can try again
 
-# Обработчик нажатия кнопки "✏️ Редактировать"
+# Handler for the "✏️ Edit" button click
 @router.callback_query(F.data == "edit:free")
 async def handle_edit_free(call: CallbackQuery, state: FSMContext):
     """
-    Обработчик кнопки "✏️ Редактировать".
-    Переводит пользователя в режим свободного редактирования.
+    Handler for the "✏️ Edit" button.
+    Transitions user to free-form editing mode.
     """
-    # Явно сохраняем invoice в state при переходе в режим редактирования
+    # Get data from state
     data = await state.get_data()
+    lang = data.get("lang", "en")
+    
+    # Explicitly save invoice in state when transitioning to edit mode
     invoice = data.get("invoice")
     if invoice:
         await state.update_data(invoice=invoice)
-    # Переходим в состояние ожидания ввода
+    
+    # Transition to input awaiting state
     await state.set_state(EditFree.awaiting_input)
     
-    # Отправляем инструкцию
+    # Send instruction
     await call.message.answer(
-        "Что нужно отредактировать? Примеры команд:\n\n"
-        "• <i>дата 16 апреля</i>\n"
-        "• <i>строка 2 цена 95000</i>\n"
-        "• <i>строка 1 название Apple</i>\n"
-        "• <i>строка 3 количество 10</i>\n\n"
-        "Введите команду или <i>отмена</i> для возврата.",
+        t("example.edit_prompt", lang=lang),
         parse_mode="HTML"
     )
     
-    # Отвечаем на callback
+    # Answer callback
     await call.answer()
 
 # Обработчик подтверждения fuzzy-совпадения

@@ -2,8 +2,91 @@ import logging
 import time
 from collections import deque
 from threading import Lock
+from typing import Dict, Any, Optional
 
-# Мониторинг ValueError по ключу (например, 'Missing action')
+# Prometheus metric classes
+try:
+    import prometheus_client as prom
+    HAS_PROMETHEUS = True
+except ImportError:
+    HAS_PROMETHEUS = False
+
+# Monitoring metrics
+METRICS = {}
+
+# Initialize Prometheus metrics if available
+if HAS_PROMETHEUS:
+    # Counter metrics
+    METRICS["nota_invoices_total"] = prom.Counter(
+        "nota_invoices_total",
+        "Total number of processed invoices",
+        ["status"]  # ok/failed
+    )
+    
+    # Histogram metrics
+    METRICS["nota_ocr_latency_ms"] = prom.Histogram(
+        "nota_ocr_latency_ms",
+        "OCR processing latency in milliseconds",
+        buckets=(500, 1000, 2000, 5000, 10000, 15000, 30000, 60000)
+    )
+    
+    METRICS["assistant_latency_ms"] = prom.Histogram(
+        "assistant_latency_ms",
+        "OpenAI Assistant latency in milliseconds",
+        ["phase"],  # ocr/edits/syrve
+        buckets=(500, 1000, 2000, 5000, 10000, 15000, 30000, 60000)
+    )
+    
+    METRICS["fuzzy_suggestions"] = prom.Histogram(
+        "fuzzy_suggestions",
+        "Number of fuzzy match suggestions per request",
+        buckets=(0, 1, 2, 3, 5, 10)
+    )
+
+def increment_counter(name: str, labels: Optional[Dict[str, Any]] = None) -> None:
+    """
+    Increment a Prometheus counter.
+    
+    Args:
+        name: The name of the counter metric
+        labels: Dictionary of label values
+    """
+    if not HAS_PROMETHEUS or name not in METRICS:
+        return
+    
+    # Default to empty dict if no labels provided
+    labels = labels or {}
+    
+    try:
+        if isinstance(METRICS[name], prom.Counter):
+            # Get counter with labels
+            METRICS[name].labels(**labels).inc()
+    except Exception as e:
+        logging.getLogger().warning(f"Failed to increment counter {name}: {str(e)}")
+
+def record_histogram(name: str, value: float, labels: Optional[Dict[str, Any]] = None) -> None:
+    """
+    Record a value in a Prometheus histogram.
+    
+    Args:
+        name: The name of the histogram metric
+        value: The value to record
+        labels: Dictionary of label values
+    """
+    if not HAS_PROMETHEUS or name not in METRICS:
+        return
+    
+    # Default to empty dict if no labels provided
+    labels = labels or {}
+    
+    try:
+        if isinstance(METRICS[name], prom.Histogram):
+            # Get histogram with labels
+            METRICS[name].labels(**labels).observe(value)
+    except Exception as e:
+        logging.getLogger().warning(f"Failed to record histogram {name}: {str(e)}")
+
+# Monitor ValueError by key (e.g., 'Missing action')
 
 class ErrorRateMonitor:
     def __init__(self, max_errors=5, interval_sec=600):

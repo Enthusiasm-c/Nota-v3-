@@ -1,0 +1,52 @@
+# Nota AI English Localization
+
+# Common UI Elements
+button:
+  edit: "✏️ Edit"
+  cancel: "↩ Cancel"
+  confirm: "✅ Confirm"
+  back: "Back"
+  help: "ℹ️ Help"
+  upload_new: "➕ Upload new invoice"
+  set_supplier: "✏️ Set supplier"
+
+# Status Messages
+status:
+  processing: "🔄 Processing request..."
+  edit_cancelled: "Editing cancelled."
+  session_expired: "Session expired. Please upload the invoice again."
+  service_unavailable: "Service temporarily unavailable. Please try again later.\nIf the problem persists, contact the administrator."
+  applying_changes: "🔄 Applying changes..."
+  edit_success: "✅ The {field} has been successfully changed!"
+  edit_success_confirm: " You can confirm the invoice."
+  name_changed: "✅ Item name changed to <b>{name}</b>!"
+
+# Error Messages
+error:
+  parse_command: "I didn't understand what to change. Try rephrasing, for example:\n• date April 16\n• row 2 price 95000"
+  confirmation_data: "Error: confirmation data not found."
+  position_not_found: "Error: position with index {index} not found."
+  update_name: "An error occurred while updating the name. Please try again."
+  unit_mismatch: "unit measurement error"
+  unrecognized_item: "item not recognized (name error)"
+  line_processing: "line processing error"
+  missing_quantity: "quantity not specified"
+  missing_price: "price not specified"
+
+# Report Messages
+report:
+  no_errors: "<b>No errors. All items recognized correctly.</b>"
+
+# Suggestions
+suggestion:
+  fuzzy_match: "Did you mean <b>{suggestion}</b>?"
+  manual_edit: "Okay, you can manually edit the name by sending the command:\n\n<i>row {index} name [new name]</i>"
+  no_similar_items: "No similar items found. Please type the exact name."
+
+# Command Examples
+example:
+  edit_prompt: "What needs to be edited? Command examples:\n\n• <i>date April 16</i>\n• <i>row 2 price 95000</i>\n• <i>row 1 name Apple</i>\n• <i>row 3 quantity 10</i>\n\nEnter a command or <i>cancel</i> to return."
+
+# Welcome Message
+welcome:
+  start: "Welcome to Nota AI — a quick way to digitize supplier invoices.\n1) Send a photo.\n2) Review suggestions.\n3) Push to Syrve."

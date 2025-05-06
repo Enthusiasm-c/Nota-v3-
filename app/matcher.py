@@ -144,6 +144,49 @@ def fuzzy_best(name: str, catalog: dict[str, str]) -> tuple[str, float]:
     return best, score
 
 
+def fuzzy_find(query: str, products: List[Dict], thresh: float = 0.75) -> List[Dict]:
+    """
+    Find products with similar names using fuzzy matching.
+    
+    Args:
+        query: The search query (product name)
+        products: List of product dictionaries
+        thresh: Similarity threshold (0.0-1.0)
+        
+    Returns:
+        List of matching products with similarity >= threshold
+    """
+    if not query or not products:
+        return []
+    
+    query = query.lower().strip()
+    matches = []
+    
+    for product in products:
+        if isinstance(product, dict):
+            name = product.get("name", "")
+            product_id = product.get("id", "")
+        else:
+            name = getattr(product, "name", "")
+            product_id = getattr(product, "id", "")
+            
+        if not name:
+            continue
+            
+        similarity = calculate_string_similarity(query, name)
+        if similarity >= thresh:
+            matches.append({
+                "name": name,
+                "id": product_id,
+                "score": similarity
+            })
+    
+    # Sort by similarity score (highest first)
+    matches.sort(key=lambda x: x["score"], reverse=True)
+    
+    return matches
+
+
 def match_positions(
     positions: List[Dict],
     products: List[Dict],
@@ -250,6 +293,23 @@ def match_positions(
                 matched_product = best_match
                 status = "ok"
                 canonical_name = product_name
+                
+                # Автоматическое создание алиаса при высокой уверенности (>=90%)
+                if best_score >= 90.0 and name:
+                    try:
+                        # Получаем product_id из matched_product
+                        if isinstance(matched_product, dict):
+                            product_id = matched_product.get("id")
+                        else:
+                            product_id = getattr(matched_product, "id", None)
+                            
+                        if product_id:
+                            from app.alias import add_alias
+                            added = add_alias(name, product_id)
+                            if added:
+                                logger.info(f"Auto-added alias for high confidence match: '{name}' -> {product_id} (score: {best_score:.1f})")
+                    except Exception as e:
+                        logger.warning(f"Failed to auto-add alias: {str(e)}")
             else:
                 matched_product = None
                 status = "unknown"

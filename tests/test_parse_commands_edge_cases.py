@@ -27,6 +27,28 @@ from app.assistants.client import parse_edit_command
         {"action": "set_supplier", "supplier": "Acme Corp"},
         {"action": "set_name", "line": 1, "name": "Milk"}
     ]),
+    # Команды с запятыми
+    ("строка 1 цена 100, строка 2 количество 5", None, [
+        {"action": "set_price", "line": 0, "price": 100.0},
+        {"action": "set_qty", "line": 1, "qty": 5.0}
+    ]),
+    # Команды с точками
+    ("строка 1 название Молоко. строка 1 цена 200. строка 1 количество 3", None, [
+        {"action": "set_name", "line": 0, "name": "Молоко"},
+        {"action": "set_price", "line": 0, "price": 200.0},
+        {"action": "set_qty", "line": 0, "qty": 3.0}
+    ]),
+    # Комбинированные разделители
+    ("поставщик ООО Ромашка; строка 1 цена 100, строка 2 количество 5.", None, [
+        {"action": "set_supplier", "supplier": "ООО Ромашка"},
+        {"action": "set_price", "line": 0, "price": 100.0},
+        {"action": "set_qty", "line": 1, "qty": 5.0}
+    ]),
+    # Проверка, что точки внутри чисел не разделяют команды
+    ("строка 1 цена 10.5, строка 2 количество 3.14", None, [
+        {"action": "set_price", "line": 0, "price": 10.5},
+        {"action": "set_qty", "line": 1, "qty": 3.14}
+    ]),
 ])
 def test_parse_commands_edge_cases(user_input, invoice_lines, expected):
     result = parse_edit_command(user_input, invoice_lines) if invoice_lines is not None else parse_edit_command(user_input)

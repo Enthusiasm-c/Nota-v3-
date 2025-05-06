@@ -3,6 +3,7 @@ from aiogram.fsm.state import StatesGroup, State
 class EditFree(StatesGroup):
     awaiting_input = State()
     awaiting_free_edit = State()
+    awaiting_pick_name = State()  # Added for fuzzy match feature
     
 class NotaStates(StatesGroup):
     lang = State()
