@@ -1,5 +1,6 @@
 """
 Image preprocessing module for enhancing scanned invoices before OCR.
+Simplified version that focuses on minimal necessary preprocessing.
 """
 
 import io
@@ -7,6 +8,7 @@ import logging
 import numpy as np
 from typing import Optional, Tuple, List
 from PIL import Image, ImageEnhance, ImageFilter
+from pathlib import Path
 
 # Try to import OpenCV, fall back to PIL-only mode if not available
 try:
@@ -20,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 def prepare_for_ocr(path: str) -> bytes:
     """
-    Prepare image for OCR by applying a series of enhancements.
+    Prepare image for OCR by applying minimal enhancements.
     
     Args:
         path: Path to the source image file
@@ -36,7 +38,7 @@ def prepare_for_ocr(path: str) -> bytes:
 
 def prepare_with_pil(path: str) -> bytes:
     """
-    PIL-only version of image preprocessing for systems without OpenCV.
+    PIL-only version of minimal image preprocessing for systems without OpenCV.
     
     Args:
         path: Path to the source image file
@@ -50,7 +52,7 @@ def prepare_with_pil(path: str) -> bytes:
         
         # Step 1: Resize if needed (max dimension 1200px)
         width, height = image.size
-        max_dim = 1200
+        max_dim = 2048
         if max(width, height) > max_dim:
             if width > height:
                 new_width = max_dim
@@ -65,25 +67,18 @@ def prepare_with_pil(path: str) -> bytes:
         if image.mode != 'L':
             image = image.convert('L')
         
-        # Step 3: Enhance contrast
+        # Step 3: Mild contrast enhancement (reduced from 1.5 to 1.2)
         enhancer = ImageEnhance.Contrast(image)
-        image = enhancer.enhance(1.5)
+        image = enhancer.enhance(1.2)
         
-        # Step 4: Apply sharpening filter
-        image = image.filter(ImageFilter.SHARPEN)
-        
-        # Step 5: Apply additional enhancement for text documents
-        enhancer = ImageEnhance.Brightness(image)
-        image = enhancer.enhance(1.1)  # Slightly increase brightness
-        
-        # Step 6: Save to bytes (WebP format if supported)
+        # Step 4: Save to bytes (WebP format if supported)
         buffer = io.BytesIO()
         if hasattr(Image, 'WEBP'):
-            image.save(buffer, format="WebP", quality=90)
+            image.save(buffer, format="WebP", quality=95)  # Increased quality
         else:
             image.save(buffer, format="PNG", optimize=True)
         
-        logger.info("Image processed with PIL (OpenCV not available)")
+        logger.info("Image processed with minimal PIL enhancements")
         return buffer.getvalue()
         
     except Exception as e:
@@ -98,13 +93,13 @@ def prepare_with_pil(path: str) -> bytes:
 
 def prepare_with_opencv(path: str) -> bytes:
     """
-    OpenCV-based image preprocessing for enhanced OCR results.
+    OpenCV-based minimal image preprocessing for enhanced OCR results.
     
     Args:
         path: Path to the source image file
         
     Returns:
-        Processed image as bytes in WebP format
+        Processed image as bytes
     """
     try:
         # Open and read image
@@ -117,22 +112,19 @@ def prepare_with_opencv(path: str) -> bytes:
         elif img.shape[2] == 4:  # RGBA
             img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)
             
-        # 3.1 Resize if too large
-        img = resize_if_needed(img)
+        # 1. Resize if too large
+        img = resize_if_needed(img, max_size=2048)
         
-        # 3.2 Detect and align document
-        aligned_img = detect_and_align_document(img)
+        # 2. Detect and align document only if clearly skewed
+        aligned_img = detect_and_align_document(img, skew_threshold=5.0)
         if aligned_img is not None:
             img = aligned_img
             
-        # 3.3 Apply CLAHE enhancement and denoise
-        enhanced_img = apply_clahe_and_denoise(img)
-        
-        # 3.4 Apply adaptive threshold and morphological operations
-        binary_img = apply_threshold_and_morph(enhanced_img)
-        
-        # 3.5 Save to WebP
-        return save_to_webp(binary_img)
+        # 3. Apply mild contrast normalization
+        enhanced_img = apply_mild_normalization(img)
+            
+        # 4. Save to WebP with high quality
+        return save_to_webp(enhanced_img, quality=95, max_size=500)
         
     except Exception as e:
         logger.error(f"Error preprocessing image with OpenCV: {str(e)}")
@@ -146,14 +138,13 @@ def prepare_with_opencv(path: str) -> bytes:
 
 # The remaining OpenCV functions are only used when OpenCV is available
 
-def resize_if_needed(img: np.ndarray, max_size: int = 1600, quality: int = 85) -> np.ndarray:
+def resize_if_needed(img: np.ndarray, max_size: int = 2048) -> np.ndarray:
     """
     Resize image if it's larger than max_size in either dimension.
     
     Args:
         img: Input image
         max_size: Maximum dimension size
-        quality: JPEG quality for resizing
         
     Returns:
         Resized image or original if no resize needed
@@ -179,15 +170,17 @@ def resize_if_needed(img: np.ndarray, max_size: int = 1600, quality: int = 85) -
     return resized
 
 
-def detect_and_align_document(img: np.ndarray) -> Optional[np.ndarray]:
+def detect_and_align_document(img: np.ndarray, skew_threshold: float = 5.0) -> Optional[np.ndarray]:
     """
-    Detect document edges and align/warp to correct perspective.
+    Detect document edges and align/warp to correct perspective,
+    but only if document is clearly skewed beyond the threshold.
     
     Args:
         img: Input image
+        skew_threshold: Minimum angle (in degrees) to consider skewed
         
     Returns:
-        Perspective-corrected image or None if detection fails
+        Perspective-corrected image or None if detection fails or skew is below threshold
     """
     try:
         # Convert to grayscale
@@ -209,10 +202,10 @@ def detect_and_align_document(img: np.ndarray) -> Optional[np.ndarray]:
         # Find the largest contour by area
         max_contour = max(contours, key=cv2.contourArea)
         
-        # Check if contour is large enough (at least 80% of image area)
+        # Check if contour is large enough (at least 30% of image area)
         img_area = img.shape[0] * img.shape[1]
         contour_area = cv2.contourArea(max_contour)
-        if contour_area < 0.1 * img_area:
+        if contour_area < 0.3 * img_area:
             logger.info(f"Largest contour area ({contour_area}) too small compared to image area ({img_area})")
             return None
             
@@ -225,8 +218,26 @@ def detect_and_align_document(img: np.ndarray) -> Optional[np.ndarray]:
             # Order points to get top-left, top-right, bottom-right, bottom-left
             rect = order_points(approx.reshape(4, 2))
             
-            # Get destination dimensions
+            # Check for skew angle
             (tl, tr, br, bl) = rect
+            
+            # Calculate angles of edges
+            def angle_between_points(p1, p2):
+                return np.degrees(np.arctan2(p2[1] - p1[1], p2[0] - p1[0]))
+            
+            # Get angles of horizontal edges
+            top_angle = angle_between_points(tl, tr)
+            bottom_angle = angle_between_points(bl, br)
+            
+            # Compute skew as deviation from horizontal
+            skew = max(abs(top_angle), abs(bottom_angle))
+            
+            # Only align if skew is significant
+            if skew < skew_threshold:
+                logger.info(f"Document skew ({skew:.2f}°) below threshold ({skew_threshold}°), skipping alignment")
+                return None
+            
+            # Get destination dimensions
             width_a = np.sqrt(((br[0] - bl[0]) ** 2) + ((br[1] - bl[1]) ** 2))
             width_b = np.sqrt(((tr[0] - tl[0]) ** 2) + ((tr[1] - tl[1]) ** 2))
             max_width = max(int(width_a), int(width_b))
@@ -249,7 +260,7 @@ def detect_and_align_document(img: np.ndarray) -> Optional[np.ndarray]:
             # Apply perspective transformation
             warped = cv2.warpPerspective(img, M, (max_width, max_height))
             
-            logger.info(f"Document aligned from {img.shape[:2]} to {warped.shape[:2]}")
+            logger.info(f"Document aligned from {img.shape[:2]} to {warped.shape[:2]}, corrected skew: {skew:.2f}°")
             return warped
             
         return None
@@ -286,9 +297,9 @@ def order_points(pts: np.ndarray) -> np.ndarray:
     return rect
 
 
-def apply_clahe_and_denoise(img: np.ndarray) -> np.ndarray:
+def apply_mild_normalization(img: np.ndarray) -> np.ndarray:
     """
-    Apply CLAHE (Contrast Limited Adaptive Histogram Equalization) and denoise.
+    Apply gentle contrast normalization without excessive processing.
     
     Args:
         img: Input image
@@ -302,63 +313,21 @@ def apply_clahe_and_denoise(img: np.ndarray) -> np.ndarray:
     else:
         gray = img.copy()
     
-    # Calculate image statistics
-    mean, std = cv2.meanStdDev(gray)
-    mean_val = mean[0][0]
-    std_val = std[0][0]
+    # Apply very mild denoising only for noisy images
+    # Calculate noise level
+    noise_level = np.std(gray)
+    if noise_level > 35:  # Only apply denoising if image is noisy
+        denoised = cv2.fastNlMeansDenoising(gray, None, h=7, searchWindowSize=21)
+        logger.info(f"Applied mild denoising (noise level: {noise_level:.1f})")
+        return denoised
     
-    # Determine CLAHE clip limit based on standard deviation
-    clip_limit = 2.0
-    if std_val < 50:  # Low contrast image
-        clip_limit = 3.0
-    elif std_val > 80:  # High contrast image
-        clip_limit = 1.5
-    
-    # Create CLAHE object and apply
-    clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=(8, 8))
-    clahe_img = clahe.apply(gray)
-    
-    # Apply appropriate denoising based on image noise level
-    if std_val < 30:  # Low noise
-        denoised = cv2.fastNlMeansDenoising(clahe_img, None, h=7, searchWindowSize=21)
-    else:  # Normal or high noise
-        denoised = cv2.fastNlMeansDenoising(clahe_img, None, h=10, searchWindowSize=21)
-    
-    return denoised
+    # For clean images, just return grayscale
+    return gray
 
 
-def apply_threshold_and_morph(img: np.ndarray) -> np.ndarray:
+def save_to_webp(img: np.ndarray, quality: int = 95, max_size: int = 500) -> bytes:
     """
-    Apply adaptive thresholding, morphological operations, and sharpening.
-    
-    Args:
-        img: Input grayscale image
-        
-    Returns:
-        Processed binary image
-    """
-    # Apply adaptive thresholding
-    thresh = cv2.adaptiveThreshold(
-        img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
-    )
-    
-    # Create kernels for morphological operations
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
-    
-    # Apply morphological operations to clean up the image
-    # Opening (erosion followed by dilation) to remove small noise
-    cleaned = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
-    
-    # Apply sharpening
-    blurred = cv2.GaussianBlur(cleaned, (0, 0), 3)
-    sharpened = cv2.addWeighted(cleaned, 1.5, blurred, -0.5, 0)
-    
-    return sharpened
-
-
-def save_to_webp(img: np.ndarray, quality: int = 90, max_size: int = 200) -> bytes:
-    """
-    Convert OpenCV image to WebP format with compression.
+    Convert OpenCV image to WebP format with high quality compression.
     
     Args:
         img: Input image
@@ -384,13 +353,13 @@ def save_to_webp(img: np.ndarray, quality: int = 90, max_size: int = 200) -> byt
     # Get bytes
     img_bytes = buffer.getvalue()
     
-    # Check size and reduce quality if needed
+    # Check size and reduce quality if needed, but not below 80
     size_kb = len(img_bytes) / 1024
     current_quality = quality
     
-    # Reduce quality until file size is below max_size
-    while size_kb > max_size and current_quality > 50:
-        current_quality -= 10
+    # Reduce quality until file size is below max_size, but not below 80
+    while size_kb > max_size and current_quality > 80:
+        current_quality -= 5
         buffer = io.BytesIO()
         pil_img.save(buffer, format="WebP", quality=current_quality)
         img_bytes = buffer.getvalue()

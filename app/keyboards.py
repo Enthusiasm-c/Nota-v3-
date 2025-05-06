@@ -14,10 +14,10 @@ def kb_main(lang: str = "en") -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=t("button.upload_new", lang), callback_data="action:new"
+                    text=t("buttons.upload_new", lang), callback_data="action:new"
                 )
             ],
-            [InlineKeyboardButton(text=t("button.help", lang), callback_data="action:help")],
+            [InlineKeyboardButton(text=t("buttons.help", lang), callback_data="action:help")],
         ]
     )
 
@@ -38,7 +38,7 @@ def kb_upload(lang: str = "en") -> ReplyKeyboardMarkup:
 
 def kb_help_back(lang: str = "en") -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=t("button.back", lang))]],
+        keyboard=[[KeyboardButton(text=t("buttons.back", lang))]],
         resize_keyboard=True,
         one_time_keyboard=True,
     )
@@ -121,7 +121,7 @@ def kb_help_back(lang: str = "en") -> ReplyKeyboardMarkup:
 def kb_set_supplier(lang: str = "en") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=t("button.set_supplier", lang), callback_data="set_supplier")]
+            [InlineKeyboardButton(text=t("buttons.set_supplier", lang), callback_data="set_supplier")]
         ]
     )
 
@@ -143,7 +143,7 @@ def kb_unit_buttons() -> InlineKeyboardMarkup:
 def kb_cancel_all(lang: str = "en") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🚫 " + t("button.cancel", lang), callback_data="cancel:all")]
+            [InlineKeyboardButton(text="✖ " + t("buttons.cancel", lang), callback_data="cancel:all")]
         ]
     )
 
@@ -165,10 +165,10 @@ def build_main_kb(has_errors: bool = True, lang: str = "en") -> InlineKeyboardMa
     keyboard_rows = [
         [
             InlineKeyboardButton(
-                text=t("button.edit", lang), callback_data="edit:free"
+                text="✏️ " + t("buttons.edit", lang), callback_data="edit:free"
             ),
             InlineKeyboardButton(
-                text=t("button.cancel", lang), callback_data="cancel:all"
+                text="✖ " + t("buttons.cancel", lang), callback_data="cancel:all"
             )
         ]
     ]
@@ -177,7 +177,7 @@ def build_main_kb(has_errors: bool = True, lang: str = "en") -> InlineKeyboardMa
     if not has_errors:
         keyboard_rows.append([
             InlineKeyboardButton(
-                text=t("button.confirm", lang), callback_data="confirm:invoice"
+                text="✅ " + t("buttons.confirm", lang), callback_data="confirm:invoice"
             )
         ])
     

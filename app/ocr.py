@@ -171,18 +171,18 @@ def _sanitize_response(message):
 @with_retry_backoff(max_retries=2, initial_backoff=1.0, backoff_factor=2.0)
 def call_openai_ocr(image_bytes: bytes) -> ParsedData:
     """
-    Отправляет изображение в OpenAI Vision API для распознавания инвойса.
-    Использует декоратор with_retry_backoff для автоматической обработки ошибок
-    и повторных попыток.
+    Sends an image to OpenAI Vision API for invoice recognition.
+    Uses the with_retry_backoff decorator for automatic error handling
+    and retries.
 
     Args:
-        image_bytes: Байты изображения для обработки
+        image_bytes: Image bytes for processing
 
     Returns:
-        ParsedData: Структурированные данные инвойса
+        ParsedData: Structured invoice data
 
     Raises:
-        RuntimeError: При ошибках API или парсинга данных с дружественными сообщениями
+        RuntimeError: For API errors or data parsing errors with friendly messages
     """
     # Use global client from config instead of creating a new one each time
     client = get_ocr_client()
@@ -193,15 +193,15 @@ def call_openai_ocr(image_bytes: bytes) -> ParsedData:
         )
 
     t0 = time.time()
-    # req_id берется из контекста декоратора
+    # req_id is taken from the decorator context
     prompt_prefix = build_prompt()
 
-    # Подготовка base64 изображения - вынесено из цикла для эффективности
+    # Base64 image preparation - moved outside the loop for efficiency
     base64_image = base64.b64encode(image_bytes).decode()
     image_url = f"data:image/jpeg;base64,{base64_image}"
 
     # Set longer timeout and increase max_tokens
-    logging.info(f"[OCR] Используется модель для Vision: gpt-4o")
+    logging.info(f"[OCR] Using Vision model: gpt-4o")
     rsp = client.chat.completions.create(
         model="gpt-4o",
         temperature=0,
@@ -225,7 +225,7 @@ def call_openai_ocr(image_bytes: bytes) -> ParsedData:
         p["price"] = _clean_num(p.get("price"))
         p["price_per_unit"] = _clean_num(p.get("price_per_unit"))
         p["total_price"] = _clean_num(p.get("total_price"))
-        # Если price отсутствует, но есть total_price и qty > 0, вычислить price
+        # If price is missing but total_price and qty > 0 are available, calculate price
         if (p.get("price") is None or p.get("price") == 0) and p.get("total_price") and p.get("qty"):
             try:
                 qty = float(p["qty"])

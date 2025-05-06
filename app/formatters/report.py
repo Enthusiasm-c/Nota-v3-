@@ -131,8 +131,7 @@ def build_summary(match_results):
     if not errors:
         return f"{t('report.no_errors')}\nCorrect: {correct}\nIssues: {issues}"
     return (
-        "🚫\n"
-        + "\n".join(errors)
+        "\n".join(errors)
         + f"\nCorrect: {correct}\nIssues: {issues}"
     )
 

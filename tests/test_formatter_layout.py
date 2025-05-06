@@ -51,7 +51,7 @@ def test_report_layout_strict():
             assert "❗" not in line
     # Проверяем summary
     assert "❗" in report or "<b>Нет ошибок. Все позиции распознаны корректно.</b>" in report
-    assert "🚫" in report
+    # Удалили символ 🚫 из отчёта
     # Проверяем корректные данные
     assert "lumajang" in report
     # Проверяем summary

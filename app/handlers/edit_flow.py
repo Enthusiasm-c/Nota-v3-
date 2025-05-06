@@ -39,7 +39,7 @@ async def handle_free_edit_text(message: Message, state: FSMContext):
     lang = data.get("lang", "en")
     
     # Handle cancel command
-    if user_text.lower() in ["отмена", "cancel"]:
+    if user_text.lower() in ["cancel"]:
         await message.answer(t("status.edit_cancelled", lang=lang))
         await state.set_state(None)  # Return to initial state
         return
@@ -202,46 +202,47 @@ async def handle_edit_free(call: CallbackQuery, state: FSMContext):
     # Answer callback
     await call.answer()
 
-# Обработчик подтверждения fuzzy-совпадения
+# Handler for fuzzy-match confirmation
 @router.callback_query(F.data.startswith("fuzzy:confirm:"))
 async def confirm_fuzzy_name(call: CallbackQuery, state: FSMContext):
     """
-    Обработчик подтверждения fuzzy-совпадения названия позиции.
+    Handles fuzzy match name confirmation.
     
     Args:
-        call: Объект callback запроса от нажатия кнопки "Да"
-        state: FSM-контекст
+        call: Callback query object from clicking "Yes" button
+        state: FSM context
     """
-    # Получаем индекс строки из callback data
+    # Get line index from callback data
     line_idx = int(call.data.split(":")[-1])
     
-    # Получаем данные из state
+    # Get data from state
     data = await state.get_data()
-    fuzzy_match = data.get("fuzzy_match")  # Предложенное название
-    fuzzy_original = data.get("fuzzy_original")  # Оригинальное название
+    fuzzy_match = data.get("fuzzy_match")  # Suggested name
+    fuzzy_original = data.get("fuzzy_original")  # Original name
     invoice = data.get("invoice")
+    lang = data.get("lang", "en")
     
     if not all([fuzzy_match, invoice]):
-        await call.message.answer("Ошибка: данные для подтверждения не найдены.")
+        await call.message.answer(t("error.unexpected", lang=lang))
         await call.message.edit_reply_markup(reply_markup=None)
         await call.answer()
         return
     
-    # Отправляем индикатор обработки
-    processing_msg = await call.message.answer("🔄 Применяю изменение...")
+    # Send processing indicator
+    processing_msg = await call.message.answer(t("status.applying_changes", lang=lang))
     
     try:
-        # Обновляем название позиции
+        # Update position name
         invoice = parsed_to_dict(invoice)
         if 0 <= line_idx < len(invoice.get("positions", [])):
-            # Изменяем название на предложенное
+            # Change name to suggested one
             invoice["positions"][line_idx]["name"] = fuzzy_match
             
-            # Пересчитываем ошибки и обновляем отчёт
+            # Recalculate errors and update report
             match_results = match_positions(invoice["positions"], load_products())
             text, has_errors = report.build_report(invoice, match_results)
             
-            # Добавляем алиас если строка успешно распознана
+            # Add alias if line was successfully recognized
             product_id = None
             for pos in match_results:
                 if pos.get("name") == fuzzy_match and pos.get("product_id"):
@@ -253,50 +254,50 @@ async def confirm_fuzzy_name(call: CallbackQuery, state: FSMContext):
                 add_alias(fuzzy_original, product_id)
                 logger.info(f"[confirm_fuzzy_name] Added alias: {fuzzy_original} -> {product_id}")
             
-            # Подсчитываем количество оставшихся проблем
+            # Count remaining issues
             issues_count = sum(1 for item in match_results if item.get("status", "") != "ok")
             
-            # Обновляем данные в состоянии
+            # Update data in state
             await state.update_data(invoice=invoice, issues_count=issues_count)
             
-            # Удаляем индикатор обработки
+            # Delete processing indicator
             try:
                 await processing_msg.delete()
             except Exception:
                 pass
                 
-            # Убираем кнопки с подсказкой
+            # Remove suggestion buttons
             await call.message.edit_reply_markup(reply_markup=None)
             
-            # Генерируем клавиатуру в зависимости от наличия ошибок
-            keyboard = build_main_kb(has_errors)
+            # Generate keyboard based on errors presence
+            keyboard = build_main_kb(has_errors, lang=lang)
             
-            # Отправляем обновлённый отчёт
+            # Send updated report
             await call.message.answer(
                 text, 
                 reply_markup=keyboard, 
                 parse_mode="HTML"
             )
             
-            # Добавляем сообщение об успешном редактировании
-            success_message = f"✅ Название позиции изменено на <b>{fuzzy_match}</b>!"
+            # Add message about successful editing
+            success_message = f"✅ {t('status.edit_success', {'field': 'name'}, lang=lang)}"
             if not has_errors:
-                success_message += " Вы можете подтвердить инвойс."
+                success_message += f" {t('status.edit_success_confirm', lang=lang)}"
                 
             await call.message.answer(success_message, parse_mode="HTML")
         else:
-            await call.message.answer(f"Ошибка: позиция с индексом {line_idx} не найдена.")
+            await call.message.answer(t("error.position_not_found", {"index": line_idx}, lang=lang))
     
     except Exception as e:
-        logger.error("[confirm_fuzzy_name] Ошибка при обновлении названия", extra={"data": {"error": str(e)}})
+        logger.error("[confirm_fuzzy_name] Error updating name", extra={"data": {"error": str(e)}})
         
-        # Удаляем индикатор обработки
+        # Delete processing indicator
         try:
             await processing_msg.delete()
         except Exception:
             pass
             
-        await call.message.answer("Произошла ошибка при обновлении названия. Пожалуйста, попробуйте еще раз.")
+        await call.message.answer(t("error.unexpected", lang=lang))
     
     # Отвечаем на callback
     await call.answer()
@@ -304,35 +305,36 @@ async def confirm_fuzzy_name(call: CallbackQuery, state: FSMContext):
     # Остаёмся в том же состоянии для продолжения редактирования
     await state.set_state(EditFree.awaiting_input)
 
-# Обработчик отклонения fuzzy-совпадения
+# Handler for fuzzy-match rejection
 @router.callback_query(F.data.startswith("fuzzy:reject:"))
 async def reject_fuzzy_name(call: CallbackQuery, state: FSMContext):
     """
-    Обработчик отклонения fuzzy-совпадения названия позиции.
+    Handles fuzzy match name rejection.
     
     Args:
-        call: Объект callback запроса от нажатия кнопки "Нет"
-        state: FSM-контекст
+        call: Callback query object from clicking "No" button
+        state: FSM context
     """
-    # Получаем индекс строки из callback data
+    # Get line index from callback data
     line_idx = int(call.data.split(":")[-1])
     
-    # Получаем данные из state
+    # Get data from state
     data = await state.get_data()
     fuzzy_original = data.get("fuzzy_original")
+    lang = data.get("lang", "en")
     
-    # Убираем кнопки с подсказкой
+    # Remove suggestion buttons
     await call.message.edit_reply_markup(reply_markup=None)
     
-    # Отправляем сообщение о необходимости ручного редактирования
+    # Send message about manual editing requirement
     await call.message.answer(
-        f"Хорошо, вы можете вручную отредактировать название, отправив команду:\n\n"
-        f"<i>строка {line_idx+1} название [новое название]</i>",
+        f"You can manually edit the name by sending the command:\n\n"
+        f"<i>line {line_idx+1} name [new name]</i>",
         parse_mode="HTML"
     )
     
-    # Отвечаем на callback
+    # Answer callback
     await call.answer()
     
-    # Остаёмся в том же состоянии для продолжения редактирования
+    # Stay in the same state for continued editing
     await state.set_state(EditFree.awaiting_input)
