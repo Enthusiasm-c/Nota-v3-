@@ -10,16 +10,49 @@ status:
   generating_report: "📋 Generating report..."
   processing_completed: "✅ Photo processing completed!"
   brief_summary: "📋 Found {total} items. ✅ OK: {ok}. ⚠️ Issues: {issues}."
-  
+  edit_success: "✅ {field} updated successfully!"
+  edit_success_confirm: "All items recognized correctly. Ready to confirm."
+  edit_cancelled: "✏️ Editing canceled."
+  session_expired: "Your session has expired. Please start again."
+  processing: "⏳ Processing your request..."
+  service_unavailable: "Sorry, the service is temporarily unavailable. Please try again."
+  applying_changes: "Applying changes..."
+
 error:
   photo_processing: "❌ An error occurred while processing the photo. Please try again or contact the administrator."
   ocr: "❌ Error recognizing text. Please try again with a clearer photo."
   matching: "❌ Error matching products. Please try again."
   report: "❌ Error generating report. Please try again."
-  
+  parse_command: "I couldn't understand your command. Please try again with a simpler format."
+  invalid_callback_data: "Invalid data in button press. Please try again."
+  invoice_not_found: "Invoice data not found. Please upload a new invoice."
+  product_not_found: "Selected product not found in the database."
+  position_not_found: "Position with index {index} not found."
+  update_name: "Failed to update name. Please try again."
+  unexpected: "An unexpected error occurred. Please try again."
+  syrve_auth: "Authentication error with Syrve. Please check your credentials."
+  syrve_duplicate: "This invoice is already in Syrve."
+  syrve_error: "Syrve API error: {message}"
+
+example:
+  edit_prompt: "What would you like to edit? Examples:\n\n• <i>date April 26</i>\n• <i>line 2 name tomatoes</i>\n• <i>line 3 price 90000</i>\n• <i>line 1 qty 5</i>\n• <i>line 4 unit kg</i>\n• <i>delete 3</i> — delete line\n\nEnter command or <i>cancel</i> to go back."
+
 buttons:
   edit: "✏️ Edit"
   confirm: "✅ Confirm"
   cancel: "❌ Cancel"
   back: "◀️ Back"
   help: "❓ Help"
+
+suggestion:
+  no_similar_items: "No similar items found in the database."
+  fuzzy_match: "Did you mean \"{suggestion}\"?"
+
+report:
+  error_line: "❗ Line {line} <b>{name}</b>: {problem}"
+  unit_mismatch: "unit mismatch error"
+  name_error: "item not recognized (name error)"
+  processing_error: "line processing error"
+  no_quantity: "quantity not specified"
+  no_price: "price not specified"
+  no_errors: "<b>No errors. All items recognized correctly.</b>"

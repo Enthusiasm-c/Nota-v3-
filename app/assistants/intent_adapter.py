@@ -179,13 +179,13 @@ class IntentAdapter:
                             # Проверяем, содержит ли JSON поле actions или action
                             if isinstance(parsed_json, dict):
                                 if "actions" in parsed_json or "action" in parsed_json:
-                                    logger.info(f"Успешно извлечен альтернативный JSON с полем actions/action")
+                                    logger.info(f"Successfully extracted alternative JSON with actions/action field")
                                     if logger.isEnabledFor(logging.DEBUG):
-                                        logger.debug(f"Содержимое JSON: {json_candidate[:100]}...")
+                                        logger.debug(f"JSON content: {json_candidate[:100]}...")
                                     return parsed_json
                             
                             # Если нашли любой валидный JSON, возвращаем его
-                            logger.info(f"Успешно извлечен альтернативный JSON")
+                            logger.info(f"Successfully extracted alternative JSON")
                             return parsed_json
                         except json.JSONDecodeError:
                             continue

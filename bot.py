@@ -762,7 +762,7 @@ async def handle_nlu_text(message, state: FSMContext):
         logger.error(f"Assistant error: {str(e)}")
         # Отправляем ошибку как новое сообщение
         await message.answer(
-            f"Извините, не удалось обработать запрос. Пожалуйста, попробуйте еще раз.",
+            f"Sorry, could not process your request. Please try again.",
             parse_mode=None,
         )
 

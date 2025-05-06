@@ -216,7 +216,7 @@ def parse_assistant_output(raw: str) -> List[EditCommand]:
     # Если не удалось получить ни одной команды, возвращаем ошибку
     if not cmds:
         parse_action_monitor.record_error()
-        return [EditCommand(action="clarification_needed", error="Не удалось извлечь ни одну валидную команду")]
+        return [EditCommand(action="clarification_needed", error="No valid commands could be extracted")]
         
     return cmds
 
@@ -338,7 +338,7 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
         while run.status in ["queued", "in_progress"]:
             if time.time() - start_time > timeout:
                 logger.error(f"[run_thread_safe_async] Timeout waiting for Assistant API response after {timeout}s")
-                return {"action": "unknown", "error": "timeout", "user_message": "Превышено время ожидания ответа от OpenAI. Пожалуйста, попробуйте еще раз."}
+                return {"action": "unknown", "error": "timeout", "user_message": "OpenAI response timed out. Please try again."}
             
             # Используем асинхронную задержку вместо блокирования потока
             await asyncio.sleep(1)
@@ -389,7 +389,7 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
             while run.status in ["queued", "in_progress"]:
                 if time.time() - start_time > timeout:
                     logger.error(f"[run_thread_safe_async] Timeout waiting for Assistant API response after tool outputs, {timeout}s")
-                    return {"action": "unknown", "error": "timeout_after_tools", "user_message": "Превышено время ожидания ответа от OpenAI после вызова инструментов. Пожалуйста, попробуйте еще раз."}
+                    return {"action": "unknown", "error": "timeout_after_tools", "user_message": "OpenAI response timed out after tool execution. Please try again."}
                 
                 # Используем асинхронную задержку вместо блокирования потока
                 await asyncio.sleep(1)
@@ -416,7 +416,7 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
                 return {
                     "action": "unknown", 
                     "error": "multiple_tool_requests", 
-                    "user_message": "Не удалось обработать вашу команду. Пожалуйста, попробуйте сформулировать запрос четче."
+                    "user_message": "Could not process your command. Please try to formulate your request more clearly."
                 }
             elif run.status != "completed":
                 logger.error(f"[run_thread_safe_async] Run failed after tool outputs with status: {run.status}")
@@ -481,7 +481,7 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
             return {
                 "action": "unknown", 
                 "error": f"run_failed: {run.status}",
-                "user_message": "Запрос к OpenAI не выполнен. Пожалуйста, попробуйте еще раз позже."
+                "user_message": "OpenAI request failed. Please try again later."
             }
             
     except openai.RateLimitError as e:
@@ -490,7 +490,7 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
         return {
             "action": "unknown", 
             "error": "rate_limit_error",
-            "user_message": "Превышен лимит запросов к OpenAI. Пожалуйста, попробуйте позже."
+            "user_message": "OpenAI rate limit exceeded. Please try again later."
         }
     except openai.APIConnectionError as e:
         # Ошибка соединения с API
@@ -498,7 +498,7 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
         return {
             "action": "unknown", 
             "error": "api_connection_error",
-            "user_message": "Ошибка соединения с OpenAI. Пожалуйста, проверьте подключение к интернету."
+            "user_message": "OpenAI connection error. Please check your internet connection."
         }
     except openai.AuthenticationError as e:
         # Ошибка аутентификации
@@ -506,7 +506,7 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
         return {
             "action": "unknown", 
             "error": "authentication_error",
-            "user_message": "Ошибка аутентификации в OpenAI. Пожалуйста, обратитесь к администратору."
+            "user_message": "OpenAI authentication error. Please contact your administrator."
         }
     except Exception as e:
         # Общая обработка ошибок
@@ -514,7 +514,7 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
         return {
             "action": "unknown", 
             "error": str(e),
-            "user_message": "Произошла ошибка при обработке запроса. Пожалуйста, попробуйте еще раз."
+            "user_message": "An error occurred while processing your request. Please try again."
         }
 
 

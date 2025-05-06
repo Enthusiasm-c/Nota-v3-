@@ -98,33 +98,38 @@ def build_table(rows):
 
 def build_summary(match_results):
     """
-    Формирует подробный HTML-отчет об ошибках по каждой проблемной позиции.
+    Creates a detailed HTML report about errors for each problematic item.
     """
+    from app.i18n import t
+    
     errors = []
     for idx, item in enumerate(match_results, 1):
         status = item.get("status", "")
         name = item.get("name", "")
         problems = []
         if status == "unit_mismatch":
-            problems.append("ошибка в единице измерения")
+            problems.append(t("report.unit_mismatch"))
         if status == "unknown":
-            problems.append("позиция не распознана (ошибка в названии)")
+            problems.append(t("report.name_error"))
         if status == "error":
-            problems.append("ошибка обработки строки")
+            problems.append(t("report.processing_error"))
         qty = item.get("qty", None)
         price = item.get("price", None)
         if price in (None, "", "—"):
             price = item.get("unit_price", None)
         if qty in (None, "", "—"):
-            problems.append("не указано количество")
+            problems.append(t("report.no_quantity"))
         if price in (None, "", "—"):
-            problems.append("не указана цена")
+            problems.append(t("report.no_price"))
         if problems:
-            errors.append(f"❗ Строка {idx} <b>{name}</b>: {', '.join(problems)}")
+            error_line = t("report.error_line", params={"line": idx, "name": name, "problem": ', '.join(problems)})
+            if not error_line.startswith("❗"):
+                error_line = f"❗ Line {idx} <b>{name}</b>: {', '.join(problems)}"
+            errors.append(error_line)
     correct = sum(1 for item in match_results if item.get("status", "") == "ok")
     issues = sum(1 for item in match_results if item.get("status", "") != "ok")
     if not errors:
-        return f"<b>Нет ошибок. Все позиции распознаны корректно.</b>\nCorrect: {correct}\nIssues: {issues}"
+        return f"{t('report.no_errors')}\nCorrect: {correct}\nIssues: {issues}"
     return (
         "🚫\n"
         + "\n".join(errors)
