@@ -42,8 +42,9 @@ class EditCommand(BaseModel):
 
 def parse_assistant_output(raw: str) -> List[EditCommand]:
     """
-    Принимает JSON-строку от Assistant и возвращает список EditCommand.
-    Бросает ValueError, если в любом элементе нет поля 'action'.
+    Принимает JSON-строку от Assistant.
+    Возвращает список EditCommand.
+    Универсально поддерживает оба формата: actions[] и одиночный action.
     """
     logger.info("[parse_assistant_output] Начало разбора ассистент-ответа", extra={"data": {"raw": raw}})
     try:
@@ -53,33 +54,30 @@ def parse_assistant_output(raw: str) -> List[EditCommand]:
         logger.error("[parse_assistant_output] Ошибка JSON", extra={"data": {"error": str(e), "raw": raw}})
         raise ValueError(f"Invalid JSON: {e}")
 
-    # Новый формат: actions
-    if isinstance(data, dict) and "actions" in data:
-        actions = data["actions"]
-        if not isinstance(actions, list):
-            logger.error("[parse_assistant_output] 'actions' не список", extra={"data": {"actions": actions}})
-            raise ValueError("'actions' must be a list")
-        cmds = []
-        for i, item in enumerate(actions):
-            if not isinstance(item, dict):
-                logger.error(f"[parse_assistant_output] Action не dict", extra={"data": {"index": i, "item": item}})
-                raise ValueError(f"Action at index {i} is not a dict")
-            if "action" not in item:
-                raise ValueError("Missing 'action' field in response")
-            try:
-                cmds.append(EditCommand(**item))
-            except ValidationError as ve:
-                raise ValueError(str(ve))
-        return cmds
-    # Старый формат: одиночная команда
-    elif isinstance(data, dict) and "action" in data:
+    # Универсальная логика: actions[] или одиночный action
+    # Проверка наличия 'actions' или 'action'
+    if not (isinstance(data, dict) and ("actions" in data or "action" in data)):
+        raise ValueError("Neither 'action' nor 'actions' found")
+
+    actions = data.get("actions") if isinstance(data, dict) and "actions" in data else None
+    if actions is None:
+        actions = [data]
+    if not isinstance(actions, list):
+        logger.error("[parse_assistant_output] 'actions' не список", extra={"data": {"actions": actions}})
+        raise ValueError("'actions' must be a list")
+    logger.debug("Assistant parsed actions: %s", actions)
+    cmds = []
+    for i, obj in enumerate(actions):
+        if not isinstance(obj, dict):
+            logger.error(f"[parse_assistant_output] Action не dict", extra={"data": {"index": i, "item": obj}})
+            raise ValueError(f"Action at index {i} is not a dict")
+        if "action" not in obj:
+            raise ValueError("Missing 'action' field in response")
         try:
-            cmd = EditCommand(**data)
+            cmds.append(EditCommand(**obj))
         except ValidationError as ve:
             raise ValueError(str(ve))
-        return [cmd]
-    else:
-        raise ValueError("Neither 'action' nor 'actions' found")
+    return cmds
 
 logger = logging.getLogger(__name__)
 
