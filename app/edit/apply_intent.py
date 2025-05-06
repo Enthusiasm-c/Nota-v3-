@@ -171,6 +171,36 @@ def apply_intent(invoice: Union[dict, ParsedData], intent: dict) -> dict:
             intent.get("line", 0),
             intent.get("value", "")
         )
+    elif action == "edit_line_field":
+        line = intent.get("line", 0) - 1
+        field = intent.get("field")
+        value = intent.get("value")
+        if (
+            isinstance(invoice.get("positions"), list)
+            and 0 <= line < len(invoice["positions"])
+            and field in invoice["positions"][line]
+        ):
+            invoice["positions"][line][field] = value
+        return invoice
+
+    elif action == "edit_date":
+        value = intent.get("value")
+        invoice["date"] = value
+        return invoice
+
+    elif action == "add_line":
+        value = intent.get("value")
+        parts = value.split()
+        if len(parts) >= 4:
+            name = parts[0]
+            qty = parts[1]
+            unit = parts[2]
+            price = parts[3]
+            invoice.setdefault("positions", []).append(
+                {"name": name, "qty": qty, "unit": unit, "price": price}
+            )
+        return invoice
+
     else:
         logger.warning(f"Неизвестное действие в интенте: {action}")
         return deepcopy(invoice)  # Возвращаем копию без изменений

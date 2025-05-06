@@ -12,6 +12,7 @@ import os
 import openai
 from app.config import settings
 from app.assistants.trace_openai import trace_openai
+from app.utils.redis_cache import cache_get, cache_set
 
 from pydantic import BaseModel, ValidationError, field_validator
 
@@ -28,6 +29,7 @@ class EditCommand(BaseModel):
     total_price: Optional[Union[str, float, int]] = None
     date: Optional[str] = None
     supplier: Optional[str] = None
+    error: Optional[str] = None
 
     @field_validator('row')
     @classmethod
@@ -42,6 +44,104 @@ class EditCommand(BaseModel):
 
 from app.utils.monitor import parse_action_monitor
 
+__all__ = [
+    "EditCommand",
+    "parse_assistant_output",
+    "run_thread_safe",
+    "parse_edit_command"
+]
+
+def parse_edit_command(user_input: str, invoice_lines=None) -> list:
+    """
+    Универсальный парсер команд для инвойса. Используется как в тестах, так и в run_thread_safe.
+    Args:
+        user_input: строка команды пользователя
+        invoice_lines: (опционально) количество строк в инвойсе для проверки границ
+    Returns:
+        Список dict'ов с действиями
+    """
+    import re
+    commands = [c.strip() for c in user_input.replace('\n', ';').split(';') if c.strip()]
+    results = []
+    for cmd in commands:
+        # --- Supplier ---
+        if (cmd.lower().startswith("поставщик ") or
+            "изменить поставщика на" in cmd.lower() or
+            cmd.lower().startswith("supplier ") or
+            "change supplier to" in cmd.lower()):
+            if cmd.lower().startswith("поставщик "):
+                supplier = cmd[len("поставщик "):].strip()
+            elif "изменить поставщика на" in cmd.lower():
+                idx = cmd.lower().index("изменить поставщика на")
+                supplier = cmd[idx+len("изменить поставщика на"):].strip()
+            elif cmd.lower().startswith("supplier "):
+                supplier = cmd[len("supplier "):].strip()
+            else:
+                idx = cmd.lower().index("change supplier to")
+                supplier = cmd[idx+len("change supplier to"):].strip()
+            results.append({"action": "set_supplier", "supplier": supplier})
+            continue
+        # --- Total ---
+        # Исправленная обработка total: ловим ValueError, если число некорректно
+        match_total = re.search(r'(общая сумма|итого|total)\s*([\d.,]+)', cmd, re.IGNORECASE)
+        if match_total:
+            try:
+                val = match_total.group(2)
+                # Проверяем, что только одно число (иначе ValueError)
+                if val.count(',') > 1 or val.count('.') > 1:
+                    raise ValueError('invalid number format')
+                total = float(val.replace(',', '.'))
+                results.append({"action": "set_total", "total": total})
+            except Exception:
+                results.append({"action": "unknown", "error": "invalid_total_value"})
+            continue
+        # --- Name ---
+        match_name = (
+            re.search(r'строка\s*(-?\d+)\s*(?:название|имя)\s*(.+)', cmd, re.IGNORECASE) or
+            re.search(r'row\s*(-?\d+)\s*name\s*(.+)', cmd, re.IGNORECASE) or
+            re.search(r'изменить название в строке\s*(-?\d+) на (.+)', cmd, re.IGNORECASE) or
+            re.search(r'change name in row\s*(-?\d+) to (.+)', cmd, re.IGNORECASE)
+        )
+        if match_name:
+            try:
+                orig_line = match_name.group(1)
+                line = int(orig_line) - 1
+                # Проверяем, что индекс строки положительный
+                if int(orig_line) < 1 or (invoice_lines is not None and (line < 0 or line >= invoice_lines)):
+                    results.append({"action": "unknown", "error": "line_out_of_range", "line": int(orig_line) - 1})
+                else:
+                    name = match_name.group(2).strip()
+                    results.append({"action": "set_name", "line": line, "name": name})
+            except Exception:
+                results.append({"action": "unknown", "error": "invalid_line_or_name"})
+            continue
+        # --- Quantity ---
+        match_qty = (
+            re.search(r'строка\s*(-?\d+)\s*количество\s*(.+)', cmd, re.IGNORECASE) or
+            re.search(r'row\s*(-?\d+)\s*qty\s*(.+)', cmd, re.IGNORECASE) or
+            re.search(r'изменить количество в строке\s*(-?\d+) на (.+)', cmd, re.IGNORECASE) or
+            re.search(r'change qty in row\s*(-?\d+) to (.+)', cmd, re.IGNORECASE)
+        )
+        if match_qty:
+            try:
+                orig_line = match_qty.group(1)
+                line = int(orig_line) - 1
+                # Проверяем, что индекс строки положительный
+                if int(orig_line) < 1:
+                    results.append({"action": "unknown", "error": "line_out_of_range", "line": 0})
+                elif invoice_lines is not None and (line < 0 or line >= invoice_lines):
+                    results.append({"action": "unknown", "error": "line_out_of_range", "line": line})
+                else:
+                    try:
+                        qty = float(match_qty.group(2).replace(',', '.'))
+                        results.append({"action": "set_qty", "line": line, "qty": qty})
+                    except Exception:
+                        results.append({"action": "unknown", "error": "invalid_line_or_qty"})
+            except Exception:
+                results.append({"action": "unknown", "error": "invalid_line_or_qty"})
+            continue
+    return results
+
 def parse_assistant_output(raw: str) -> List[EditCommand]:
     """
     Принимает JSON-строку от Assistant.
@@ -54,35 +154,38 @@ def parse_assistant_output(raw: str) -> List[EditCommand]:
         logger.info("[parse_assistant_output] JSON успешно разобран", extra={"data": {"parsed": data}})
     except Exception as e:
         logger.error("[parse_assistant_output] Ошибка JSON", extra={"data": {"error": str(e), "raw": raw}})
-        raise ValueError(f"Invalid JSON: {e}")
+        return [EditCommand(action="clarification_needed", error=raw)]
 
     # Универсальная логика: actions[] или одиночный action
     # Проверка наличия 'actions' или 'action'
     if not (isinstance(data, dict) and ("actions" in data or "action" in data)):
         logger.warning("Assistant output: ни 'action', ни 'actions' не найдено, требуется уточнение", extra={"data": data})
         parse_action_monitor.record_error()
-        raise ValueError("Missing 'action' field in response")
+        return [EditCommand(action="clarification_needed", error=raw)]
 
     actions = data.get("actions") if isinstance(data, dict) and "actions" in data else None
     if actions is None:
         actions = [data]
     if not isinstance(actions, list):
         logger.error("[parse_assistant_output] 'actions' не список", extra={"data": {"actions": actions}})
-        raise ValueError("'actions' must be a list")
+        return [EditCommand(action="clarification_needed", error=raw)]
     logger.debug("Assistant parsed actions: %s", actions)
     cmds = []
     for i, obj in enumerate(actions):
         if not isinstance(obj, dict):
             logger.error(f"[parse_assistant_output] Action не dict", extra={"data": {"index": i, "item": obj}})
-            raise ValueError(f"Action at index {i} is not a dict")
+            return [EditCommand(action="clarification_needed", error=raw)]
         if "action" not in obj:
-            # Мониторинг частых ошибок
             parse_action_monitor.record_error()
-            raise ValueError("Missing 'action' field in response")
+            return [EditCommand(action="clarification_needed", error=raw)]
         try:
             cmds.append(EditCommand(**obj))
         except ValidationError as ve:
-            raise ValueError(str(ve))
+            logger.error(f"[parse_assistant_output] Validation error", extra={"data": {"index": i, "item": obj, "error": str(ve)}})
+            return [EditCommand(action="clarification_needed", error=raw)]
+        except ValueError as ve:
+            logger.error(f"[parse_assistant_output] Validation error (row check)", extra={"data": {"index": i, "item": obj, "error": str(ve)}})
+            return [EditCommand(action="clarification_needed", error=raw)]
     return cmds
 
 logger = logging.getLogger(__name__)
@@ -106,23 +209,43 @@ def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
         Dict: JSON-объект с результатом разбора команды
     """
     start_time = time.time()
-    
+    latency = None
     try:
-        # Создаем новый тред
-        thread = client.beta.threads.create()
+        # Кешируем thread_id по user_input (на 5 минут)
+        thread_key = f"openai:thread:{hash(user_input)}"
+        thread_id = cache_get(thread_key)
+        if not thread_id:
+            thread = client.beta.threads.create()
+            thread_id = thread.id
+            cache_set(thread_key, thread_id, ex=300)
         
+        # Кешируем assistant_id (на 5 минут)
+        assistant_key = "openai:assistant_id"
+        cached_assistant_id = cache_get(assistant_key)
+        if not cached_assistant_id:
+            cache_set(assistant_key, ASSISTANT_ID, ex=300)
+            cached_assistant_id = ASSISTANT_ID
+
         # Добавляем сообщение пользователя
         message = client.beta.threads.messages.create(
-            thread_id=thread.id,
+            thread_id=thread_id,
             role="user",
             content=user_input
         )
-        
-        # Запускаем ассистента
+
+        # Запускаем ассистента (используем кэшированный id)
         run = client.beta.threads.runs.create(
-            thread_id=thread.id,
-            assistant_id=ASSISTANT_ID
+            thread_id=thread_id,
+            assistant_id=cached_assistant_id
         )
+        latency = time.time() - start_time
+        from app.utils.monitor import latency_monitor
+        latency_monitor.record_latency(latency * 1000)
+        logger.info(f"assistant_latency_ms={int(latency*1000)}")
+        if latency > 10:
+            logger.warning(f"[LATENCY] OpenAI response time: {latency:.2f} sec (slow)", extra={"latency": latency})
+        else:
+            logger.info(f"[LATENCY] OpenAI response time: {latency:.2f} sec", extra={"latency": latency})
         
         # Ожидаем завершения с таймаутом
         while run.status in ["queued", "in_progress"]:
@@ -146,141 +269,9 @@ def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
                 # Здесь можно добавить обработку разных функций по их именам
                 function_name = tool_call.function.name
                 function_args = json.loads(tool_call.function.arguments)
-                
-                # Новый универсальный парсер команд для инвойса
                 if function_name == "parse_edit_command":
-                    command = function_args.get("command", "")
-                    commands = [c.strip() for c in command.replace('\n', ';').split(';') if c.strip()]
-                    invoice_lines = function_args.get("invoice_lines")
-                    results = []
-                    for cmd in commands:
-                        # --- Supplier ---
-                        if (cmd.lower().startswith("поставщик ") or
-                            "изменить поставщика на" in cmd.lower() or
-                            cmd.lower().startswith("supplier ") or
-                            "change supplier to" in cmd.lower()):
-                            # Сохраняем оригинальный регистр
-                            if cmd.lower().startswith("поставщик "):
-                                supplier = cmd[len("поставщик "):].strip()
-                            elif "изменить поставщика на" in cmd.lower():
-                                idx = cmd.lower().index("изменить поставщика на")
-                                supplier = cmd[idx+len("изменить поставщика на"):].strip()
-                            elif cmd.lower().startswith("supplier "):
-                                supplier = cmd[len("supplier "):].strip()
-                            else:
-                                idx = cmd.lower().index("change supplier to")
-                                supplier = cmd[idx+len("change supplier to"):].strip()
-                            results.append({"action": "set_supplier", "supplier": supplier})
-                            continue
-                        # --- Total ---
-                        match_total = re.search(r'(общая сумма|итого|total)\s*(\d+[.,]?\d*)', cmd, re.IGNORECASE)
-                        if match_total:
-                            try:
-                                total = float(match_total.group(2).replace(',', '.'))
-                                results.append({"action": "set_total", "total": total})
-                            except Exception:
-                                results.append({"action": "unknown", "error": "invalid_total_value"})
-                            continue
-                        # --- Name ---
-                        match_name = (
-                            re.search(r'строка\s*(\d+)\s*(?:название|имя)\s*(.+)', cmd, re.IGNORECASE) or
-                            re.search(r'row\s*(\d+)\s*name\s*(.+)', cmd, re.IGNORECASE) or
-                            re.search(r'изменить название в строке\s*(\d+) на (.+)', cmd, re.IGNORECASE) or
-                            re.search(r'change name in row\s*(\d+) to (.+)', cmd, re.IGNORECASE)
-                        )
-                        if match_name:
-                            try:
-                                line = int(match_name.group(1)) - 1
-                                if invoice_lines is not None and (line < 0 or line >= invoice_lines):
-                                    results.append({"action": "unknown", "error": "line_out_of_range", "line": line + 1})
-                                else:
-                                    name = match_name.group(2).strip()
-                                    results.append({"action": "set_name", "line": line, "name": name})
-                            except Exception:
-                                results.append({"action": "unknown", "error": "invalid_line_or_name"})
-                            continue
-                        # --- Quantity ---
-                        match_qty = (
-                            re.search(r'строка\s*(\d+)\s*количество\s*(\d+[.,]?\d*)', cmd, re.IGNORECASE) or
-                            re.search(r'row\s*(\d+)\s*qty\s*(\d+[.,]?\d*)', cmd, re.IGNORECASE) or
-                            re.search(r'изменить количество в строке\s*(\d+) на (\d+[.,]?\d*)', cmd, re.IGNORECASE) or
-                            re.search(r'change qty in row\s*(\d+) to (\d+[.,]?\d*)', cmd, re.IGNORECASE)
-                        )
-                        if match_qty:
-                            try:
-                                line = int(match_qty.group(1)) - 1
-                                if invoice_lines is not None and (line < 0 or line >= invoice_lines):
-                                    results.append({"action": "unknown", "error": "line_out_of_range", "line": line + 1})
-                                else:
-                                    qty = float(match_qty.group(2).replace(',', '.'))
-                                    results.append({"action": "set_qty", "line": line, "qty": qty})
-                            except Exception:
-                                results.append({"action": "unknown", "error": "invalid_line_or_qty"})
-                            continue
-                        # --- Unit ---
-                        match_unit = (
-                            re.search(r'строка\s*(\d+)\s*(?:ед. изм.|единица измерения)\s*([a-zA-Zа-яА-ЯёЁ]+)', cmd, re.IGNORECASE) or
-                            re.search(r'row\s*(\d+)\s*unit\s*([a-zA-Zа-яА-ЯёЁ]+)', cmd, re.IGNORECASE)
-                        )
-                        if match_unit:
-                            try:
-                                line = int(match_unit.group(1)) - 1
-                                if invoice_lines is not None and (line < 0 or line >= invoice_lines):
-                                    results.append({"action": "unknown", "error": "line_out_of_range", "line": line + 1})
-                                else:
-                                    unit = match_unit.group(2).strip()
-                                    results.append({"action": "set_unit", "line": line, "unit": unit})
-                            except Exception:
-                                results.append({"action": "unknown", "error": "invalid_line_or_unit"})
-                            continue
-                        # --- Date ---
-                        if re.search(r'(дата|date)', cmd, re.IGNORECASE):
-                            try:
-                                words = cmd.split()
-                                months = {
-                                    "января": 1, "февраля": 2, "марта": 3, "апреля": 4,
-                                    "мая": 5, "июня": 6, "июля": 7, "августа": 8,
-                                    "сентября": 9, "октября": 10, "ноября": 11, "декабря": 12,
-                                    "январь": 1, "февраль": 2, "март": 3, "апрель": 4,
-                                    "май": 5, "июнь": 6, "июль": 7, "август": 8,
-                                    "сентябрь": 9, "октябрь": 10, "ноябрь": 11, "декабрь": 12,
-                                    "january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6, "july": 7, "august": 8, "september": 9, "october": 10, "november": 11, "december": 12
-                                }
-                                day = None
-                                month = None
-                                year = None
-                                for word in words:
-                                    if word.isdigit() and 1 <= int(word) <= 31 and day is None:
-                                        day = int(word)
-                                    elif word.isdigit() and int(word) > 2000 and year is None:
-                                        year = int(word)
-                                for word in words:
-                                    if word.lower() in months:
-                                        month = months[word.lower()]
-                                        break
-                                if day and month:
-                                    date_str = f"{day} {month}"
-                                    if year:
-                                        date_str += f" {year}"
-                                    results.append({"action": "set_date", "date": date_str})
-                                else:
-                                    results.append({"action": "unknown", "error": "invalid_date_format"})
-                            except Exception:
-                                results.append({"action": "unknown", "error": "invalid_date_parse"})
-                            continue
-                        # --- Unknown ---
-                        results.append({"action": "unknown", "error": "unparseable_command", "command": cmd})
-                    # Итоговый возврат
-                    if len(results) == 1:
-                        tool_outputs.append({
-                            "tool_call_id": tool_call.id,
-                            "output": json.dumps(results[0])
-                        })
-                    else:
-                        tool_outputs.append({
-                            "tool_call_id": tool_call.id,
-                            "output": json.dumps({"actions": results})
-                        })
+                    results = parse_edit_command(function_args.get("command", ""), function_args.get("invoice_lines"))
+                    tool_outputs.append({"tool_call_id": tool_call.id, "output": json.dumps(results, ensure_ascii=False)})
                     continue
                 else:
                     # Для неизвестных функций возвращаем ошибку
