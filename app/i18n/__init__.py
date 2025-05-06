@@ -70,14 +70,14 @@ def get_nested_value(data: Dict[str, Any], key_path: str) -> Optional[str]:
     
     return result if isinstance(result, str) else None
 
-def t(key: str, lang: str = "en", **kwargs) -> str:
+def t(key: str, params: dict = None, *, lang: str = "en") -> str:
     """
     Get a translated string for the given key and language.
     
     Args:
         key: The translation key (e.g., 'button.edit')
-        lang: The language code (default: 'en')
-        **kwargs: Format arguments to be inserted into the translated string
+        params: Parameters for string formatting (e.g., {"count": 5})
+        lang: The language code (default: 'en'), keyword-only argument
         
     Returns:
         The translated string, or the key itself if not found
@@ -89,10 +89,10 @@ def t(key: str, lang: str = "en", **kwargs) -> str:
         logger.warning(f"Translation key '{key}' not found for language '{lang}'")
         return key
     
-    # Apply string formatting if kwargs are provided
-    if kwargs:
+    # Apply string formatting if params are provided
+    if params:
         try:
-            return value.format(**kwargs)
+            return value.format(**params)
         except KeyError as e:
             logger.error(f"Missing format argument in translation: {str(e)}")
             return value
