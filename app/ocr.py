@@ -29,31 +29,23 @@ async def call_openai_ocr(image_bytes: bytes) -> ParsedData:
         logging.error("Vision Assistant unavailable: no Assistant ID configured")
         raise RuntimeError("Vision Assistant unavailable: Please set OPENAI_VISION_ASSISTANT_ID in .env")
 
+    base64_image = base64.b64encode(image_bytes).decode('utf-8')
+    image_size_kb = len(image_bytes) / 1024
+    logging.debug(f"Processing image of size: {image_size_kb:.2f} KB")
+    
     start_time = time.time()
     try:
         # Используем run_in_executor для синхронных методов OpenAI API
         loop = asyncio.get_running_loop()
         
-        # 1. Сначала загружаем файл в Files API
-        logging.debug("Uploading image to OpenAI Files API")
-        file_obj = io.BytesIO(image_bytes)
-        file_obj.name = 'invoice.jpg'  # Имя файла для MIME-типа
-        
-        # Загружаем файл синхронно через executor
-        file_response = await loop.run_in_executor(
-            None, 
-            lambda: client.files.create(
-                file=file_obj,
-                purpose="assistants"
-            )
-        )
-        file_id = file_response.id
-        logging.debug(f"File uploaded with ID: {file_id}")
-        
-        # 2. Создаем поток синхронно
+        # 1. Создаем поток синхронно
+        logging.debug("Creating thread for OpenAI Vision Assistant")
         thread = await loop.run_in_executor(None, lambda: client.beta.threads.create())
+        logging.debug(f"Thread created with ID: {thread.id}")
         
-        # 3. Создаем сообщение синхронно с использованием загруженного файла
+        # 2. Создаем сообщение синхронно
+        # Без использования Files API, напрямую в image_url
+        logging.debug("Creating message with image")
         message_params = {
             "thread_id": thread.id,
             "role": "user",
@@ -63,9 +55,9 @@ async def call_openai_ocr(image_bytes: bytes) -> ParsedData:
                     "text": "Распознай этот инвойс и верни структурированные данные в JSON формате. Используй формат, где есть поля supplier, date, positions с товарами (name, qty, unit, price), и total_price."
                 },
                 {
-                    "type": "image_file",
-                    "image_file": {
-                        "file_id": file_id
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{base64_image}"
                     }
                 }
             ]
