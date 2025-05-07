@@ -62,8 +62,20 @@ class EnhancedLocalCache:
     
     def _cleanup_expired(self) -> None:
         """Периодически очищает истекшие элементы кэша"""
-        while True:
-            time.sleep(30)  # Проверка каждые 30 секунд
+        # Use an event to allow graceful shutdown
+        self._stop_event = threading.Event()
+        
+        while not self._stop_event.is_set():
+            # Use smaller sleep intervals to respond to shutdown faster
+            for _ in range(6):  # 6 x 5 seconds = 30 seconds total
+                if self._stop_event.is_set():
+                    break
+                time.sleep(5)
+                
+            # Skip if already stopping
+            if self._stop_event.is_set():
+                break
+                
             try:
                 with self._lock:
                     now = time.time()
@@ -75,6 +87,16 @@ class EnhancedLocalCache:
                         del self._cache[key]
             except Exception as e:
                 logger.error(f"Ошибка при очистке локального кэша: {e}")
+                
+        logger.info("Thread pool cleanup thread stopped gracefully")
+        
+    def stop_cleanup(self) -> None:
+        """Останавливает поток очистки кэша при завершении работы"""
+        if hasattr(self, '_stop_event'):
+            self._stop_event.set()
+            if hasattr(self, '_cleanup_thread') and self._cleanup_thread.is_alive():
+                self._cleanup_thread.join(timeout=2.0)  # Wait up to 2 seconds for thread to terminate
+                logger.info("Cache cleanup thread stopped")
 
 # Инициализация улучшенного локального кэша
 _local_cache = EnhancedLocalCache(CACHE_SIZE)

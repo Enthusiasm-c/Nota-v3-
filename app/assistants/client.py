@@ -59,22 +59,65 @@ __all__ = [
 def parse_edit_command(user_input: str, invoice_lines=None) -> list:
     """
     Универсальный парсер команд для инвойса. Используется как в тестах, так и в run_thread_safe.
+    Поддерживает комбинированные команды (несколько команд в одном сообщении).
+    
     Args:
         user_input: строка команды пользователя
         invoice_lines: (опционально) количество строк в инвойсе для проверки границ
+        
     Returns:
         Список dict'ов с действиями
     """
     import re
-    # Split commands by newlines, semicolons, commas, or periods
-    import re
+    from datetime import datetime
+    
     # First replace newlines with semicolons, then split by semicolons, commas, or periods
     # We use a regex to avoid splitting on periods within numbers (e.g., "3.14")
     cleaned_input = user_input.replace('\n', ';')
+    
     # Split on semicolons, commas, or periods that are followed by a space or end of string
     commands = [c.strip() for c in re.split(r'[;,.](?=\s|\Z)', cleaned_input) if c.strip()]
+    
+    # If no commands found after splitting, try to process whole input
+    if not commands and cleaned_input.strip():
+        commands = [cleaned_input.strip()]
+        
     results = []
+    reserved_keywords = ['date', 'дата', 'supplier', 'поставщик', 'total', 'итог', 'line', 'row', 'строка']
+    has_reserved_keywords = any(kw in user_input.lower() for kw in reserved_keywords)
+    
     for cmd in commands:
+        # --- Date ---
+        # Check for date patterns first
+        date_match = (
+            re.search(r'(?:дата|date|invoice date)\s+([\d]{1,2})[.\/-]([\d]{1,2})[.\/-]([\d]{4}|\d{2})', cmd, re.IGNORECASE) or
+            re.search(r'(?:дата|date|invoice date)\s+([\d]{4})[.\/-]([\d]{1,2})[.\/-]([\d]{1,2})', cmd, re.IGNORECASE)
+        )
+        
+        if date_match:
+            try:
+                # Check which format we matched (DD.MM.YYYY or YYYY.MM.DD)
+                if len(date_match.group(3)) == 4:  # DD.MM.YYYY
+                    day = int(date_match.group(1))
+                    month = int(date_match.group(2))
+                    year = int(date_match.group(3))
+                elif len(date_match.group(1)) == 4:  # YYYY.MM.DD
+                    year = int(date_match.group(1))
+                    month = int(date_match.group(2))
+                    day = int(date_match.group(3))
+                else:  # DD.MM.YY
+                    day = int(date_match.group(1))
+                    month = int(date_match.group(2))
+                    year = 2000 + int(date_match.group(3))  # Assume 20xx for 2-digit years
+                
+                # Format as YYYY-MM-DD (ISO format)
+                date_str = f"{year:04d}-{month:02d}-{day:02d}"
+                results.append({"action": "set_date", "date": date_str})
+                continue
+            except Exception as e:
+                results.append({"action": "unknown", "error": f"invalid_date_format: {str(e)}"})
+                continue
+        
         # --- Supplier ---
         if (cmd.lower().startswith("поставщик ") or
             "изменить поставщика на" in cmd.lower() or
@@ -92,27 +135,74 @@ def parse_edit_command(user_input: str, invoice_lines=None) -> list:
                 supplier = cmd[idx+len("change supplier to"):].strip()
             results.append({"action": "set_supplier", "supplier": supplier})
             continue
+        
         # --- Total ---
-        # Исправленная обработка total: ловим ValueError, если число некорректно
-        match_total = re.search(r'(общая сумма|итого|total)\s*([\d.,]+)', cmd, re.IGNORECASE)
+        # Improved total pattern matching
+        match_total = re.search(r'(?:общая сумма|итого|total)\s*([\d,.]+(?:\s*[kкк])?)', cmd, re.IGNORECASE)
         if match_total:
             try:
-                val = match_total.group(2)
-                # Проверяем, что только одно число (иначе ValueError)
+                val = match_total.group(1).lower().strip()
+                # Handle 'k' or 'к' suffix (thousands)
+                has_k = 'k' in val or 'к' in val
+                val = val.replace('k', '').replace('к', '')
+                
+                # Check that only one number (invalid format otherwise)
                 if val.count(',') > 1 or val.count('.') > 1:
                     raise ValueError('invalid number format')
+                
                 total = float(val.replace(',', '.'))
+                # Multiply by 1000 if 'k' suffix was present
+                if has_k:
+                    total *= 1000
+                
                 results.append({"action": "set_total", "total": total})
             except Exception:
                 results.append({"action": "unknown", "error": "invalid_total_value"})
             continue
+        
+        # --- Price ---
+        # Handle price patterns with "per pack" or similar suffixes
+        match_price = (
+            re.search(r'(?:строка|line|row)\s*(-?\d+).*?(?:цена|price)\s*([\d.,]+(?:\s*[kкк])?)\s*(?:per\s+\w+|за.*)?', cmd, re.IGNORECASE) or
+            re.search(r'(?:изменить цену в строке|change price in row)\s*(-?\d+).*?(?:на|to)\s*([\d.,]+(?:\s*[kкк])?)', cmd, re.IGNORECASE)
+        )
+        
+        if match_price:
+            try:
+                orig_line = match_price.group(1)
+                line = int(orig_line) - 1
+                
+                # Get price value with k/к suffix handling
+                price_val = match_price.group(2).lower().strip()
+                has_k = 'k' in price_val or 'к' in price_val
+                price_val = price_val.replace('k', '').replace('к', '')
+                
+                # Convert price to number
+                try:
+                    price = float(price_val.replace(',', '.'))
+                    if has_k:
+                        price *= 1000
+                except ValueError:
+                    results.append({"action": "unknown", "error": "invalid_price_value"})
+                    continue
+                
+                # Check if line index is valid
+                if int(orig_line) < 1:
+                    results.append({"action": "unknown", "error": "line_out_of_range", "line": 0})
+                elif invoice_lines is not None and (line < 0 or line >= invoice_lines):
+                    results.append({"action": "unknown", "error": "line_out_of_range", "line": line})
+                else:
+                    results.append({"action": "set_price", "line": line, "price": price})
+            except Exception:
+                results.append({"action": "unknown", "error": "invalid_line_or_price"})
+            continue
+        
         # --- Name ---
         match_name = (
-            re.search(r'строка\s*(-?\d+)\s*(?:название|имя)\s*(.+)', cmd, re.IGNORECASE) or
-            re.search(r'row\s*(-?\d+)\s*name\s*(.+)', cmd, re.IGNORECASE) or
-            re.search(r'изменить название в строке\s*(-?\d+) на (.+)', cmd, re.IGNORECASE) or
-            re.search(r'change name in row\s*(-?\d+) to (.+)', cmd, re.IGNORECASE)
+            re.search(r'(?:строка|line|row)\s*(-?\d+)\s*(?:название|имя|name)\s*(.+)', cmd, re.IGNORECASE) or
+            re.search(r'(?:изменить название в строке|change name in row)\s*(-?\d+).*?(?:на|to)\s*(.+)', cmd, re.IGNORECASE)
         )
+        
         if match_name:
             try:
                 orig_line = match_name.group(1)
@@ -126,13 +216,13 @@ def parse_edit_command(user_input: str, invoice_lines=None) -> list:
             except Exception:
                 results.append({"action": "unknown", "error": "invalid_line_or_name"})
             continue
+        
         # --- Quantity ---
         match_qty = (
-            re.search(r'строка\s*(-?\d+)\s*количество\s*(.+)', cmd, re.IGNORECASE) or
-            re.search(r'row\s*(-?\d+)\s*qty\s*(.+)', cmd, re.IGNORECASE) or
-            re.search(r'изменить количество в строке\s*(-?\d+) на (.+)', cmd, re.IGNORECASE) or
-            re.search(r'change qty in row\s*(-?\d+) to (.+)', cmd, re.IGNORECASE)
+            re.search(r'(?:строка|line|row)\s*(-?\d+)\s*(?:количество|кол-во|qty)\s*(.+)', cmd, re.IGNORECASE) or
+            re.search(r'(?:изменить количество в строке|change qty in row)\s*(-?\d+).*?(?:на|to)\s*(.+)', cmd, re.IGNORECASE)
         )
+        
         if match_qty:
             try:
                 orig_line = match_qty.group(1)
@@ -144,13 +234,46 @@ def parse_edit_command(user_input: str, invoice_lines=None) -> list:
                     results.append({"action": "unknown", "error": "line_out_of_range", "line": line})
                 else:
                     try:
-                        qty = float(match_qty.group(2).replace(',', '.'))
+                        qty_val = match_qty.group(2).strip()
+                        has_k = 'k' in qty_val.lower() or 'к' in qty_val.lower()
+                        qty_val = qty_val.lower().replace('k', '').replace('к', '')
+                        
+                        qty = float(qty_val.replace(',', '.'))
+                        if has_k:
+                            qty *= 1000
+                            
                         results.append({"action": "set_qty", "line": line, "qty": qty})
                     except Exception:
                         results.append({"action": "unknown", "error": "invalid_line_or_qty"})
             except Exception:
                 results.append({"action": "unknown", "error": "invalid_line_or_qty"})
             continue
+        
+        # --- Unit ---
+        match_unit = (
+            re.search(r'(?:строка|line|row)\s*(-?\d+)\s*(?:единица|ед\.|unit)\s*(.+)', cmd, re.IGNORECASE) or
+            re.search(r'(?:изменить единицу в строке|change unit in row)\s*(-?\d+).*?(?:на|to)\s*(.+)', cmd, re.IGNORECASE)
+        )
+        
+        if match_unit:
+            try:
+                orig_line = match_unit.group(1)
+                line = int(orig_line) - 1
+                # Check that line index is valid
+                if int(orig_line) < 1 or (invoice_lines is not None and (line < 0 or line >= invoice_lines)):
+                    results.append({"action": "unknown", "error": "line_out_of_range", "line": int(orig_line) - 1})
+                else:
+                    unit = match_unit.group(2).strip()
+                    results.append({"action": "set_unit", "line": line, "unit": unit})
+            except Exception:
+                results.append({"action": "unknown", "error": "invalid_line_or_unit"})
+            continue
+    
+    # If no commands were recognized and we have reserved keywords, return a special error
+    if not results and has_reserved_keywords:
+        results.append({"action": "unknown", "error": "no_pattern_match", "user_input": user_input})
+    # If completely empty and no reserved keywords, return an empty list to let the assistant handle it
+    
     return results
 
 def parse_assistant_output(raw: str) -> List[EditCommand]:

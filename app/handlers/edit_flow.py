@@ -59,41 +59,104 @@ async def handle_free_edit_text(message: Message, state: FSMContext):
     
     try:
         logger.info("[edit_flow] Sending user text to OpenAI", extra={"data": {"user_text": user_text}})
-        # Use async version for better performance
-        intent = await run_thread_safe_async(user_text)
-        logger.info("[edit_flow] OpenAI response received", extra={"data": {"intent": intent}})
         
-        # Check parsing success
-        if intent.get("action") == "unknown":
-            error = intent.get("error", "unknown_error")
-            logger.warning("[edit_flow] Failed to parse command", extra={"data": {"error": error}})
-            
-            # Delete loading message
-            try:
-                await processing_msg.delete()
-            except Exception:
-                pass
-            
-            # Use custom error message if available
-            error_message = intent.get("user_message", t("error.parse_command", lang=lang))
-            
-            await message.answer(error_message)
-            return
-            
-        # Convert invoice to dict via universal adapter
-        invoice = parsed_to_dict(invoice)
+        # First, try direct pattern matching with improved parse_edit_command
+        from app.assistants.client import parse_edit_command
+        direct_actions = parse_edit_command(user_text, len(invoice.get("positions", [])) if invoice else 0)
+        logger.info(f"[edit_flow] Direct pattern matching found {len(direct_actions)} actions: {direct_actions}")
         
-        # Apply intent to invoice
-        new_invoice = apply_intent(invoice, intent)
+        # If direct pattern matching works, use those results
+        if direct_actions and not any(action.get("error", "").startswith("invalid") for action in direct_actions):
+            # Successfully parsed at least one action directly
+            logger.info(f"[edit_flow] Using direct pattern matching results: {direct_actions}")
+            
+            # Detect if this contains commands with reserved keywords date/line/price
+            has_date = any(action.get("action") == "set_date" for action in direct_actions)
+            has_price = any(action.get("action") == "set_price" for action in direct_actions)
+            
+            # Flag to show if there was a change
+            was_changed = len(direct_actions) > 0
+            
+            # Convert invoice to dict via universal adapter
+            invoice = parsed_to_dict(invoice)
+            new_invoice = invoice  # Start with original invoice
+            
+            # Apply all intents sequentially
+            for action_data in direct_actions:
+                # Convert to proper format expected by apply_intent
+                if action_data.get("action") == "set_price" and "price" in action_data:
+                    action_data["value"] = action_data["price"]
+                elif action_data.get("action") == "set_date" and "date" in action_data:
+                    action_data["value"] = action_data["date"]
+                
+                # Apply each intent individually
+                new_invoice = apply_intent(new_invoice, action_data)
+                logger.info(f"[edit_flow] Applied action: {action_data.get('action')} - result: {bool(new_invoice != invoice)}")
+            
+            # Clear any suggestions for names if we're handling a date command
+            if has_date or has_price:
+                # Skip fuzzy matching when dealing with dates/prices/known values
+                suggestion_shown = False
+            
+        else:
+            # Fall back to OpenAI interpretation if direct pattern matching fails
+            intent = await run_thread_safe_async(user_text)
+            logger.info("[edit_flow] OpenAI response received", extra={"data": {"intent": intent}})
+            
+            # Check if this is a line-specific edit command
+            is_line_edit = False
+            edited_line = None
+            
+            if intent.get("action") == "edit_line_field" and intent.get("line") is not None:
+                is_line_edit = True
+                edited_line = intent.get("line") - 1  # Convert to 0-based index
+                logger.info(f"[edit_flow] Line-specific edit detected for line {edited_line}")
+                
+                # Save edit context in state
+                await state.update_data(edit_context={
+                    "line_specific": True,
+                    "edited_line": edited_line,
+                    "field": intent.get("field"),
+                    "value": intent.get("value")
+                })
+            else:
+                # Clear any previous edit context
+                await state.update_data(edit_context={
+                    "line_specific": False,
+                    "edited_line": None
+                })
+            
+            # Check parsing success
+            if intent.get("action") == "unknown":
+                error = intent.get("error", "unknown_error")
+                logger.warning("[edit_flow] Failed to parse command", extra={"data": {"error": error}})
+                
+                # Delete loading message
+                try:
+                    await processing_msg.delete()
+                except Exception:
+                    pass
+                
+                # Use custom error message if available
+                error_message = intent.get("user_message", t("error.parse_command", lang=lang))
+                
+                await message.answer(error_message)
+                return
+                
+            # Convert invoice to dict via universal adapter
+            invoice = parsed_to_dict(invoice)
+            
+            # Apply intent to invoice
+            new_invoice = apply_intent(invoice, intent)
+            
+            # Flag to show if there was a change
+            was_changed = True
         
         # Recalculate errors and update report with cached products
         from app.utils.cached_loader import cached_load_products
         products = cached_load_products("data/base_products.csv", load_products)
         match_results = match_positions(new_invoice["positions"], products)
         text, has_errors = report.build_report(new_invoice, match_results)
-    
-        # Flag to show if there was a change
-        was_changed = True
         
         # Check if there are any unknown positions for fuzzy matching
         from app.handlers.name_picker import show_fuzzy_suggestions
@@ -156,7 +219,7 @@ async def handle_free_edit_text(message: Message, state: FSMContext):
             
             success_message = t("status.edit_success", {"field": field}, lang=lang)
             if not has_errors:
-                success_message += t("status.edit_success_confirm", lang=lang)
+                success_message += t("status.edit_success_confirm", {}, lang=lang)
                 
             await message.answer(success_message)
     
@@ -226,6 +289,8 @@ async def confirm_fuzzy_name(call: CallbackQuery, state: FSMContext):
     if not all([fuzzy_match, invoice]):
         await call.message.answer(t("error.unexpected", lang=lang))
         await call.message.edit_reply_markup(reply_markup=None)
+        # Get user language preference
+        lang = data.get("lang", "en")
         await call.answer()
         return
     

@@ -57,6 +57,18 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
     photo_id = message.photo[-1].file_id if message.photo else None
     req_id = uuid.uuid4().hex[:8]  # Unique request ID for logging
     
+    # Check if already processing a photo
+    if data.get("processing_photo"):
+        logger.warning(f"Already processing a photo for user {user_id}, ignoring new photo")
+        await message.answer(
+            t("status.wait_for_processing", lang=lang) or "Please wait while I finish processing your current photo.",
+            parse_mode=None
+        )
+        return
+    
+    # Set processing flag
+    await state.update_data(processing_photo=True)
+    
     logger.info(f"[{req_id}] Received new photo from user {user_id}")
     
     # Initialize IncrementalUI
@@ -256,7 +268,8 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
             except Exception as key_err:
                 logger.error(f"Error updating user_matches: {str(key_err)}")
         
-        # Update user state
+        # Update user state and clear processing flag
+        await state.update_data(processing_photo=False)
         await state.set_state(NotaStates.editing)
         logger.info(f"[{req_id}] Invoice processing completed for user {user_id}")
         
@@ -268,6 +281,9 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
             t("error.photo_processing", lang=lang) or 
             "An error occurred while processing the photo. Please try again or contact the administrator."
         )
+        
+        # Clear processing flag
+        await state.update_data(processing_photo=False)
         
         # Return to initial state
         await state.set_state(NotaStates.main_menu)

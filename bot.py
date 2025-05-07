@@ -1,4 +1,5 @@
 import asyncio
+import concurrent.futures
 import logging
 import re
 import os
@@ -607,6 +608,21 @@ async def handle_nlu_text(message, state: FSMContext):
 
     # Получаем данные состояния пользователя для определения режима
     user_data = await state.get_data()
+    
+    # Получаем язык пользователя
+    lang = user_data.get("lang", "en")
+    
+    # Проверяем команды для специальной обработки
+    if text and text.lower() in ["отправить фото", "send photo", "нова накладна", "новый инвойс", "new invoice"]:
+        logger.info(f"Detected command to start new invoice process: '{text}'")
+        # Переключаем состояние на ожидание файла для загрузки нового инвойса
+        await state.set_state(NotaStates.awaiting_file)
+        from app.i18n import t
+        await message.answer(
+            t("status.send_photo", lang=lang) or "Please send a photo of your invoice.",
+            parse_mode=None
+        )
+        return
 
     # Проверяем, находимся ли мы в режиме редактирования поля
     if user_data.get("editing_mode") == "field_edit":
@@ -614,10 +630,23 @@ async def handle_nlu_text(message, state: FSMContext):
         # Вызываем обработчик редактирования поля напрямую
         await handle_field_edit(message, state)
         return
+    
+    # Проверяем, не обрабатывается ли уже фото
+    if user_data.get("processing_photo"):
+        logger.warning(f"Already processing a photo for user {user_id}, ignoring text message")
+        from app.i18n import t
+        await message.answer(
+            t("status.wait_for_processing", lang=lang) or "Please wait while I finish processing your photo.", 
+            parse_mode=None
+        )
+        return
 
     # Если не в режиме редактирования, считаем запрос обычным диалогом с ассистентом
-    # Отправляем индикатор обработки
-    processing_msg = await message.answer("🤔 Обрабатываю ваш запрос...")
+    # Отправляем индикатор обработки (используем t для мультиязычности)
+    from app.i18n import t
+    processing_msg = await message.answer(
+        t("status.processing_request", lang=lang) or "🤔 Processing your request..."
+    )
 
     try:
         logger.debug(
@@ -653,7 +682,8 @@ async def handle_nlu_text(message, state: FSMContext):
                 # Apply edit_line logic here (update local state, etc.)
                 # For now, just acknowledge with NEW message
                 await message.answer(
-                    "✅ Изменения применены (edit_line)", parse_mode=None
+                    t("status.changes_applied", lang=lang) or "✅ Changes applied",
+                    parse_mode=None
                 )
                 await state.set_state(NotaStates.editing)
                 return
@@ -670,7 +700,8 @@ async def handle_nlu_text(message, state: FSMContext):
             await message.answer(assistant_response, parse_mode=ParseMode.HTML)
         except Exception as e:
             logger.error("Telegram error (assistant): %s\nText: %s", str(e), assistant_response[:500])
-            raise
+            # Если ошибка с HTML-форматированием, попробуем без него
+            await message.answer(assistant_response, parse_mode=None)
 
         # Сохраняем состояние редактирования инвойса
         await state.set_state(NotaStates.editing)
@@ -679,7 +710,7 @@ async def handle_nlu_text(message, state: FSMContext):
         logger.error(f"Assistant error: {str(e)}")
         # Отправляем ошибку как новое сообщение
         await message.answer(
-            f"Sorry, could not process your request. Please try again.",
+            t("error.request_failed", lang=lang) or "Sorry, could not process your request. Please try again.",
             parse_mode=None,
         )
 
@@ -1436,12 +1467,102 @@ import sys
 def _graceful_shutdown(signum, frame):
     logger.info(f"Получен сигнал завершения ({signum}), выполняем graceful shutdown...")
     try:
-        # Здесь можно закрыть соединения с Redis, БД и т.д.
+        # 1. Stop background threads first
+        logger.info("Останавливаем фоновые потоки...")
+        try:
+            # Stop the Redis cache cleanup thread
+            from app.utils.redis_cache import _local_cache
+            if hasattr(_local_cache, 'stop_cleanup'):
+                _local_cache.stop_cleanup()
+                logger.info("Поток очистки кэша остановлен")
+        except Exception as thread_err:
+            logger.error(f"Ошибка при остановке фоновых потоков: {thread_err}")
+
+        # 2. Close Redis connection if it exists
+        from app.utils.redis_cache import get_redis
+        redis_conn = get_redis()
+        if redis_conn:
+            logger.info("Закрываем соединение с Redis...")
+            try:
+                redis_conn.close()
+                logger.info("Соединение с Redis закрыто")
+            except Exception as redis_err:
+                logger.error(f"Ошибка при закрытии Redis: {redis_err}")
+
+        # 3. Cancel any pending OpenAI requests and shut down thread pool
+        logger.info("Отменяем запросы OpenAI API...")
+        try:
+            # Shutdown thread pool first to prevent new async tasks
+            from app.assistants.thread_pool import shutdown_thread_pool
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                shutdown_task = asyncio.run_coroutine_threadsafe(shutdown_thread_pool(), loop)
+                # Wait up to 3 seconds for thread pool shutdown
+                try:
+                    shutdown_task.result(timeout=3.0)
+                except (asyncio.TimeoutError, concurrent.futures.TimeoutError):
+                    logger.warning("Timeout waiting for thread pool shutdown")
+                except Exception as pool_err:
+                    logger.error(f"Ошибка при остановке thread pool: {pool_err}")
+            
+            # Close the OpenAI client connection
+            from app.config import get_chat_client
+            client = get_chat_client()
+            if client:
+                client._client.http_client.close()  # Close the underlying HTTP client
+                logger.info("HTTP клиент OpenAI закрыт")
+        except Exception as openai_err:
+            logger.error(f"Ошибка при остановке клиента OpenAI: {openai_err}")
+
+        # 4. Stop the bot polling and dispatcher
+        if 'dp' in globals() and dp:
+            logger.info("Останавливаем диспетчер бота...")
+            if hasattr(dp, '_polling'):
+                dp._polling = False
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                try:
+                    # First try stopping polling gracefully
+                    stop_task = asyncio.run_coroutine_threadsafe(dp.stop_polling(), loop)
+                    # Wait up to 5 seconds for polling to stop
+                    stop_task.result(timeout=5.0)
+                    logger.info("Опрос Telegram API остановлен")
+                except (asyncio.TimeoutError, concurrent.futures.TimeoutError):
+                    logger.warning("Timeout waiting for polling to stop")
+                except Exception as e:
+                    logger.error(f"Ошибка при остановке опроса: {e}")
+
+        # 5. Close event loop properly
+        logger.info("Останавливаем event loop...")
         loop = asyncio.get_event_loop()
         if loop.is_running():
+            # Collect and close all pending tasks
+            pending = asyncio.all_tasks(loop)
+            if pending:
+                logger.info(f"Отменяем {len(pending)} незавершенных задач...")
+                for task in pending:
+                    task.cancel()
+                
+                # Give tasks a moment to respond to cancellation
+                try:
+                    # Wait for a short time for tasks to cancel
+                    gather_task = asyncio.run_coroutine_threadsafe(
+                        asyncio.gather(*pending, return_exceptions=True), 
+                        loop
+                    )
+                    gather_task.result(timeout=2.0)
+                except (asyncio.TimeoutError, concurrent.futures.TimeoutError):
+                    logger.warning("Timeout waiting for tasks to cancel")
+                except Exception as e:
+                    logger.error(f"Ошибка при отмене задач: {e}")
+                    
+            # Now stop the loop
             loop.stop()
+            logger.info("Event loop остановлен")
     except Exception as e:
         logger.error(f"Ошибка при завершении: {e}")
+        
+    logger.info("Graceful shutdown завершен")
     sys.exit(0)
 
 if __name__ == "__main__":
@@ -1452,6 +1573,10 @@ if __name__ == "__main__":
         global bot, dp
         bot, dp = create_bot_and_dispatcher()
         register_handlers(dp, bot)
+        
+        # Проверка конфигурации логирования для предотвращения дублирования
+        root_logger = logging.getLogger()
+        logger.debug(f"Logger configuration: {len(root_logger.handlers)} handlers")
         
         # Инициализируем пул потоков OpenAI Assistant API
         from app.assistants.client import client, initialize_pool
@@ -1465,6 +1590,8 @@ if __name__ == "__main__":
         logger.info("✅ Asynchronous OCR processing")
         logger.info("✅ Incremental UI updates for better UX")
         logger.info("✅ Parallel API processing")
+        logger.info("✅ Fixed i18n formatting issues")
+        logger.info("✅ Improved logging with duplication prevention")
         
         await dp.start_polling(bot)
 
