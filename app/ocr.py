@@ -31,11 +31,16 @@ async def call_openai_ocr(image_bytes: bytes) -> ParsedData:
     base64_image = base64.b64encode(image_bytes).decode('utf-8')
     start_time = time.time()
     try:
-        thread = await client.beta.threads.create()
-        await client.beta.threads.messages.create(
-            thread_id=thread.id,
-            role="user",
-            content=[
+        # Используем run_in_executor для синхронных методов OpenAI API
+        loop = asyncio.get_running_loop()
+        # Создаем поток синхронно
+        thread = await loop.run_in_executor(None, lambda: client.beta.threads.create())
+        
+        # Создаем сообщение синхронно
+        message_params = {
+            "thread_id": thread.id,
+            "role": "user",
+            "content": [
                 {
                     "type": "text",
                     "text": "Распознай этот инвойс и верни структурированные данные в JSON формате. Используй формат, где есть поля supplier, date, positions с товарами (name, qty, unit, price), и total_price."
@@ -47,17 +52,32 @@ async def call_openai_ocr(image_bytes: bytes) -> ParsedData:
                     }
                 }
             ]
+        }
+        await loop.run_in_executor(
+            None,
+            lambda: client.beta.threads.messages.create(**message_params)
         )
-        run = await client.beta.threads.runs.create(
-            thread_id=thread.id,
-            assistant_id=vision_assistant_id
+        
+        # Создаем запуск синхронно
+        run_params = {
+            "thread_id": thread.id,
+            "assistant_id": vision_assistant_id
+        }
+        run = await loop.run_in_executor(
+            None,
+            lambda: client.beta.threads.runs.create(**run_params)
         )
         timeout = VISION_ASSISTANT_TIMEOUT_SECONDS
         completion_time = time.time() + timeout
         while time.time() < completion_time:
-            run_status = await client.beta.threads.runs.retrieve(
-                thread_id=thread.id,
-                run_id=run.id
+            # Получаем статус запуска синхронно
+            retrieve_params = {
+                "thread_id": thread.id,
+                "run_id": run.id
+            }
+            run_status = await loop.run_in_executor(
+                None,
+                lambda: client.beta.threads.runs.retrieve(**retrieve_params)
             )
             if run_status.status == 'completed':
                 break
@@ -65,13 +85,24 @@ async def call_openai_ocr(image_bytes: bytes) -> ParsedData:
                 raise RuntimeError(f"Assistant run failed with status: {run_status.status}")
             await asyncio.sleep(1)
         else:
-            await client.beta.threads.runs.cancel(
-                thread_id=thread.id,
-                run_id=run.id
+            # Отменяем запуск синхронно
+            cancel_params = {
+                "thread_id": thread.id,
+                "run_id": run.id
+            }
+            await loop.run_in_executor(
+                None,
+                lambda: client.beta.threads.runs.cancel(**cancel_params)
             )
             raise RuntimeError(f"Assistant run timed out after {timeout} seconds")
-        messages = await client.beta.threads.messages.list(
-            thread_id=thread.id
+        
+        # Получаем список сообщений синхронно
+        list_params = {
+            "thread_id": thread.id
+        }
+        messages = await loop.run_in_executor(
+            None,
+            lambda: client.beta.threads.messages.list(**list_params)
         )
         if not messages.data:
             raise RuntimeError("No messages returned from Assistant")
