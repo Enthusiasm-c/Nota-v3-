@@ -6,138 +6,128 @@ import logging
 import re
 import time
 from typing import Any
+from pathlib import Path
+import uuid
 
 from app.models import ParsedData
 from app.config import settings, get_ocr_client
 from app.utils.monitor import increment_counter, ocr_monitor
-from app.utils.api_decorators import with_retry_backoff
+from app.utils.api_decorators import with_async_retry_backoff
 
 VISION_ASSISTANT_TIMEOUT_SECONDS = int(getattr(settings, "VISION_ASSISTANT_TIMEOUT_SECONDS", 30))
 
-@with_retry_backoff(max_retries=2, initial_backoff=2.0)
+@with_async_retry_backoff(max_retries=2, initial_backoff=2.0)
 async def call_openai_ocr(image_bytes: bytes) -> ParsedData:
     """
     Отправляет изображение OpenAI Vision Assistant для распознавания инвойса.
-    Возвращает ParsedData или кидает RuntimeError при ошибке.
     """
+    start_time = time.time()
     client = get_ocr_client()
+    vision_assistant_id = getattr(settings, "OPENAI_VISION_ASSISTANT_ID", None)
     if not client:
         logging.error("Vision Assistant unavailable: no OpenAI client")
         raise RuntimeError("Vision Assistant unavailable: Please check your OPENAI_API_KEY")
-    vision_assistant_id = getattr(settings, "OPENAI_VISION_ASSISTANT_ID", None)
     if not vision_assistant_id:
         logging.error("Vision Assistant unavailable: no Assistant ID configured")
         raise RuntimeError("Vision Assistant unavailable: Please set OPENAI_VISION_ASSISTANT_ID in .env")
 
-    base64_image = base64.b64encode(image_bytes).decode('utf-8')
-    image_size_kb = len(image_bytes) / 1024
-    logging.debug(f"Processing image of size: {image_size_kb:.2f} KB")
-    
-    start_time = time.time()
+    loop = asyncio.get_running_loop()
+    tmp_path = Path("/tmp") / f"{uuid4()}.jpg"
+    tmp_path.write_bytes(image_bytes)
+    logging.debug("Telegram file downloaded: %d bytes", len(image_bytes))
     try:
-        # Используем run_in_executor для синхронных методов OpenAI API
-        loop = asyncio.get_running_loop()
-        
-        # 1. Создаем поток синхронно
-        logging.debug("Creating thread for OpenAI Vision Assistant")
-        thread = await loop.run_in_executor(None, lambda: client.beta.threads.create())
-        logging.debug(f"Thread created with ID: {thread.id}")
-        
-        # 2. Создаем сообщение синхронно
-        # Без использования Files API, напрямую в image_url
-        logging.debug("Creating message with image")
-        message_params = {
-            "thread_id": thread.id,
-            "role": "user",
-            "content": [
-                {
-                    "type": "text",
-                    "text": "Распознай этот инвойс и верни структурированные данные в JSON формате. Используй формат, где есть поля supplier, date, positions с товарами (name, qty, unit, price), и total_price."
-                },
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/jpeg;base64,{base64_image}"
-                    }
-                }
-            ]
-        }
-        await loop.run_in_executor(
+        # 1. Загрузить файл в Files API (blocking)
+        file_obj = await loop.run_in_executor(
             None,
-            lambda: client.beta.threads.messages.create(**message_params)
+            lambda: client.files.create(file=open(tmp_path, "rb"), purpose="vision")
         )
-        
-        # Создаем запуск синхронно
-        run_params = {
-            "thread_id": thread.id,
-            "assistant_id": vision_assistant_id
-        }
+        file_id = file_obj.id
+        logging.debug("OpenAI file_id: %s", file_id)
+        # 2. Создать thread
+        thread = await loop.run_in_executor(None, lambda: client.beta.threads.create())
+        # 3. Сформировать content
+        content = [
+            {
+                "type": "text",
+                "text": "Extract items as JSON."
+            },
+            {
+                "type": "image_file",
+                "image_file": {"file_id": file_id}
+            }
+        ]
+        logging.debug("Content payload: %s", json.dumps(content, indent=2)[:300])
+        # 4. Отправить в Vision-ассистент
+        message = await loop.run_in_executor(
+            None,
+            lambda: client.beta.threads.messages.create(
+                thread_id=thread.id,
+                role="user",
+                content=content
+            )
+        )
+        # 5. Создать запуск ассистента
         run = await loop.run_in_executor(
             None,
-            lambda: client.beta.threads.runs.create(**run_params)
+            lambda: client.beta.threads.runs.create(
+                thread_id=thread.id,
+                assistant_id=vision_assistant_id
+            )
         )
         timeout = VISION_ASSISTANT_TIMEOUT_SECONDS
         completion_time = time.time() + timeout
         while time.time() < completion_time:
-            # Получаем статус запуска синхронно
-            retrieve_params = {
-                "thread_id": thread.id,
-                "run_id": run.id
-            }
             run_status = await loop.run_in_executor(
                 None,
-                lambda: client.beta.threads.runs.retrieve(**retrieve_params)
+                lambda: client.beta.threads.runs.retrieve(
+                    thread_id=thread.id,
+                    run_id=run.id
+                )
             )
-            if run_status.status == 'completed':
+            if getattr(run_status, 'status', None) == 'completed':
                 break
-            elif run_status.status in ['failed', 'cancelled', 'expired']:
+            elif getattr(run_status, 'status', None) in ['failed', 'cancelled', 'expired']:
                 raise RuntimeError(f"Assistant run failed with status: {run_status.status}")
             await asyncio.sleep(1)
         else:
-            # Отменяем запуск синхронно
-            cancel_params = {
-                "thread_id": thread.id,
-                "run_id": run.id
-            }
             await loop.run_in_executor(
                 None,
-                lambda: client.beta.threads.runs.cancel(**cancel_params)
+                lambda: client.beta.threads.runs.cancel(
+                    thread_id=thread.id,
+                    run_id=run.id
+                )
             )
             raise RuntimeError(f"Assistant run timed out after {timeout} seconds")
-        
-        # Получаем список сообщений синхронно
-        list_params = {
-            "thread_id": thread.id
-        }
+        # 6. Получить результат
         messages = await loop.run_in_executor(
             None,
-            lambda: client.beta.threads.messages.list(**list_params)
+            lambda: client.beta.threads.messages.list(
+                thread_id=thread.id
+            )
         )
         if not messages.data:
             raise RuntimeError("No messages returned from Assistant")
         last_message = messages.data[0]
-        if last_message.role != "assistant":
+        if getattr(last_message, 'role', None) != "assistant":
             raise RuntimeError("Unexpected message format from Assistant")
         invoice_data = None
-        for content_part in last_message.content:
-            if content_part.type == "text":
+        for content_part in getattr(last_message, 'content', []):
+            if getattr(content_part, 'type', None) == "text":
                 json_match = re.search(r'```(?:json)?\n(.*?)\n```', content_part.text, re.DOTALL)
                 if json_match:
-                    invoice_json = json_match.group(1)
-                    try:
-                        invoice_data = json.loads(invoice_json)
-                        break
-                    except json.JSONDecodeError:
-                        logging.warning("Failed to parse JSON from markdown block, trying full message text")
-                try:
-                    invoice_data = json.loads(content_part.text)
+                    invoice_data = json_match.group(1)
                     break
-                except json.JSONDecodeError:
-                    continue
         if not invoice_data:
-            raise RuntimeError("No valid JSON data found in Assistant response")
+            raise RuntimeError("No invoice data found in Assistant response")
+        # Попробовать распарсить JSON и провалидировать результат
         try:
-            result = ParsedData.model_validate(invoice_data)
+            parsed = json.loads(invoice_data)
+        except Exception as e:
+            logging.error(f"Failed to parse invoice JSON: {e}")
+            logging.error(f"Raw invoice data: {invoice_data}")
+            raise RuntimeError(f"Invalid invoice data format: {str(e)}") from e
+        try:
+            result = ParsedData.model_validate(parsed)
         except Exception as e:
             logging.error(f"Failed to validate invoice data: {str(e)}")
             logging.error(f"Raw invoice data: {invoice_data}")
@@ -149,11 +139,12 @@ async def call_openai_ocr(image_bytes: bytes) -> ParsedData:
         if elapsed > 6.0:
             logging.warning(f"High Vision Assistant OCR latency detected: {elapsed:.1f}s > 6.0s threshold")
         return result
-    except Exception as e:
-        elapsed = time.time() - start_time
-        logging.error(f"Vision Assistant API error after {elapsed:.1f}s: {str(e)}")
-        increment_counter("nota_ocr_requests_total", {"status": "error"})
-        raise RuntimeError(f"Vision OCR failed: {str(e)}") from e
+    finally:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except Exception as e:
+            logging.warning(f"Failed to remove temp file {tmp_path}: {e}")
+
 def _clean_num(v):
     if v in (None, "", "null"):
         return None
