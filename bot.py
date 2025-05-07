@@ -1471,6 +1471,17 @@ import sys
 
 def _graceful_shutdown(signum, frame):
     logger.info(f"Получен сигнал завершения ({signum}), выполняем graceful shutdown...")
+    
+    # Устанавливаем общий таймаут в 25 секунд для гарантированного завершения
+    # даже если что-то зависнет в процессе shutdown
+    def alarm_handler(signum, frame):
+        logger.warning("Таймаут graceful shutdown превышен, принудительное завершение")
+        sys.exit(1)
+    
+    # Установка обработчика сигнала и таймера
+    old_alarm_handler = signal.signal(signal.SIGALRM, alarm_handler)
+    old_alarm_time = signal.alarm(25)  # 25 секунд на все операции
+    
     try:
         # 1. Stop background threads first
         logger.info("Останавливаем фоновые потоки...")
@@ -1484,15 +1495,15 @@ def _graceful_shutdown(signum, frame):
             logger.error(f"Ошибка при остановке фоновых потоков: {thread_err}")
 
         # 2. Close Redis connection if it exists
-        from app.utils.redis_cache import get_redis
-        redis_conn = get_redis()
-        if redis_conn:
-            logger.info("Закрываем соединение с Redis...")
-            try:
+        try:
+            from app.utils.redis_cache import get_redis
+            redis_conn = get_redis()
+            if redis_conn:
+                logger.info("Закрываем соединение с Redis...")
                 redis_conn.close()
                 logger.info("Соединение с Redis закрыто")
-            except Exception as redis_err:
-                logger.error(f"Ошибка при закрытии Redis: {redis_err}")
+        except Exception as redis_err:
+            logger.error(f"Ошибка при закрытии Redis: {redis_err}")
 
         # 3. Cancel any pending OpenAI requests and shut down thread pool
         logger.info("Отменяем запросы OpenAI API...")
@@ -1502,24 +1513,27 @@ def _graceful_shutdown(signum, frame):
             loop = asyncio.get_event_loop()
             if loop.is_running():
                 shutdown_task = asyncio.run_coroutine_threadsafe(shutdown_thread_pool(), loop)
-                # Wait up to 3 seconds for thread pool shutdown
+                # Уменьшаем таймаут с 3 до 1.5 сек
                 try:
-                    shutdown_task.result(timeout=3.0)
+                    shutdown_task.result(timeout=1.5)
                 except (asyncio.TimeoutError, concurrent.futures.TimeoutError):
                     logger.warning("Timeout waiting for thread pool shutdown")
                 except Exception as pool_err:
                     logger.error(f"Ошибка при остановке thread pool: {pool_err}")
             
             # Close the OpenAI client connection
-            from app.config import get_chat_client
-            client = get_chat_client()
-            if client:
-                client._client.http_client.close()  # Close the underlying HTTP client
-                logger.info("HTTP клиент OpenAI закрыт")
+            try:
+                from app.config import get_chat_client
+                client = get_chat_client()
+                if client and hasattr(client, '_client') and hasattr(client._client, 'http_client'):
+                    client._client.http_client.close()  # Close the underlying HTTP client
+                    logger.info("HTTP клиент OpenAI закрыт")
+            except Exception as client_err:
+                logger.error(f"Ошибка при закрытии HTTP клиента: {client_err}")
         except Exception as openai_err:
             logger.error(f"Ошибка при остановке клиента OpenAI: {openai_err}")
 
-        # 4. Stop the bot polling and dispatcher
+        # 4. Stop the bot polling and dispatcher - критически важный шаг
         if 'dp' in globals() and dp:
             logger.info("Останавливаем диспетчер бота...")
             if hasattr(dp, '_polling'):
@@ -1527,10 +1541,9 @@ def _graceful_shutdown(signum, frame):
             loop = asyncio.get_event_loop()
             if loop.is_running():
                 try:
-                    # First try stopping polling gracefully
+                    # Уменьшаем таймаут с 5 до 2 сек
                     stop_task = asyncio.run_coroutine_threadsafe(dp.stop_polling(), loop)
-                    # Wait up to 5 seconds for polling to stop
-                    stop_task.result(timeout=5.0)
+                    stop_task.result(timeout=2.0)
                     logger.info("Опрос Telegram API остановлен")
                 except (asyncio.TimeoutError, concurrent.futures.TimeoutError):
                     logger.warning("Timeout waiting for polling to stop")
@@ -1539,36 +1552,44 @@ def _graceful_shutdown(signum, frame):
 
         # 5. Close event loop properly
         logger.info("Останавливаем event loop...")
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # Collect and close all pending tasks
-            pending = asyncio.all_tasks(loop)
-            if pending:
-                logger.info(f"Отменяем {len(pending)} незавершенных задач...")
-                for task in pending:
-                    task.cancel()
-                
-                # Give tasks a moment to respond to cancellation
-                try:
-                    # Wait for a short time for tasks to cancel
-                    gather_task = asyncio.run_coroutine_threadsafe(
-                        asyncio.gather(*pending, return_exceptions=True), 
-                        loop
-                    )
-                    gather_task.result(timeout=2.0)
-                except (asyncio.TimeoutError, concurrent.futures.TimeoutError):
-                    logger.warning("Timeout waiting for tasks to cancel")
-                except Exception as e:
-                    logger.error(f"Ошибка при отмене задач: {e}")
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Collect and close all pending tasks
+                pending = asyncio.all_tasks(loop)
+                if pending:
+                    logger.info(f"Отменяем {len(pending)} незавершенных задач...")
+                    for task in pending:
+                        if not task.done():
+                            task.cancel()
                     
-            # Now stop the loop
-            loop.stop()
-            logger.info("Event loop остановлен")
+                    # Уменьшаем таймаут с 2 до 1 сек
+                    try:
+                        gather_task = asyncio.run_coroutine_threadsafe(
+                            asyncio.gather(*pending, return_exceptions=True), 
+                            loop
+                        )
+                        gather_task.result(timeout=1.0)
+                    except (asyncio.TimeoutError, concurrent.futures.TimeoutError):
+                        logger.warning("Timeout waiting for tasks to cancel")
+                    except Exception as e:
+                        logger.error(f"Ошибка при отмене задач: {e}")
+                        
+                # Now stop the loop
+                loop.stop()
+                logger.info("Event loop остановлен")
+        except Exception as loop_err:
+            logger.error(f"Ошибка при остановке event loop: {loop_err}")
     except Exception as e:
         logger.error(f"Ошибка при завершении: {e}")
+    finally:
+        # Восстанавливаем предыдущий обработчик сигнала и таймер
+        signal.signal(signal.SIGALRM, old_alarm_handler)
+        signal.alarm(old_alarm_time)  
         
-    logger.info("Graceful shutdown завершен")
-    sys.exit(0)
+        logger.info("Graceful shutdown завершен")
+        # Гарантированное завершение процесса
+        sys.exit(0)
 
 if __name__ == "__main__":
     signal.signal(signal.SIGTERM, _graceful_shutdown)
