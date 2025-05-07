@@ -1,13 +1,19 @@
 """
 Image preprocessing module for enhancing scanned invoices before OCR.
-Optimized for performance and OCR accuracy with adaptive processing.
+Optimized for processing Indonesian HoReCa invoices with specific characteristics:
+- Colored paper (pink, violet, blue, white)
+- Dot-matrix printing and handwritten text
+- Mixed printed/handwritten content
+- Perspective distortion from phone camera
+- Matrix printer artifacts and creases
 """
 
 import io
 import logging
 import math
 import numpy as np
-from typing import Optional, Tuple, List
+import cv2
+from typing import Optional, Tuple, List, Dict, Any
 from PIL import Image, ImageEnhance, ImageFilter
 from pathlib import Path
 
@@ -20,6 +26,21 @@ except ImportError:
     logging.getLogger(__name__).warning("OpenCV (cv2) not available, using PIL fallback")
 
 logger = logging.getLogger(__name__)
+
+# Constants for Indonesian invoice processing
+INVOICE_TYPES = {
+    "MATRIX_PRINT": 1,  # Dot-matrix printer (thin, dotted characters)
+    "HANDWRITTEN": 2,   # Mostly handwritten invoice
+    "MIXED": 3          # Mixed printed headers with handwritten content
+}
+
+# Color backgrounds commonly found in Indonesian invoices
+COLORED_PAPERS = {
+    "WHITE": 1,
+    "PINK": 2, 
+    "VIOLET": 3,
+    "BLUE": 4
+}
 
 def prepare_without_preprocessing(path: str) -> bytes:
     """
@@ -130,10 +151,117 @@ def prepare_with_pil(path: str) -> bytes:
             logger.error(f"Error reading original image: {str(read_error)}")
             raise
 
+def detect_invoice_properties(img: np.ndarray) -> Dict[str, Any]:
+    """
+    Analyze invoice image to detect key properties like paper color,
+    presence of dot-matrix printing, dominant text type, etc.
+    
+    Args:
+        img: Input image in RGB format
+        
+    Returns:
+        Dictionary with detected properties
+    """
+    h, w = img.shape[:2]
+    props = {
+        "paper_color": COLORED_PAPERS["WHITE"],
+        "invoice_type": INVOICE_TYPES["MIXED"],
+        "is_perspective": False,
+        "skew_angle": 0.0,
+        "mean_brightness": 0,
+        "has_dot_matrix": False,
+        "has_handwriting": False
+    }
+    
+    # Convert to HSV for better color analysis
+    hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+    h_channel, s_channel, v_channel = cv2.split(hsv)
+    
+    # Get brightness stats
+    mean_brightness = np.mean(v_channel)
+    props["mean_brightness"] = mean_brightness
+    
+    # Detect paper color based on hue and saturation in top 20% of image
+    # This is where invoice headers are typically located
+    header_region = hsv[0:int(h*0.2), :, :]
+    h_header = header_region[:,:,0]
+    s_header = header_region[:,:,1]
+    
+    # Average hue and saturation values for header region
+    avg_hue = np.mean(h_header)
+    avg_sat = np.mean(s_header)
+    
+    # Detect paper color based on hue/saturation ranges
+    if avg_sat < 30:  # Low saturation indicates white/gray paper
+        props["paper_color"] = COLORED_PAPERS["WHITE"]
+    elif 140 <= avg_hue <= 170 and avg_sat > 30:  # Pink/light red range
+        props["paper_color"] = COLORED_PAPERS["PINK"]
+    elif 120 <= avg_hue <= 140 and avg_sat > 30:  # Purple/violet range
+        props["paper_color"] = COLORED_PAPERS["VIOLET"]
+    elif 90 <= avg_hue <= 120 and avg_sat > 30:  # Blue range
+        props["paper_color"] = COLORED_PAPERS["BLUE"]
+    
+    # Detect dot-matrix printing using edge detection and pattern analysis
+    # Convert to grayscale for edge detection
+    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    edges = cv2.Canny(gray, 100, 200)
+    
+    # Calculate stats on edges to detect dot-matrix patterns
+    # Dot-matrix has characteristic small, regular dots
+    _, contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    small_dots_count = 0
+    for contour in contours:
+        area = cv2.contourArea(contour)
+        if 2 < area < 10:  # Small dots typical of dot-matrix printing
+            small_dots_count += 1
+    
+    # If there are many small dots in a regular pattern, likely dot-matrix
+    props["has_dot_matrix"] = small_dots_count > (w * h) * 0.0005
+    
+    # Detect handwriting using stroke width variation
+    # Apply morphological operations to highlight handwritten strokes
+    kernel = np.ones((3, 3), np.uint8)
+    dilated = cv2.dilate(edges, kernel, iterations=1)
+    stroke_width = cv2.subtract(dilated, edges)
+    
+    # Calculate stroke width variance
+    # Handwritten text has higher stroke width variance than printed text
+    nonzero_stroke = stroke_width[stroke_width > 0]
+    if len(nonzero_stroke) > 0:
+        stroke_std = np.std(nonzero_stroke)
+        props["has_handwriting"] = stroke_std > 10.0
+    
+    # Determine predominant invoice type
+    if props["has_dot_matrix"] and not props["has_handwriting"]:
+        props["invoice_type"] = INVOICE_TYPES["MATRIX_PRINT"]
+    elif props["has_handwriting"] and not props["has_dot_matrix"]:
+        props["invoice_type"] = INVOICE_TYPES["HANDWRITTEN"]
+    else:
+        props["invoice_type"] = INVOICE_TYPES["MIXED"]
+    
+    # Check perspective distortion by analyzing horizontal and vertical lines
+    # Common in photos taken by phone
+    lines = cv2.HoughLinesP(edges, 1, np.pi/180, 100, minLineLength=w*0.3, maxLineGap=10)
+    if lines is not None and len(lines) > 0:
+        angles = []
+        for line in lines:
+            x1, y1, x2, y2 = line[0]
+            if abs(x2 - x1) > abs(y2 - y1):  # Horizontal line
+                angle = np.degrees(np.arctan2(y2 - y1, x2 - x1))
+                angles.append(angle)
+        
+        if angles:
+            angle_std = np.std(angles)
+            props["is_perspective"] = angle_std > 2.0
+            props["skew_angle"] = np.mean(angles)
+    
+    return props
+
 def prepare_with_opencv(path: str) -> bytes:
     """
-    OpenCV-based minimal image preprocessing for enhanced OCR results.
-    Optimized for speed and OCR performance.
+    OpenCV-based preprocessing optimized for Indonesian invoices.
+    Applies specific enhancements for colored paper, dot-matrix printing,
+    and mixed handwritten/printed content.
     
     Args:
         path: Path to the source image file
@@ -160,34 +288,48 @@ def prepare_with_opencv(path: str) -> bytes:
         orig_h, orig_w = img.shape[:2]
         img_size = f"{orig_w}x{orig_h}"
             
-        # 1. Resize if too large - increased max_size to 2400 for better quality
-        img = resize_if_needed(img, max_size=2400)
+        # 1. Resize if too large but preserve quality for OCR
+        img = resize_if_needed(img, max_size=2800)  # Increased to maintain quality
         
-        # Check if image is dark and likely needs brightness enhancement
-        mean_brightness = cv2.mean(img)[0]
+        # 2. Detect invoice properties to customize preprocessing
+        props = detect_invoice_properties(img)
         
-        # 2. Skip alignment for most images unless very skewed (10 degrees+)
-        # This significantly improves processing speed with minimal quality impact
-        if mean_brightness < 50:  # Only try to align dark images which may be harder to read
-            aligned_img = detect_and_align_document(img, skew_threshold=10.0)
+        # Log detected properties
+        logger.info(f"Detected invoice properties: " + 
+                    f"paper_color={list(COLORED_PAPERS.keys())[list(COLORED_PAPERS.values()).index(props['paper_color'])]} " +
+                    f"type={list(INVOICE_TYPES.keys())[list(INVOICE_TYPES.values()).index(props['invoice_type'])]} " +
+                    f"perspective={props['is_perspective']} " +
+                    f"brightness={props['mean_brightness']:.1f}")
+        
+        # 3. Apply perspective correction if needed (more sensitive threshold for invoices)
+        # These documents often have perforation marks that help with alignment
+        if props['is_perspective'] or abs(props['skew_angle']) > 5.0:
+            aligned_img = detect_and_align_document(img, skew_threshold=5.0)
             if aligned_img is not None:
                 img = aligned_img
+                logger.info(f"Applied perspective correction, angle={props['skew_angle']:.1f}°")
         
-        # 3. Apply optimized normalization - different paths for different image types
-        if mean_brightness < 70:  # Dark image
-            logger.info(f"Applying enhanced brightness for dark image (brightness: {mean_brightness:.1f})")
-            # For darker images, apply CLAHE to improve contrast without adding noise
-            enhanced_img = apply_enhanced_normalization(img)
-        else:
-            # For normal brightness images, apply minimal processing
-            enhanced_img = apply_mild_normalization(img)
-            
-        # 4. Save to WebP with high quality but enforce maximum file size
-        result_bytes = save_to_webp(enhanced_img, quality=92, max_size=800)
+        # 4. Apply specialized preprocessing based on invoice type
+        if props['invoice_type'] == INVOICE_TYPES["MATRIX_PRINT"]:
+            # Specialized processing for dot-matrix prints to connect broken characters
+            enhanced_img = process_dot_matrix(img, props)
+            logger.info("Applied dot-matrix optimization")
+        elif props['invoice_type'] == INVOICE_TYPES["HANDWRITTEN"]:
+            # Optimize for handwritten text (preserve stroke detail)
+            enhanced_img = process_handwritten(img, props)
+            logger.info("Applied handwriting optimization")
+        else:  # MIXED type
+            # Process for mixed content (headers printed, content handwritten)
+            enhanced_img = process_mixed_content(img, props)
+            logger.info("Applied mixed-content optimization")
+        
+        # 5. Save to WebP with higher quality for better OCR
+        # Since accuracy is more important than size
+        result_bytes = save_to_webp(enhanced_img, quality=95, max_size=1200)  # Higher quality, larger size limit
         
         # Log processing time for performance monitoring
         elapsed = time.time() - t0
-        logger.info(f"OpenCV preprocessing: {img_size} → {enhanced_img.shape[1]}x{enhanced_img.shape[0]} in {elapsed:.3f}s")
+        logger.info(f"Indonesian invoice preprocessing: {img_size} → {enhanced_img.shape[1]}x{enhanced_img.shape[0]} in {elapsed:.3f}s")
         
         return result_bytes
         
@@ -237,8 +379,8 @@ def resize_if_needed(img: np.ndarray, max_size: int = 2048) -> np.ndarray:
 
 def detect_and_align_document(img: np.ndarray, skew_threshold: float = 5.0) -> Optional[np.ndarray]:
     """
-    Detect document edges and align/warp to correct perspective,
-    but only if document is clearly skewed beyond the threshold.
+    Enhanced document edge detection and alignment optimized for Indonesian invoices.
+    Detects perforation marks from fan-fold pages and handles colored backgrounds.
     
     Args:
         img: Input image
@@ -248,87 +390,158 @@ def detect_and_align_document(img: np.ndarray, skew_threshold: float = 5.0) -> O
         Perspective-corrected image or None if detection fails or skew is below threshold
     """
     try:
-        # Convert to grayscale
-        gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+        # Convert to HSV for better edge detection on colored papers
+        if len(img.shape) == 3:
+            hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+            # Use value channel which works better for edge detection on colored paper
+            gray = hsv[:,:,2]
+        else:
+            gray = img.copy()
         
-        # Apply Gaussian blur to reduce noise
-        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        # Check for dot-matrix perforation marks in fan-fold invoices
+        h, w = gray.shape
+        has_perforation = False
         
-        # Apply Canny edge detection
-        edges = cv2.Canny(blurred, 75, 200)
+        # Look for perforation patterns at the edges
+        left_edge = gray[:, 0:20]
+        right_edge = gray[:, w-20:w]
         
-        # Find contours
-        contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # Calculate vertical variance of edge pixel values
+        # High variance with regular spacing indicates perforation
+        left_var = np.var(np.mean(left_edge, axis=1))
+        right_var = np.var(np.mean(right_edge, axis=1))
         
-        # If no contours found, return None
+        # High variance with regular pattern indicates perforation
+        has_perforation = left_var > 500 or right_var > 500
+        
+        # Apply more aggressive preprocessing for invoices with perforation
+        # as they usually have well-defined edges
+        if has_perforation:
+            # Use Canny with tighter thresholds for perforation marks
+            edges = cv2.Canny(gray, 50, 150)
+            logger.info("Fan-fold perforation marks detected, using optimized edge detection")
+        else:
+            # Apply Gaussian blur to reduce noise
+            blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+            # Use standard Canny edge detection
+            edges = cv2.Canny(blurred, 75, 200)
+        
+        # Dilate edges to ensure connectivity
+        kernel = np.ones((3, 3), np.uint8)
+        dilated_edges = cv2.dilate(edges, kernel, iterations=1)
+        
+        # Find contours - use external only for document boundary
+        contours, _ = cv2.findContours(dilated_edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # If no contours found, try a different approach with thresholding
         if not contours:
-            return None
-            
+            # Try adaptive thresholding instead
+            thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                                          cv2.THRESH_BINARY_INV, 11, 2)
+            contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            if not contours:
+                return None
+        
         # Find the largest contour by area
         max_contour = max(contours, key=cv2.contourArea)
         
-        # Check if contour is large enough (at least 30% of image area)
+        # Check if contour is large enough (relaxed to 25% for photos with fingers holding invoice)
         img_area = img.shape[0] * img.shape[1]
         contour_area = cv2.contourArea(max_contour)
-        if contour_area < 0.3 * img_area:
+        if contour_area < 0.25 * img_area:
             logger.info(f"Largest contour area ({contour_area}) too small compared to image area ({img_area})")
             return None
-            
-        # Approximate the contour to simplify it
-        peri = cv2.arcLength(max_contour, True)
-        approx = cv2.approxPolyDP(max_contour, 0.02 * peri, True)
         
-        # If approximated contour has 4 points, we assume it's a document
+        # Approximate the contour to find corners
+        peri = cv2.arcLength(max_contour, True)
+        # Lower epsilon for more points (Indonesian invoices often have rounded corners)
+        approx = cv2.approxPolyDP(max_contour, 0.01 * peri, True)
+        
+        # Handle different contour shapes
         if len(approx) == 4:
-            # Order points to get top-left, top-right, bottom-right, bottom-left
-            rect = order_points(approx.reshape(4, 2))
+            # Perfect quadrilateral - use directly
+            corners = approx.reshape(4, 2)
+        elif len(approx) > 4:
+            # Too many points - find the four extreme corners
+            # This handles rounded corners and irregular shapes better
             
-            # Check for skew angle
-            (tl, tr, br, bl) = rect
+            # Get bounding rectangle
+            rect = cv2.minAreaRect(approx)
+            box = cv2.boxPoints(rect)
+            corners = np.array(box, dtype="float32")
+        else:
+            # Not enough points for a quadrilateral
+            logger.info(f"Contour has {len(approx)} points, need at least 4 for alignment")
+            return None
+        
+        # Order points to get top-left, top-right, bottom-right, bottom-left
+        rect = order_points(corners)
+        
+        # Check for skew angle
+        (tl, tr, br, bl) = rect
+        
+        # Calculate angles of edges
+        def angle_between_points(p1, p2):
+            return np.degrees(np.arctan2(p2[1] - p1[1], p2[0] - p1[0]))
+        
+        # Get angles of horizontal and vertical edges
+        top_angle = angle_between_points(tl, tr)
+        bottom_angle = angle_between_points(bl, br)
+        left_angle = angle_between_points(tl, bl) - 90  # Should be close to 0 if vertical
+        right_angle = angle_between_points(tr, br) - 90  # Should be close to 0 if vertical
+        
+        # Compute skew as deviation from orthogonal
+        h_skew = max(abs(top_angle), abs(bottom_angle))
+        v_skew = max(abs(left_angle), abs(right_angle))
+        skew = max(h_skew, v_skew)
+        
+        # For perforation-detected invoices, use a lower threshold
+        effective_threshold = skew_threshold * 0.6 if has_perforation else skew_threshold
+        
+        # Only align if skew is significant
+        if skew < effective_threshold:
+            logger.info(f"Document skew ({skew:.2f}°) below threshold ({effective_threshold}°), skipping alignment")
+            return None
+        
+        # Get improved destination dimensions that maintain aspect ratio
+        # This avoids stretching that might distort text
+        width_a = np.sqrt(((br[0] - bl[0]) ** 2) + ((br[1] - bl[1]) ** 2))
+        width_b = np.sqrt(((tr[0] - tl[0]) ** 2) + ((tr[1] - tl[1]) ** 2))
+        max_width = max(int(width_a), int(width_b))
+        
+        height_a = np.sqrt(((tr[0] - br[0]) ** 2) + ((tr[1] - br[1]) ** 2))
+        height_b = np.sqrt(((tl[0] - bl[0]) ** 2) + ((tl[1] - bl[1]) ** 2))
+        max_height = max(int(height_a), int(height_b))
+        
+        # Ensure reasonable dimensions
+        if max_width < 10 or max_height < 10 or max_width > img.shape[1]*5 or max_height > img.shape[0]*5:
+            logger.info(f"Unreasonable dimensions calculated: {max_width}x{max_height}, skipping alignment")
+            return None
+        
+        # Destination points
+        dst = np.array([
+            [0, 0],
+            [max_width - 1, 0],
+            [max_width - 1, max_height - 1],
+            [0, max_height - 1]
+        ], dtype="float32")
+        
+        # Compute perspective transform matrix
+        M = cv2.getPerspectiveTransform(rect, dst)
+        
+        # Apply perspective transformation with border replication to avoid black edges
+        warped = cv2.warpPerspective(img, M, (max_width, max_height), borderMode=cv2.BORDER_REPLICATE)
+        
+        logger.info(f"Indonesian invoice aligned from {img.shape[:2]} to {warped.shape[:2]}, corrected skew: {skew:.2f}°")
+        
+        # Verify the alignment improved the image
+        # In rare cases, a failed alignment might result in all-black or distorted image
+        if np.mean(warped) < 10 or np.std(warped) < 5:
+            logger.warning("Alignment resulted in invalid image, returning original")
+            return None
             
-            # Calculate angles of edges
-            def angle_between_points(p1, p2):
-                return np.degrees(np.arctan2(p2[1] - p1[1], p2[0] - p1[0]))
-            
-            # Get angles of horizontal edges
-            top_angle = angle_between_points(tl, tr)
-            bottom_angle = angle_between_points(bl, br)
-            
-            # Compute skew as deviation from horizontal
-            skew = max(abs(top_angle), abs(bottom_angle))
-            
-            # Only align if skew is significant
-            if skew < skew_threshold:
-                logger.info(f"Document skew ({skew:.2f}°) below threshold ({skew_threshold}°), skipping alignment")
-                return None
-            
-            # Get destination dimensions
-            width_a = np.sqrt(((br[0] - bl[0]) ** 2) + ((br[1] - bl[1]) ** 2))
-            width_b = np.sqrt(((tr[0] - tl[0]) ** 2) + ((tr[1] - tl[1]) ** 2))
-            max_width = max(int(width_a), int(width_b))
-            
-            height_a = np.sqrt(((tr[0] - br[0]) ** 2) + ((tr[1] - br[1]) ** 2))
-            height_b = np.sqrt(((tl[0] - bl[0]) ** 2) + ((tl[1] - bl[1]) ** 2))
-            max_height = max(int(height_a), int(height_b))
-            
-            # Destination points
-            dst = np.array([
-                [0, 0],
-                [max_width - 1, 0],
-                [max_width - 1, max_height - 1],
-                [0, max_height - 1]
-            ], dtype="float32")
-            
-            # Compute perspective transform matrix
-            M = cv2.getPerspectiveTransform(rect, dst)
-            
-            # Apply perspective transformation
-            warped = cv2.warpPerspective(img, M, (max_width, max_height))
-            
-            logger.info(f"Document aligned from {img.shape[:2]} to {warped.shape[:2]}, corrected skew: {skew:.2f}°")
-            return warped
-            
-        return None
+        return warped
+    
     except Exception as e:
         logger.error(f"Error in document alignment: {str(e)}")
         return None
@@ -362,79 +575,174 @@ def order_points(pts: np.ndarray) -> np.ndarray:
     return rect
 
 
-def apply_mild_normalization(img: np.ndarray) -> np.ndarray:
+def process_dot_matrix(img: np.ndarray, props: Dict[str, Any]) -> np.ndarray:
     """
-    Apply gentle contrast normalization without excessive processing.
-    Optimized version for good quality images.
+    Specialized processing for dot-matrix printed invoices.
+    Focuses on connecting broken dots in characters and handling
+    colored backgrounds typical in Indonesian invoices.
     
     Args:
-        img: Input image
+        img: Input RGB image
+        props: Properties dictionary from detect_invoice_properties
         
     Returns:
-        Enhanced image
+        Enhanced grayscale image optimized for OCR
     """
-    # Convert to grayscale if needed
+    # Convert to grayscale
     if len(img.shape) == 3:
-        gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+        # Use optimal channel based on paper color
+        if props["paper_color"] == COLORED_PAPERS["PINK"]:
+            # For pink paper, blue channel works best
+            gray = img[:,:,2]
+        elif props["paper_color"] == COLORED_PAPERS["BLUE"]:
+            # For blue paper, red channel works best
+            gray = img[:,:,0]
+        elif props["paper_color"] == COLORED_PAPERS["VIOLET"]:
+            # For violet paper, green channel often works best
+            gray = img[:,:,1]
+        else:
+            # Default grayscale conversion for white paper
+            gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
     else:
         gray = img.copy()
     
-    # Apply very mild denoising only for noisy images
-    # Calculate noise level
-    noise_level = np.std(gray)
-    if noise_level > 35:  # Only apply denoising if image is noisy
-        # Use faster non-local means denoising with smaller search window
-        denoised = cv2.fastNlMeansDenoising(gray, None, h=7, searchWindowSize=15)
-        logger.info(f"Applied mild denoising (noise level: {noise_level:.1f})")
-        return denoised
+    # 1. Apply adaptive thresholding to handle varying backgrounds
+    # This works better for dot-matrix prints on colored paper
+    window_size = 25  # Larger window for dot-matrix spacing
+    const = 10  # Lower constant for better dot connection
+    binary = cv2.adaptiveThreshold(
+        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+        cv2.THRESH_BINARY_INV, window_size, const
+    )
     
-    # For clean images, just return grayscale
-    return gray
+    # 2. Connect dots using morphological operations
+    # Key for improving dot-matrix character recognition
+    kernel = np.ones((2, 2), np.uint8)
+    connected = cv2.dilate(binary, kernel, iterations=1)
+    
+    # 3. Clean up noise
+    kernel_clean = np.ones((2, 2), np.uint8)
+    cleaned = cv2.morphologyEx(connected, cv2.MORPH_OPEN, kernel_clean)
+    
+    # 4. Fill small holes in letters (especially important for 'e', 'a', etc.)
+    kernel_close = np.ones((3, 3), np.uint8)
+    closed = cv2.morphologyEx(cleaned, cv2.MORPH_CLOSE, kernel_close)
+    
+    # 5. Invert back to black text on white background
+    result = cv2.bitwise_not(closed)
+    
+    return result
 
-
-def apply_enhanced_normalization(img: np.ndarray) -> np.ndarray:
+def process_handwritten(img: np.ndarray, props: Dict[str, Any]) -> np.ndarray:
     """
-    Apply enhanced contrast normalization for dark or low-contrast images.
-    Uses CLAHE (Contrast Limited Adaptive Histogram Equalization) for better results.
+    Specialized processing for handwritten invoices.
+    Focuses on preserving stroke details while enhancing contrast
+    and handling colored backgrounds.
     
     Args:
-        img: Input image
+        img: Input RGB image
+        props: Properties dictionary from detect_invoice_properties
         
     Returns:
-        Enhanced image with improved contrast
+        Enhanced grayscale image optimized for OCR
     """
-    # Convert to grayscale if needed
+    # Convert to grayscale with optimal approach for handwriting
     if len(img.shape) == 3:
-        gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+        # Convert to HSV to better handle colored backgrounds
+        hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+        # Use value channel which separates handwriting best
+        gray = hsv[:,:,2]
     else:
         gray = img.copy()
     
-    # Check mean brightness and contrast
-    mean_brightness = cv2.mean(gray)[0]
-    contrast = np.std(gray)
-    
-    logger.info(f"Image stats: brightness={mean_brightness:.1f}, contrast={contrast:.1f}")
-    
-    # Create a CLAHE object with controlled clip limit
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    
-    # Apply CLAHE for contrast enhancement
+    # 1. Apply CLAHE for better contrast
+    # Handwriting often has varying pressure points
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
     enhanced = clahe.apply(gray)
     
-    # Apply gentle bilateral filter to preserve edges while reducing noise
-    # This is more OCR-friendly than regular Gaussian blur
-    if contrast < 40:  # Only apply if contrast is low
-        filtered = cv2.bilateralFilter(enhanced, 9, 75, 75)
-        logger.info("Applied bilateral filtering for low contrast image")
-        return filtered
+    # 2. Use bilateral filter to preserve edges (handwriting strokes)
+    # while reducing noise - critical for handwritten text
+    filtered = cv2.bilateralFilter(enhanced, 9, 20, 20)
     
-    return enhanced
+    # 3. Apply Otsu thresholding to separate handwriting from background
+    # Works well after CLAHE enhancement
+    _, binary = cv2.threshold(filtered, 0, 255, cv2.THRESH_BINARY_INV+cv2.THRESH_OTSU)
+    
+    # 4. Remove small noise dots (dust, etc.)
+    kernel = np.ones((2, 2), np.uint8)
+    opened = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)
+    
+    # 5. Ensure stroke continuity for OCR
+    kernel_close = np.ones((2, 2), np.uint8)
+    processed = cv2.morphologyEx(opened, cv2.MORPH_CLOSE, kernel_close)
+    
+    # 6. Invert back to black text on white background
+    result = cv2.bitwise_not(processed)
+    
+    return result
 
-
-def save_to_webp(img: np.ndarray, quality: int = 95, max_size: int = 500) -> bytes:
+def process_mixed_content(img: np.ndarray, props: Dict[str, Any]) -> np.ndarray:
     """
-    Convert OpenCV image to WebP format with high quality compression.
-    Optimized for OCR performance with adaptive quality settings.
+    Specialized processing for mixed content invoices (printed headers with handwritten data).
+    Balances techniques for both printed and handwritten text recognition.
+    
+    Args:
+        img: Input RGB image
+        props: Properties dictionary from detect_invoice_properties
+        
+    Returns:
+        Enhanced grayscale image optimized for OCR
+    """
+    # For mixed content, process in HSV color space
+    if len(img.shape) == 3:
+        hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+        h, s, v = cv2.split(hsv)
+        
+        # Paper color compensation in saturation channel
+        if props["paper_color"] != COLORED_PAPERS["WHITE"]:
+            # Reduce saturation to minimize colored background impact
+            s = cv2.subtract(s, np.full(s.shape, 40, dtype=np.uint8))
+        
+        # Use value channel for processing (best for mixed content)
+        gray = v
+    else:
+        gray = img.copy()
+    
+    # 1. Apply adaptive binarization with parameters tuned for mixed content
+    # Larger block size handles both printed headers and handwritten content
+    binary = cv2.adaptiveThreshold(
+        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+        cv2.THRESH_BINARY, 15, 12
+    )
+    
+    # 2. If dot-matrix elements detected, enhance them
+    if props["has_dot_matrix"]:
+        # Kernel size tuned for connecting dot-matrix while preserving handwriting
+        kernel = np.ones((2, 1), np.uint8)  # Horizontal connection for dot-matrix
+        connected = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
+    else:
+        connected = binary
+    
+    # 3. Apply edge-preserving denoising
+    # Balances the needs of both printed and handwritten text
+    denoised = cv2.fastNlMeansDenoising(connected, None, h=5, searchWindowSize=13)
+    
+    # 4. Enhance contrast in a way that works for both text types
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    enhanced = clahe.apply(denoised)
+    
+    # Final sharpening for clearer character edges (helps OCR)
+    kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+    sharpened = cv2.filter2D(enhanced, -1, kernel)
+    
+    return sharpened
+
+
+def save_to_webp(img: np.ndarray, quality: int = 95, max_size: int = 800) -> bytes:
+    """
+    Convert processed image to WebP format with high quality compression.
+    Optimized specifically for Indonesian invoice OCR where quality matters
+    more than file size.
     
     Args:
         img: Input image
@@ -453,61 +761,111 @@ def save_to_webp(img: np.ndarray, quality: int = 95, max_size: int = 500) -> byt
     # Convert to PIL Image
     pil_img = Image.fromarray(rgb_img)
     
-    # Calculate image complexity - helps determine if we can compress more
-    # Simple heuristic: standard deviation of pixel values as percentage of max range
-    complexity = np.std(img) / 255.0 * 100
+    # For Indonesian invoices, analyze image characteristics to determine optimal
+    # encoding parameters - especially important for dot-matrix prints and handwriting
     
-    # Adjust initial quality based on image complexity
-    # More complex images (high detail) need higher quality settings
-    adjusted_quality = quality
-    if complexity < 10:  # Very simple/flat image
-        adjusted_quality = max(85, quality - 10)
-        logger.info(f"Low complexity image ({complexity:.1f}%), reducing initial quality to {adjusted_quality}")
-    elif complexity > 25:  # Very detailed image
-        adjusted_quality = min(98, quality + 3)
-        logger.info(f"High complexity image ({complexity:.1f}%), increasing initial quality to {adjusted_quality}")
-    
-    # Save to bytes with WebP format
-    buffer = io.BytesIO()
-    pil_img.save(buffer, format="WebP", quality=adjusted_quality)
-    
-    # Get bytes
-    img_bytes = buffer.getvalue()
-    
-    # Check size and reduce quality if needed
-    size_kb = len(img_bytes) / 1024
-    current_quality = adjusted_quality
-    
-    # Use more aggressive compression strategies for very large images
-    min_quality = 78  # Don't go below this quality
-    
-    # Reduce quality until file size is below max_size
-    while size_kb > max_size and current_quality > min_quality:
-        # Decrease quality more aggressively for larger sizes
-        step = 5 if size_kb < 2 * max_size else 8
-        current_quality -= step
-        current_quality = max(current_quality, min_quality)  # Ensure we don't go below minimum
+    # Calculate text density - helps determine optimal quality settings
+    # Use edge detection to find text ratio
+    if len(img.shape) == 2:
+        gray = img.copy()
+    else:
+        gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
         
-        buffer = io.BytesIO()
-        pil_img.save(buffer, format="WebP", quality=current_quality)
-        img_bytes = buffer.getvalue()
-        size_kb = len(img_bytes) / 1024
-        logger.info(f"Reduced WebP quality to {current_quality}, size: {size_kb:.1f} KB")
+    # Calculate edge information (text/line density)
+    edges = cv2.Canny(gray, 100, 200)
+    edge_density = np.count_nonzero(edges) / (gray.shape[0] * gray.shape[1])
     
-    # If we still exceed max size at minimum quality, need to resize
-    if size_kb > max_size and current_quality <= min_quality:
-        # Calculate new dimensions to reach target size
-        target_ratio = math.sqrt(max_size / size_kb) * 0.9  # 10% buffer
+    # Determine optimal quality based on document characteristics
+    # Indonesian invoices with dense text or dot-matrix printing need higher quality
+    optimal_quality = quality
+    
+    if edge_density > 0.1:  # High text density (likely dense tabular data)
+        optimal_quality = min(98, quality + 3)
+        logger.info(f"High text density ({edge_density:.3f}), using quality {optimal_quality}")
+    elif edge_density < 0.03:  # Low text density (likely simple invoice)
+        optimal_quality = max(85, quality - 5)
+        logger.info(f"Low text density ({edge_density:.3f}), using quality {optimal_quality}")
+    
+    # Check for dot-matrix patterns which require higher quality
+    has_dot_matrix = False
+    
+    # Simple dot pattern detection
+    kernel = np.ones((3, 3), np.uint8)
+    dilated = cv2.dilate(edges, kernel, iterations=1)
+    dots = cv2.subtract(dilated, edges)
+    dot_density = np.count_nonzero(dots) / (gray.shape[0] * gray.shape[1])
+    
+    if dot_density > 0.02:
+        has_dot_matrix = True
+        optimal_quality = min(98, optimal_quality + 5)  # Boost quality for dot-matrix
+        logger.info(f"Dot-matrix pattern detected (density: {dot_density:.3f}), boosting quality")
+    
+    # For Indonesian invoices, we prioritize OCR accuracy over file size
+    # Use lossless compression for smaller files when possible
+    try_lossless = (gray.shape[0] * gray.shape[1] < 1000000) and has_dot_matrix
+    
+    if try_lossless:
+        # Try lossless first for critical documents
+        buffer = io.BytesIO()
+        pil_img.save(buffer, format="WebP", lossless=True)
+        
+        # Check if lossless size is acceptable
+        lossless_size = len(buffer.getvalue()) / 1024
+        if lossless_size <= max_size * 1.2:  # Allow slightly larger files for lossless
+            logger.info(f"Using lossless WebP ({lossless_size:.1f} KB) for better OCR accuracy")
+            return buffer.getvalue()
+    
+    # Save with optimal quality (lossy)
+    buffer = io.BytesIO()
+    pil_img.save(buffer, format="WebP", quality=optimal_quality)
+    
+    # Get bytes and check size
+    img_bytes = buffer.getvalue()
+    size_kb = len(img_bytes) / 1024
+    current_quality = optimal_quality
+    
+    # For Indonesian invoices, keep higher minimum quality
+    min_quality = 85  # Higher minimum for better OCR results
+    
+    # Only reduce quality if absolutely necessary and in small steps
+    # to maintain OCR accuracy
+    if size_kb > max_size and current_quality > min_quality:
+        logger.info(f"Initial size ({size_kb:.1f} KB) exceeds limit, reducing quality carefully")
+        
+        # Reduce quality gently until file size is below max_size
+        while size_kb > max_size and current_quality > min_quality:
+            # Small quality steps for better control
+            current_quality -= 3
+            current_quality = max(current_quality, min_quality)
+            
+            buffer = io.BytesIO()
+            pil_img.save(buffer, format="WebP", quality=current_quality)
+            img_bytes = buffer.getvalue()
+            size_kb = len(img_bytes) / 1024
+            logger.info(f"Reduced quality to {current_quality}, new size: {size_kb:.1f} KB")
+    
+    # If we still exceed max size at minimum quality, we need to resize
+    # but do so very carefully to preserve text readability
+    if size_kb > max_size * 1.5 and current_quality <= min_quality:
+        # For OCR-critical documents, increase max_size rather than resize if possible
+        if has_dot_matrix or edge_density > 0.08:
+            logger.info(f"Allowing larger size ({size_kb:.1f} KB) for OCR-critical document")
+            return img_bytes
+            
+        # If we must resize, do so with high-quality downsampling
+        target_ratio = math.sqrt(max_size / size_kb) * 0.95
         new_width = int(pil_img.width * target_ratio)
         new_height = int(pil_img.height * target_ratio)
         
-        # Only resize if the reduction is significant (>10%)
-        if target_ratio < 0.9:
+        # Only resize if the reduction isn't too extreme
+        if target_ratio > 0.7:
+            # Use high quality LANCZOS resampling
             resized_img = pil_img.resize((new_width, new_height), Image.LANCZOS)
             buffer = io.BytesIO()
-            resized_img.save(buffer, format="WebP", quality=min_quality + 5)  # Slightly higher quality for resized
+            # Use higher quality for resized images
+            resized_img.save(buffer, format="WebP", quality=min(current_quality + 8, 98))
             img_bytes = buffer.getvalue()
             size_kb = len(img_bytes) / 1024
-            logger.info(f"Resized to {new_width}x{new_height} to reach target size, final: {size_kb:.1f} KB")
+            logger.info(f"Resized to {new_width}x{new_height}, final size: {size_kb:.1f} KB")
     
     return img_bytes

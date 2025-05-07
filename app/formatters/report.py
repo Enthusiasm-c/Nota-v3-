@@ -41,7 +41,7 @@ def build_table(rows):
     """
     from html import escape as html_escape
 
-    status_map = {"ok": "✓", "unit_mismatch": "❗", "unknown": "❗", "ignored": "❗", "error": "❗"}
+    status_map = {"ok": "✓", "unit_mismatch": "❗", "unknown": "❗", "ignored": "❗", "error": "❗", "manual": "✓"}
     def pad(text, width):
         s = str(text)
         return s[:width].ljust(width)
@@ -89,7 +89,8 @@ def build_table(rows):
             except Exception:
                 qty_str = str(qty)
         # Столбец с флажком для нераспознанных позиций
-        flag = "❗" if status != "ok" else ""
+        # Для ручного редактирования (manual) флажок не показываем
+        flag = "" if status in ["ok", "manual"] else "❗"
         row = f"{str(idx):<2} {pad(name,14)}{pad(qty_str,5)}{pad(unit,5)}{pad(price_str,6)}{pad(flag,2)}"
         table_rows.append(row)
 
@@ -105,6 +106,11 @@ def build_summary(match_results):
     errors = []
     for idx, item in enumerate(match_results, 1):
         status = item.get("status", "")
+        
+        # Пропускаем позиции с ручным редактированием - они не считаются ошибочными
+        if status == "manual":
+            continue
+            
         name = item.get("name", "")
         problems = []
         if status == "unit_mismatch":
@@ -126,8 +132,13 @@ def build_summary(match_results):
             if not error_line.startswith("❗"):
                 error_line = f"❗ Line {idx} <b>{name}</b>: {', '.join(problems)}"
             errors.append(error_line)
-    correct = sum(1 for item in match_results if item.get("status", "") == "ok")
-    issues = sum(1 for item in match_results if item.get("status", "") != "ok")
+    
+    # Считаем позиции со статусом "ok" или "manual" как правильные
+    correct = sum(1 for item in match_results if item.get("status", "") in ["ok", "manual"])
+    
+    # Считаем позиции с проблемами (исключая ручное редактирование)
+    issues = sum(1 for item in match_results if item.get("status", "") not in ["ok", "manual"])
+    
     if not errors:
         return f"{t('report.no_errors')}\nCorrect: {correct}\nIssues: {issues}"
     return (
@@ -137,15 +148,16 @@ def build_summary(match_results):
 
 def count_issues(match_results):
     """
-    Подсчитывает количество проблемных позиций в результатах матчинга.
+    Подсчитывает количество проблемных позиций в результатах матчинга,
+    исключая позиции с ручным редактированием (статус "manual").
     
     Args:
         match_results: Список результатов матчинга позиций
         
     Returns:
-        int: Количество позиций со статусом отличным от "ok"
+        int: Количество проблемных позиций
     """
-    return sum(1 for item in match_results if item.get("status", "") != "ok")
+    return sum(1 for item in match_results if item.get("status", "") not in ["ok", "manual"])
 
 def build_report(parsed_data, match_results, escape_html=True, page=1, page_size=40):
     """
@@ -195,7 +207,7 @@ def build_report(parsed_data, match_results, escape_html=True, page=1, page_size
     has_unparsed = False
     for item in match_results:
         status = item.get("status", "")
-        if status == "ok":
+        if status in ["ok", "manual"]:  # Считаем ручное редактирование как ОК
             ok_count += 1
         elif status in ("unit_mismatch", "unknown", "ignored", "error"):
             issues_count += 1

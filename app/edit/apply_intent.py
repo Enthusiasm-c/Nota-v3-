@@ -47,7 +47,7 @@ def set_price(invoice: Dict[str, Any], line_index: int, value: str) -> Dict[str,
     
     return result
 
-def set_name(invoice: Dict[str, Any], line_index: int, value: str) -> Dict[str, Any]:
+def set_name(invoice: Dict[str, Any], line_index: int, value: str, manual_edit: bool = False) -> Dict[str, Any]:
     """
     Устанавливает название для указанной позиции.
     
@@ -55,6 +55,7 @@ def set_name(invoice: Dict[str, Any], line_index: int, value: str) -> Dict[str, 
         invoice: Словарь с данными инвойса
         line_index: Индекс позиции (начиная с 0)
         value: Новое название
+        manual_edit: Флаг для обозначения ручного редактирования пользователем
     
     Returns:
         Dict: Обновленный инвойс
@@ -63,8 +64,15 @@ def set_name(invoice: Dict[str, Any], line_index: int, value: str) -> Dict[str, 
     
     if 0 <= line_index < len(result.get("positions", [])):
         result["positions"][line_index]["name"] = value
-        # Сбрасываем статус для повторного матчинга
-        result["positions"][line_index]["status"] = "unknown"
+        
+        if manual_edit:
+            # Если это ручное редактирование пользователем, устанавливаем статус "manual"
+            # что означает "принято пользователем, не считать ошибкой"
+            result["positions"][line_index]["status"] = "manual"
+            logger.info(f"Line {line_index+1} manually edited by user: name = '{value}'")
+        else:
+            # В противном случае сбрасываем статус для повторного матчинга
+            result["positions"][line_index]["status"] = "unknown"
     else:
         logger.warning(f"Попытка установить название для несуществующей строки: {line_index + 1}")
     
@@ -175,12 +183,24 @@ def apply_intent(invoice: Union[dict, ParsedData], intent: dict) -> dict:
         line = intent.get("line", 0) - 1
         field = intent.get("field")
         value = intent.get("value")
+        
         if (
             isinstance(invoice.get("positions"), list)
             and 0 <= line < len(invoice["positions"])
-            and field in invoice["positions"][line]
         ):
-            invoice["positions"][line][field] = value
+            # Обрабатываем поле name специальным образом для ручного редактирования
+            if field == "name":
+                return set_name(invoice, line, value, manual_edit=True)
+            
+            # Для других полей просто обновляем значение
+            if field in invoice["positions"][line]:
+                invoice["positions"][line][field] = value
+                
+                # Для ручного редактирования устанавливаем статус "manual"
+                # чтобы пользовательские правки не считались ошибками
+                invoice["positions"][line]["status"] = "manual"
+                logger.info(f"Line {line+1} field '{field}' manually edited by user: value = '{value}'")
+                
         return invoice
 
     elif action == "edit_date":

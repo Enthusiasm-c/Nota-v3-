@@ -35,7 +35,7 @@ async def handle_pick_name(call: CallbackQuery, state: FSMContext):
         _, row_idx, product_id = call.data.split(":")
         row_idx = int(row_idx)
     except (ValueError, IndexError):
-        await call.answer(t("error.invalid_callback_data"))
+        await call.answer(t("error.invalid_callback_data", {}, lang=lang))
         return
     
     # Get invoice from state
@@ -111,7 +111,7 @@ async def handle_pick_name(call: CallbackQuery, state: FSMContext):
             # Add success message
             success_message = t("name_changed", {"name": product_name}, lang=lang)
             if not has_errors:
-                success_message += t("edit_success_confirm", lang=lang)
+                success_message += t("edit_success_confirm", {}, lang=lang)
                 
             await call.message.answer(success_message, parse_mode="HTML")
         else:
@@ -150,11 +150,31 @@ async def show_fuzzy_suggestions(message: Message, state: FSMContext, name: str,
     Returns:
         True if suggestions were shown, False otherwise
     """
-    products = load_products()
-    matches = fuzzy_find(name, products, thresh=0.75)
+    # Get the edit context from state data
+    data = await state.get_data()
+    edit_context = data.get("edit_context", {})
     
+    # Check if this was called from a line-specific edit command
+    is_line_specific_edit = edit_context.get("line_specific", False)
+    edited_line = edit_context.get("edited_line", None)
+    
+    # If this is a line-specific edit but for a different line, skip suggestions
+    if is_line_specific_edit and edited_line is not None and edited_line != row_idx:
+        logger.debug(f"Skipping suggestions for row {row_idx} because line-specific edit is for line {edited_line}")
+        return False
+    
+    # For short inputs (length < 4), apply higher similarity threshold
+    thresh = 0.85 if len(name) < 4 else 0.75
+    
+    products = load_products()
+    
+    # Try to find fuzzy matches
+    matches = fuzzy_find(name, products, thresh=thresh)
+    
+    # If no matches found, accept the user input as-is without showing error message
     if not matches:
-        await message.answer(t("suggestion.no_similar_items", lang=lang))
+        logger.info(f"No fuzzy matches found for '{name}', accepting user input as-is")
+        # Don't show error message here, just accept the name as manual input
         return False
     
     # Limit to top 2 matches
