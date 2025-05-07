@@ -202,23 +202,43 @@ def call_openai_ocr(image_bytes: bytes) -> ParsedData:
 
     # Set longer timeout and increase max_tokens
     logging.info(f"[OCR] Using Vision model: gpt-4o")
-    rsp = client.chat.completions.create(
-        model="gpt-4o",
-        temperature=0,
-        max_tokens=1200,  # Increased max tokens
-        timeout=45,  # Increased timeout for larger invoices
-        messages=[
-            {"role": "system", "content": prompt_prefix},
-            {
-                "role": "user",
-                "content": [{"type": "image_url", "image_url": {"url": image_url}}],
-            },
-        ],
-        tools=[tool_schema],
-        tool_choice={"type": "function", "function": {"name": "parse_invoice"}},
-    )
-    message = rsp.choices[0].message
-    data = _sanitize_response(message)
+    
+    # Track OCR request in metrics
+    from app.utils.monitor import increment_counter, ocr_monitor
+    
+    try:
+        rsp = client.chat.completions.create(
+            model="gpt-4o",
+            temperature=0,
+            max_tokens=1200,  # Increased max tokens
+            timeout=45,  # Increased timeout for larger invoices
+            messages=[
+                {"role": "system", "content": prompt_prefix},
+                {
+                    "role": "user",
+                    "content": [{"type": "image_url", "image_url": {"url": image_url}}],
+                },
+            ],
+            tools=[tool_schema],
+            tool_choice={"type": "function", "function": {"name": "parse_invoice"}},
+        )
+        
+        # Count successful OCR request
+        increment_counter("nota_ocr_requests_total", {"status": "ok"})
+        
+        # Extract token usage information if available
+        total_tokens = None
+        usage = getattr(rsp, "usage", None)
+        if usage:
+            total_tokens = getattr(usage, "total_tokens", None)
+        
+        message = rsp.choices[0].message
+        data = _sanitize_response(message)
+    except Exception as e:
+        # Count failed OCR request
+        increment_counter("nota_ocr_requests_total", {"status": "error"})
+        logging.error(f"OCR API error: {str(e)}")
+        raise RuntimeError(f"OCR failed: {str(e)}") from e
 
     # Process numeric data
     for p in data.get("positions", []):
@@ -247,12 +267,24 @@ def call_openai_ocr(image_bytes: bytes) -> ParsedData:
     try:
         parsed_data = ParsedData.model_validate(data)
         elapsed = time.time() - t0
+        elapsed_ms = int(elapsed * 1000)
+        
+        # Record OCR metrics for monitoring
+        ocr_monitor.record(elapsed_ms, total_tokens)
+        
+        # Log detailed performance metrics
+        token_info = f" with {total_tokens} tokens" if total_tokens else ""
         logging.info(
             (
-                f"OCR successful after {elapsed:.1f}s with "
+                f"OCR successful after {elapsed:.1f}s{token_info} with "
                 f"{len(parsed_data.positions)} positions"
             )
         )
+        
+        # Emit warning if OCR latency is high
+        if elapsed > 6.0:  # 6 seconds threshold
+            logging.warning(f"High OCR latency detected: {elapsed:.1f}s > 6.0s threshold")
+        
         return parsed_data
     except Exception as validation_err:
         # Detailed logging of validation errors

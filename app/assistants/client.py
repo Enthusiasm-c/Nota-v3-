@@ -270,6 +270,63 @@ def run_async(func):
         return asyncio.run(func(*args, **kwargs))
     return wrapper
 
+async def retry_openai_call(func, *args, max_retries=3, initial_backoff=1.0, **kwargs):
+    """
+    Helper function to retry OpenAI API calls with exponential backoff.
+    
+    Args:
+        func: The OpenAI API function to call
+        args: Positional arguments for the function
+        max_retries: Maximum number of retries
+        initial_backoff: Initial backoff time in seconds
+        kwargs: Keyword arguments for the function
+        
+    Returns:
+        The result of the API call
+        
+    Raises:
+        Exception: If all retries fail
+    """
+    retries = 0
+    last_error = None
+    
+    while retries <= max_retries:
+        try:
+            # Attempt to call the function
+            return await asyncio.to_thread(func, *args, **kwargs)
+            
+        except (openai.RateLimitError, openai.APIError) as e:
+            # These are the errors we want to retry with backoff
+            last_error = e
+            retries += 1
+            if retries <= max_retries:
+                # Exponential backoff
+                backoff = initial_backoff * (2 ** (retries - 1))
+                # Add jitter to avoid thundering herd problem
+                jitter = 0.1 * backoff * (2 * asyncio.get_event_loop().time() % 1)
+                total_backoff = backoff + jitter
+                
+                logger.warning(
+                    f"OpenAI API error: {type(e).__name__}. "
+                    f"Retrying in {total_backoff:.2f}s ({retries}/{max_retries})"
+                )
+                await asyncio.sleep(total_backoff)
+            else:
+                # We've exhausted our retries
+                logger.error(f"OpenAI API error after {max_retries} retries: {e}")
+                raise
+                
+        except Exception as e:
+            # For other errors, don't retry
+            logger.error(f"Non-retryable OpenAI API error: {type(e).__name__}: {e}")
+            raise
+    
+    # Should not reach here, but just in case
+    if last_error:
+        raise last_error
+    raise RuntimeError("Unexpected error in retry logic")
+
+
 @trace_openai
 async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str, Any]:
     """
@@ -285,6 +342,9 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
     """
     start_time = time.time()
     latency = None
+    thread_id = None
+    run_id = None
+    
     try:
         # Кешируем thread_id по user_input (на 5 минут)
         thread_key = f"openai:thread:{hash(user_input)}"
@@ -305,23 +365,43 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
             cached_assistant_id = ASSISTANT_ID
             logger.info(f"[run_thread_safe_async] Using assistant ID: {cached_assistant_id}")
 
-        # Добавляем сообщение пользователя
+        # Добавляем сообщение пользователя с повторными попытками при ошибках API
         logger.info(f"[run_thread_safe_async] Adding user message: '{user_input}'")
-        # Используем asyncio.to_thread для выполнения синхронных операций в отдельном потоке
-        message = await asyncio.to_thread(
-            client.beta.threads.messages.create,
-            thread_id=thread_id,
-            role="user",
-            content=user_input
-        )
+        try:
+            message = await retry_openai_call(
+                client.beta.threads.messages.create,
+                thread_id=thread_id,
+                role="user",
+                content=user_input,
+                max_retries=2,
+                initial_backoff=1.0
+            )
+        except Exception as e:
+            logger.error(f"[run_thread_safe_async] Failed to add user message after retries: {e}")
+            return {
+                "action": "unknown", 
+                "error": f"message_create_failed: {type(e).__name__}",
+                "user_message": "Не удалось отправить сообщение. Пожалуйста, попробуйте позже."
+            }
 
-        # Запускаем ассистента (используем кэшированный id)
+        # Запускаем ассистента с повторными попытками
         logger.info(f"[run_thread_safe_async] Creating run with assistant ID: {cached_assistant_id}")
-        run = await asyncio.to_thread(
-            client.beta.threads.runs.create,
-            thread_id=thread_id,
-            assistant_id=cached_assistant_id
-        )
+        try:
+            run = await retry_openai_call(
+                client.beta.threads.runs.create,
+                thread_id=thread_id,
+                assistant_id=cached_assistant_id,
+                max_retries=2,
+                initial_backoff=1.0
+            )
+            run_id = run.id
+        except Exception as e:
+            logger.error(f"[run_thread_safe_async] Failed to create run after retries: {e}")
+            return {
+                "action": "unknown", 
+                "error": f"run_create_failed: {type(e).__name__}",
+                "user_message": "Не удалось создать сессию ассистента. Пожалуйста, попробуйте позже."
+            }
         
         # Измеряем и логируем латенцию для создания запроса
         latency = time.time() - start_time
@@ -333,20 +413,60 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
         else:
             logger.info(f"[LATENCY] OpenAI response time: {latency:.2f} sec", extra={"latency": latency})
         
-        # Ожидаем завершения с таймаутом
+        # Ожидаем завершения с таймаутом и обработкой ошибок
         logger.info(f"[run_thread_safe_async] Waiting for run completion, run ID: {run.id}")
+        poll_interval = 1.0  # Start with 1 second poll interval
+        poll_count = 0
+        
         while run.status in ["queued", "in_progress"]:
             if time.time() - start_time > timeout:
                 logger.error(f"[run_thread_safe_async] Timeout waiting for Assistant API response after {timeout}s")
+                
+                # Try to cancel the run before returning
+                try:
+                    await retry_openai_call(
+                        client.beta.threads.runs.cancel,
+                        thread_id=thread_id,
+                        run_id=run.id,
+                        max_retries=1
+                    )
+                    logger.info(f"[run_thread_safe_async] Successfully cancelled run {run.id} after timeout")
+                except Exception as cancel_err:
+                    logger.warning(f"[run_thread_safe_async] Failed to cancel run after timeout: {cancel_err}")
+                
                 return {"action": "unknown", "error": "timeout", "user_message": "OpenAI response timed out. Please try again."}
             
-            # Используем асинхронную задержку вместо блокирования потока
-            await asyncio.sleep(1)
-            run = await asyncio.to_thread(
-                client.beta.threads.runs.retrieve,
-                thread_id=thread_id,
-                run_id=run.id
-            )
+            # Use dynamic polling with exponential backoff
+            poll_count += 1
+            if poll_count > 5:  # After 5 polls, increase interval to reduce API load
+                poll_interval = min(5.0, poll_interval * 1.5)  # Cap at 5 seconds
+            
+            # Используем асинхронную задержку
+            await asyncio.sleep(poll_interval)
+            
+            # Retrieve run status with retry logic
+            try:
+                run = await retry_openai_call(
+                    client.beta.threads.runs.retrieve,
+                    thread_id=thread_id,
+                    run_id=run.id,
+                    max_retries=2
+                )
+            except Exception as e:
+                logger.error(f"[run_thread_safe_async] Failed to retrieve run status after retries: {e}")
+                # Decide whether to continue polling or fail fast based on error type
+                if isinstance(e, openai.RateLimitError):
+                    # For rate limits, wait longer but keep trying
+                    await asyncio.sleep(5.0)
+                    continue
+                else:
+                    # For other errors, fail fast
+                    return {
+                        "action": "unknown", 
+                        "error": f"run_retrieve_failed: {type(e).__name__}",
+                        "user_message": "Произошла ошибка при ожидании ответа. Пожалуйста, попробуйте позже."
+                    }
+            
             logger.debug(f"[run_thread_safe_async] Current run status: {run.status}")
         
         # Обрабатываем результат
@@ -375,29 +495,72 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
                         "output": json.dumps({"action": "unknown", "error": "unsupported_function"})
                     })
             
-            # Отправляем результаты выполнения функций обратно ассистенту
-            logger.info(f"[run_thread_safe_async] Submitting tool outputs: {tool_outputs}")
-            run = await asyncio.to_thread(
-                client.beta.threads.runs.submit_tool_outputs,
-                thread_id=thread_id,
-                run_id=run.id,
-                tool_outputs=tool_outputs
-            )
+            # Отправляем результаты выполнения функций обратно ассистенту с retry
+            logger.info(f"[run_thread_safe_async] Submitting tool outputs")
+            try:
+                run = await retry_openai_call(
+                    client.beta.threads.runs.submit_tool_outputs,
+                    thread_id=thread_id,
+                    run_id=run.id,
+                    tool_outputs=tool_outputs,
+                    max_retries=2
+                )
+            except Exception as e:
+                logger.error(f"[run_thread_safe_async] Failed to submit tool outputs after retries: {e}")
+                return {
+                    "action": "unknown", 
+                    "error": f"tool_submit_failed: {type(e).__name__}",
+                    "user_message": "Произошла ошибка при обработке инструментов. Пожалуйста, попробуйте еще раз."
+                }
             
-            # Ждем завершения после отправки результатов функций
+            # Ждем завершения после отправки результатов функций - с той же логикой повторных попыток
             logger.info(f"[run_thread_safe_async] Waiting for run completion after tool outputs")
+            poll_interval = 1.0
+            poll_count = 0
+            
             while run.status in ["queued", "in_progress"]:
                 if time.time() - start_time > timeout:
                     logger.error(f"[run_thread_safe_async] Timeout waiting for Assistant API response after tool outputs, {timeout}s")
+                    # Try to cancel before returning
+                    try:
+                        await retry_openai_call(
+                            client.beta.threads.runs.cancel,
+                            thread_id=thread_id,
+                            run_id=run.id,
+                            max_retries=1
+                        )
+                    except Exception:
+                        pass  # Ignore cancel errors at this point
+                    
                     return {"action": "unknown", "error": "timeout_after_tools", "user_message": "OpenAI response timed out after tool execution. Please try again."}
                 
-                # Используем асинхронную задержку вместо блокирования потока
-                await asyncio.sleep(1)
-                run = await asyncio.to_thread(
-                    client.beta.threads.runs.retrieve,
-                    thread_id=thread_id,
-                    run_id=run.id
-                )
+                # Dynamic polling interval
+                poll_count += 1
+                if poll_count > 5:
+                    poll_interval = min(5.0, poll_interval * 1.5)
+                
+                await asyncio.sleep(poll_interval)
+                
+                try:
+                    run = await retry_openai_call(
+                        client.beta.threads.runs.retrieve,
+                        thread_id=thread_id,
+                        run_id=run.id,
+                        max_retries=2
+                    )
+                except Exception as e:
+                    if isinstance(e, openai.RateLimitError):
+                        # For rate limits, wait longer but keep trying
+                        await asyncio.sleep(5.0)
+                        continue
+                    else:
+                        logger.error(f"[run_thread_safe_async] Failed to retrieve run status after tool outputs: {e}")
+                        return {
+                            "action": "unknown", 
+                            "error": f"run_retrieve_failed_after_tools: {type(e).__name__}",
+                            "user_message": "Произошла ошибка при ожидании ответа. Пожалуйста, попробуйте позже."
+                        }
+                
                 logger.debug(f"[run_thread_safe_async] Current run status after tool outputs: {run.status}")
             
             # Проверяем статус после отправки результатов функций
@@ -419,6 +582,20 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
                     "user_message": "Could not process your command. Please try to formulate your request more clearly."
                 }
             elif run.status != "completed":
+                # Check for specific failed statuses that might need different handling
+                if run.status == "failed" and hasattr(run, "last_error"):
+                    error_code = getattr(run.last_error, "code", "unknown")
+                    error_message = getattr(run.last_error, "message", "Unknown error")
+                    logger.error(f"[run_thread_safe_async] Run failed with error code {error_code}: {error_message}")
+                    
+                    # Special handling for rate limits or system errors
+                    if error_code in ["rate_limit_exceeded", "server_error"]:
+                        return {
+                            "action": "unknown", 
+                            "error": f"openai_error:{error_code}", 
+                            "user_message": "OpenAI сервис временно недоступен. Пожалуйста, попробуйте позже."
+                        }
+                
                 logger.error(f"[run_thread_safe_async] Run failed after tool outputs with status: {run.status}")
                 return {
                     "action": "unknown", 
@@ -427,12 +604,21 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
                 }
                 
         if run.status == "completed":
-            # Получаем последнее сообщение ассистента
+            # Получаем последнее сообщение ассистента с retry
             logger.info(f"[run_thread_safe_async] Run completed, retrieving assistant messages")
-            messages = await asyncio.to_thread(
-                client.beta.threads.messages.list,
-                thread_id=thread_id
-            )
+            try:
+                messages = await retry_openai_call(
+                    client.beta.threads.messages.list,
+                    thread_id=thread_id,
+                    max_retries=2
+                )
+            except Exception as e:
+                logger.error(f"[run_thread_safe_async] Failed to retrieve messages after retries: {e}")
+                return {
+                    "action": "unknown", 
+                    "error": f"messages_retrieve_failed: {type(e).__name__}",
+                    "user_message": "Не удалось получить ответ ассистента. Пожалуйста, попробуйте позже."
+                }
             
             # Находим последнее сообщение от ассистента
             assistant_messages = [
@@ -451,7 +637,7 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
             # Извлекаем ответ из сообщения
             try:
                 content = assistant_messages[0].content[0].text.value
-                logger.info(f"[run_thread_safe_async] Assistant response: '{content[:100]}...'")
+                logger.info(f"[run_thread_safe_async] Assistant response received ({len(content)} chars)")
                 
                 # Используем наш адаптер для обработки ответа
                 result = adapt_intent(content)
@@ -477,7 +663,14 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
                 }
         else:
             # Обрабатываем неуспешные статусы
-            logger.error(f"[run_thread_safe_async] Run failed with status: {run.status}")
+            # Check for specific error codes if available
+            error_msg = "Unknown error"
+            if hasattr(run, "last_error") and run.last_error:
+                error_code = getattr(run.last_error, "code", "unknown")
+                error_msg = getattr(run.last_error, "message", "Unknown error")
+                logger.error(f"[run_thread_safe_async] Run failed with error code {error_code}: {error_msg}")
+            
+            logger.error(f"[run_thread_safe_async] Run failed with status: {run.status}, message: {error_msg}")
             return {
                 "action": "unknown", 
                 "error": f"run_failed: {run.status}",
@@ -487,10 +680,22 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
     except openai.RateLimitError as e:
         # Ошибка лимита запросов
         logger.exception(f"[run_thread_safe_async] OpenAI rate limit error: {e}")
+        
+        # Try to cancel any active run before returning
+        if thread_id and run_id:
+            try:
+                await asyncio.to_thread(
+                    client.beta.threads.runs.cancel,
+                    thread_id=thread_id,
+                    run_id=run_id
+                )
+            except Exception:
+                pass  # Ignore cancel errors
+        
         return {
             "action": "unknown", 
             "error": "rate_limit_error",
-            "user_message": "OpenAI rate limit exceeded. Please try again later."
+            "user_message": "OpenAI rate limit exceeded. Please try again in a few moments."
         }
     except openai.APIConnectionError as e:
         # Ошибка соединения с API
@@ -511,6 +716,18 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
     except Exception as e:
         # Общая обработка ошибок
         logger.exception(f"[run_thread_safe_async] Error in OpenAI Assistant API call: {e}")
+        
+        # Try to cancel any active run before returning
+        if thread_id and run_id:
+            try:
+                await asyncio.to_thread(
+                    client.beta.threads.runs.cancel,
+                    thread_id=thread_id,
+                    run_id=run_id
+                )
+            except Exception:
+                pass  # Ignore cancel errors
+        
         return {
             "action": "unknown", 
             "error": str(e),

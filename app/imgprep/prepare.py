@@ -1,10 +1,11 @@
 """
 Image preprocessing module for enhancing scanned invoices before OCR.
-Simplified version that focuses on minimal necessary preprocessing.
+Optimized for performance and OCR accuracy with adaptive processing.
 """
 
 import io
 import logging
+import math
 import numpy as np
 from typing import Optional, Tuple, List
 from PIL import Image, ImageEnhance, ImageFilter
@@ -132,6 +133,7 @@ def prepare_with_pil(path: str) -> bytes:
 def prepare_with_opencv(path: str) -> bytes:
     """
     OpenCV-based minimal image preprocessing for enhanced OCR results.
+    Optimized for speed and OCR performance.
     
     Args:
         path: Path to the source image file
@@ -140,6 +142,10 @@ def prepare_with_opencv(path: str) -> bytes:
         Processed image as bytes
     """
     try:
+        # Track processing time for performance monitoring
+        import time
+        t0 = time.time()
+        
         # Open and read image
         pil_img = Image.open(path)
         img = np.array(pil_img)
@@ -149,20 +155,41 @@ def prepare_with_opencv(path: str) -> bytes:
             img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
         elif img.shape[2] == 4:  # RGBA
             img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)
-            
-        # 1. Resize if too large
-        img = resize_if_needed(img, max_size=2048)
         
-        # 2. Detect and align document only if clearly skewed
-        aligned_img = detect_and_align_document(img, skew_threshold=5.0)
-        if aligned_img is not None:
-            img = aligned_img
+        # Get original dimensions for logging
+        orig_h, orig_w = img.shape[:2]
+        img_size = f"{orig_w}x{orig_h}"
             
-        # 3. Apply mild contrast normalization
-        enhanced_img = apply_mild_normalization(img)
+        # 1. Resize if too large - increased max_size to 2400 for better quality
+        img = resize_if_needed(img, max_size=2400)
+        
+        # Check if image is dark and likely needs brightness enhancement
+        mean_brightness = cv2.mean(img)[0]
+        
+        # 2. Skip alignment for most images unless very skewed (10 degrees+)
+        # This significantly improves processing speed with minimal quality impact
+        if mean_brightness < 50:  # Only try to align dark images which may be harder to read
+            aligned_img = detect_and_align_document(img, skew_threshold=10.0)
+            if aligned_img is not None:
+                img = aligned_img
+        
+        # 3. Apply optimized normalization - different paths for different image types
+        if mean_brightness < 70:  # Dark image
+            logger.info(f"Applying enhanced brightness for dark image (brightness: {mean_brightness:.1f})")
+            # For darker images, apply CLAHE to improve contrast without adding noise
+            enhanced_img = apply_enhanced_normalization(img)
+        else:
+            # For normal brightness images, apply minimal processing
+            enhanced_img = apply_mild_normalization(img)
             
-        # 4. Save to WebP with high quality
-        return save_to_webp(enhanced_img, quality=95, max_size=500)
+        # 4. Save to WebP with high quality but enforce maximum file size
+        result_bytes = save_to_webp(enhanced_img, quality=92, max_size=800)
+        
+        # Log processing time for performance monitoring
+        elapsed = time.time() - t0
+        logger.info(f"OpenCV preprocessing: {img_size} → {enhanced_img.shape[1]}x{enhanced_img.shape[0]} in {elapsed:.3f}s")
+        
+        return result_bytes
         
     except Exception as e:
         logger.error(f"Error preprocessing image with OpenCV: {str(e)}")
@@ -338,6 +365,7 @@ def order_points(pts: np.ndarray) -> np.ndarray:
 def apply_mild_normalization(img: np.ndarray) -> np.ndarray:
     """
     Apply gentle contrast normalization without excessive processing.
+    Optimized version for good quality images.
     
     Args:
         img: Input image
@@ -355,7 +383,8 @@ def apply_mild_normalization(img: np.ndarray) -> np.ndarray:
     # Calculate noise level
     noise_level = np.std(gray)
     if noise_level > 35:  # Only apply denoising if image is noisy
-        denoised = cv2.fastNlMeansDenoising(gray, None, h=7, searchWindowSize=21)
+        # Use faster non-local means denoising with smaller search window
+        denoised = cv2.fastNlMeansDenoising(gray, None, h=7, searchWindowSize=15)
         logger.info(f"Applied mild denoising (noise level: {noise_level:.1f})")
         return denoised
     
@@ -363,9 +392,49 @@ def apply_mild_normalization(img: np.ndarray) -> np.ndarray:
     return gray
 
 
+def apply_enhanced_normalization(img: np.ndarray) -> np.ndarray:
+    """
+    Apply enhanced contrast normalization for dark or low-contrast images.
+    Uses CLAHE (Contrast Limited Adaptive Histogram Equalization) for better results.
+    
+    Args:
+        img: Input image
+        
+    Returns:
+        Enhanced image with improved contrast
+    """
+    # Convert to grayscale if needed
+    if len(img.shape) == 3:
+        gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    else:
+        gray = img.copy()
+    
+    # Check mean brightness and contrast
+    mean_brightness = cv2.mean(gray)[0]
+    contrast = np.std(gray)
+    
+    logger.info(f"Image stats: brightness={mean_brightness:.1f}, contrast={contrast:.1f}")
+    
+    # Create a CLAHE object with controlled clip limit
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    
+    # Apply CLAHE for contrast enhancement
+    enhanced = clahe.apply(gray)
+    
+    # Apply gentle bilateral filter to preserve edges while reducing noise
+    # This is more OCR-friendly than regular Gaussian blur
+    if contrast < 40:  # Only apply if contrast is low
+        filtered = cv2.bilateralFilter(enhanced, 9, 75, 75)
+        logger.info("Applied bilateral filtering for low contrast image")
+        return filtered
+    
+    return enhanced
+
+
 def save_to_webp(img: np.ndarray, quality: int = 95, max_size: int = 500) -> bytes:
     """
     Convert OpenCV image to WebP format with high quality compression.
+    Optimized for OCR performance with adaptive quality settings.
     
     Args:
         img: Input image
@@ -375,7 +444,7 @@ def save_to_webp(img: np.ndarray, quality: int = 95, max_size: int = 500) -> byt
     Returns:
         Image as bytes in WebP format
     """
-    # Convert to RGB if grayscale
+    # Convert to RGB if grayscale (needed for WebP)
     if len(img.shape) == 2:
         rgb_img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
     else:
@@ -384,24 +453,61 @@ def save_to_webp(img: np.ndarray, quality: int = 95, max_size: int = 500) -> byt
     # Convert to PIL Image
     pil_img = Image.fromarray(rgb_img)
     
+    # Calculate image complexity - helps determine if we can compress more
+    # Simple heuristic: standard deviation of pixel values as percentage of max range
+    complexity = np.std(img) / 255.0 * 100
+    
+    # Adjust initial quality based on image complexity
+    # More complex images (high detail) need higher quality settings
+    adjusted_quality = quality
+    if complexity < 10:  # Very simple/flat image
+        adjusted_quality = max(85, quality - 10)
+        logger.info(f"Low complexity image ({complexity:.1f}%), reducing initial quality to {adjusted_quality}")
+    elif complexity > 25:  # Very detailed image
+        adjusted_quality = min(98, quality + 3)
+        logger.info(f"High complexity image ({complexity:.1f}%), increasing initial quality to {adjusted_quality}")
+    
     # Save to bytes with WebP format
     buffer = io.BytesIO()
-    pil_img.save(buffer, format="WebP", quality=quality)
+    pil_img.save(buffer, format="WebP", quality=adjusted_quality)
     
     # Get bytes
     img_bytes = buffer.getvalue()
     
-    # Check size and reduce quality if needed, but not below 80
+    # Check size and reduce quality if needed
     size_kb = len(img_bytes) / 1024
-    current_quality = quality
+    current_quality = adjusted_quality
     
-    # Reduce quality until file size is below max_size, but not below 80
-    while size_kb > max_size and current_quality > 80:
-        current_quality -= 5
+    # Use more aggressive compression strategies for very large images
+    min_quality = 78  # Don't go below this quality
+    
+    # Reduce quality until file size is below max_size
+    while size_kb > max_size and current_quality > min_quality:
+        # Decrease quality more aggressively for larger sizes
+        step = 5 if size_kb < 2 * max_size else 8
+        current_quality -= step
+        current_quality = max(current_quality, min_quality)  # Ensure we don't go below minimum
+        
         buffer = io.BytesIO()
         pil_img.save(buffer, format="WebP", quality=current_quality)
         img_bytes = buffer.getvalue()
         size_kb = len(img_bytes) / 1024
         logger.info(f"Reduced WebP quality to {current_quality}, size: {size_kb:.1f} KB")
+    
+    # If we still exceed max size at minimum quality, need to resize
+    if size_kb > max_size and current_quality <= min_quality:
+        # Calculate new dimensions to reach target size
+        target_ratio = math.sqrt(max_size / size_kb) * 0.9  # 10% buffer
+        new_width = int(pil_img.width * target_ratio)
+        new_height = int(pil_img.height * target_ratio)
+        
+        # Only resize if the reduction is significant (>10%)
+        if target_ratio < 0.9:
+            resized_img = pil_img.resize((new_width, new_height), Image.LANCZOS)
+            buffer = io.BytesIO()
+            resized_img.save(buffer, format="WebP", quality=min_quality + 5)  # Slightly higher quality for resized
+            img_bytes = buffer.getvalue()
+            size_kb = len(img_bytes) / 1024
+            logger.info(f"Resized to {new_width}x{new_height} to reach target size, final: {size_kb:.1f} KB")
     
     return img_bytes
