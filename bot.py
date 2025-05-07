@@ -389,7 +389,7 @@ async def photo_handler(message, state: FSMContext, **kwargs):
 
         # Шаг 3: OCR изображения
         # Запуск OCR в отдельном потоке
-        ocr_result = await asyncio.to_thread(ocr.call_openai_ocr, img_bytes.getvalue())
+        ocr_result = await ocr.call_openai_ocr(img_bytes.getvalue())
 
         # Обновляем статус стадии
         update_stage("ocr", kwargs, update_progress_message)

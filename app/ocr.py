@@ -1,84 +1,119 @@
+import asyncio
 import base64
-import time
 import json
 import logging
-from pathlib import Path
+import re
+import time
+from typing import Any
+
 from app.models import ParsedData
 from app.config import settings, get_ocr_client
-from app.ocr_prompt import build_prompt
-from app.imgprep import prepare_for_ocr
-
-import types
-
-try:
-    import openai
-except ImportError:
-    openai: types.ModuleType | None = None
-
+from app.utils.monitor import increment_counter, ocr_monitor
 from app.utils.api_decorators import with_retry_backoff
 
-PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "invoice_ocr_en_v0.5.txt"
-PROMPT = (
-    PROMPT_PATH.read_text(encoding="utf-8")
-    + "\nReturn qty_value and unit separately; unit must be one of "
-    "[kg, g, l, ml, pcs, pack]. If unclear → null. "
-    "Add price_per_unit and total_price for each position and for the invoice."
-)
+VISION_ASSISTANT_TIMEOUT_SECONDS = int(getattr(settings, "VISION_ASSISTANT_TIMEOUT_SECONDS", 30))
 
-# OpenAI function-calling schema for invoice parsing
-tool_schema = {
-    "type": "function",
-    "function": {
-        "name": "parse_invoice",
-        "description": (
-            "Extract structured data from an Indonesian supplier invoice photo"
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "supplier": {"type": ["string", "null"]},
-                "date": {
-                    "type": ["string", "null"],
-                    "description": "YYYY-MM-DD",
+@with_retry_backoff(max_retries=2, initial_backoff=2.0)
+async def call_openai_ocr(image_bytes: bytes) -> ParsedData:
+    """
+    Отправляет изображение OpenAI Vision Assistant для распознавания инвойса.
+    Возвращает ParsedData или кидает RuntimeError при ошибке.
+    """
+    client = get_ocr_client()
+    if not client:
+        logging.error("Vision Assistant unavailable: no OpenAI client")
+        raise RuntimeError("Vision Assistant unavailable: Please check your OPENAI_API_KEY")
+    vision_assistant_id = getattr(settings, "OPENAI_VISION_ASSISTANT_ID", None)
+    if not vision_assistant_id:
+        logging.error("Vision Assistant unavailable: no Assistant ID configured")
+        raise RuntimeError("Vision Assistant unavailable: Please set OPENAI_VISION_ASSISTANT_ID in .env")
+
+    base64_image = base64.b64encode(image_bytes).decode('utf-8')
+    start_time = time.time()
+    try:
+        thread = await client.beta.threads.create()
+        await client.beta.threads.messages.create(
+            thread_id=thread.id,
+            role="user",
+            content=[
+                {
+                    "type": "text",
+                    "text": "Распознай этот инвойс и верни структурированные данные в JSON формате. Используй формат, где есть поля supplier, date, positions с товарами (name, qty, unit, price), и total_price."
                 },
-                "positions": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "required": ["name", "qty", "unit"],
-                        "properties": {
-                            "name": {"type": "string"},
-                            "qty": {"type": "number"},
-                            "unit": {
-                                "type": "string",
-                                "enum": [
-                                    "kg",
-                                    "g",
-                                    "l",
-                                    "ml",
-                                    "pcs",
-                                    "pack"
-                                ],
-                            },
-                            "price": {"type": "number", "nullable": True},
-                            "price_per_unit": {"type": "number", "nullable": True},
-                            "total_price": {"type": "number", "nullable": True},
-                            "status": {"type": "string", "nullable": True},
-                        },
-                    },
-                },
-                "price": {"type": ["number", "null"]},
-                "price_per_unit": {"type": ["number", "null"]},
-                "total_price": {"type": ["number", "null"]},
-            },
-            "required": ["supplier", "date", "positions"],
-        },
-    },
-}
-
-import re
-
-
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{base64_image}"
+                    }
+                }
+            ]
+        )
+        run = await client.beta.threads.runs.create(
+            thread_id=thread.id,
+            assistant_id=vision_assistant_id
+        )
+        timeout = VISION_ASSISTANT_TIMEOUT_SECONDS
+        completion_time = time.time() + timeout
+        while time.time() < completion_time:
+            run_status = await client.beta.threads.runs.retrieve(
+                thread_id=thread.id,
+                run_id=run.id
+            )
+            if run_status.status == 'completed':
+                break
+            elif run_status.status in ['failed', 'cancelled', 'expired']:
+                raise RuntimeError(f"Assistant run failed with status: {run_status.status}")
+            await asyncio.sleep(1)
+        else:
+            await client.beta.threads.runs.cancel(
+                thread_id=thread.id,
+                run_id=run.id
+            )
+            raise RuntimeError(f"Assistant run timed out after {timeout} seconds")
+        messages = await client.beta.threads.messages.list(
+            thread_id=thread.id
+        )
+        if not messages.data:
+            raise RuntimeError("No messages returned from Assistant")
+        last_message = messages.data[0]
+        if last_message.role != "assistant":
+            raise RuntimeError("Unexpected message format from Assistant")
+        invoice_data = None
+        for content_part in last_message.content:
+            if content_part.type == "text":
+                json_match = re.search(r'```(?:json)?\n(.*?)\n```', content_part.text, re.DOTALL)
+                if json_match:
+                    invoice_json = json_match.group(1)
+                    try:
+                        invoice_data = json.loads(invoice_json)
+                        break
+                    except json.JSONDecodeError:
+                        logging.warning("Failed to parse JSON from markdown block, trying full message text")
+                try:
+                    invoice_data = json.loads(content_part.text)
+                    break
+                except json.JSONDecodeError:
+                    continue
+        if not invoice_data:
+            raise RuntimeError("No valid JSON data found in Assistant response")
+        try:
+            result = ParsedData.model_validate(invoice_data)
+        except Exception as e:
+            logging.error(f"Failed to validate invoice data: {str(e)}")
+            logging.error(f"Raw invoice data: {invoice_data}")
+            raise RuntimeError(f"Invalid invoice data format: {str(e)}") from e
+        elapsed = time.time() - start_time
+        logging.info(f"Vision Assistant OCR successful after {elapsed:.1f}s")
+        increment_counter("nota_ocr_requests_total", {"status": "ok"})
+        ocr_monitor.record(int(elapsed * 1000), 0)
+        if elapsed > 6.0:
+            logging.warning(f"High Vision Assistant OCR latency detected: {elapsed:.1f}s > 6.0s threshold")
+        return result
+    except Exception as e:
+        elapsed = time.time() - start_time
+        logging.error(f"Vision Assistant API error after {elapsed:.1f}s: {str(e)}")
+        increment_counter("nota_ocr_requests_total", {"status": "error"})
+        raise RuntimeError(f"Vision OCR failed: {str(e)}") from e
 def _clean_num(v):
     if v in (None, "", "null"):
         return None
@@ -168,130 +203,3 @@ def _sanitize_response(message):
         raise RuntimeError(f"Sanitization failed: {str(e)}")
 
 
-@with_retry_backoff(max_retries=2, initial_backoff=1.0, backoff_factor=2.0)
-def call_openai_ocr(image_bytes: bytes) -> ParsedData:
-    """
-    Sends an image to OpenAI Vision API for invoice recognition.
-    Uses the with_retry_backoff decorator for automatic error handling
-    and retries.
-
-    Args:
-        image_bytes: Image bytes for processing
-
-    Returns:
-        ParsedData: Structured invoice data
-
-    Raises:
-        RuntimeError: For API errors or data parsing errors with friendly messages
-    """
-    # Use global client from config instead of creating a new one each time
-    client = get_ocr_client()
-    if not client:
-        logging.error("OCR unavailable: no OpenAI OCR client")
-        raise RuntimeError(
-            "OCR unavailable: Please check your OPENAI_OCR_KEY"
-        )
-
-    t0 = time.time()
-    # req_id is taken from the decorator context
-    prompt_prefix = build_prompt()
-
-    # Base64 image preparation - moved outside the loop for efficiency
-    base64_image = base64.b64encode(image_bytes).decode()
-    image_url = f"data:image/jpeg;base64,{base64_image}"
-
-    # Set longer timeout and increase max_tokens
-    logging.info(f"[OCR] Using Vision model: gpt-4o")
-    
-    # Track OCR request in metrics
-    from app.utils.monitor import increment_counter, ocr_monitor
-    
-    try:
-        rsp = client.chat.completions.create(
-            model="gpt-4o",
-            temperature=0,
-            max_tokens=1200,  # Increased max tokens
-            timeout=45,  # Increased timeout for larger invoices
-            messages=[
-                {"role": "system", "content": prompt_prefix},
-                {
-                    "role": "user",
-                    "content": [{"type": "image_url", "image_url": {"url": image_url}}],
-                },
-            ],
-            tools=[tool_schema],
-            tool_choice={"type": "function", "function": {"name": "parse_invoice"}},
-        )
-        
-        # Count successful OCR request
-        increment_counter("nota_ocr_requests_total", {"status": "ok"})
-        
-        # Extract token usage information if available
-        total_tokens = None
-        usage = getattr(rsp, "usage", None)
-        if usage:
-            total_tokens = getattr(usage, "total_tokens", None)
-        
-        message = rsp.choices[0].message
-        data = _sanitize_response(message)
-    except Exception as e:
-        # Count failed OCR request
-        increment_counter("nota_ocr_requests_total", {"status": "error"})
-        logging.error(f"OCR API error: {str(e)}")
-        raise RuntimeError(f"OCR failed: {str(e)}") from e
-
-    # Process numeric data
-    for p in data.get("positions", []):
-        p["price"] = _clean_num(p.get("price"))
-        p["price_per_unit"] = _clean_num(p.get("price_per_unit"))
-        p["total_price"] = _clean_num(p.get("total_price"))
-        # If price is missing but total_price and qty > 0 are available, calculate price
-        if (p.get("price") is None or p.get("price") == 0) and p.get("total_price") and p.get("qty"):
-            try:
-                qty = float(p["qty"])
-                if qty > 0:
-                    p["price"] = float(p["total_price"]) / qty
-            except Exception as e:
-                logging.warning(f"Failed to auto-calc price: {e} for position {p}")
-    data["price"] = _clean_num(data.get("price"))
-    data["price_per_unit"] = _clean_num(data.get("price_per_unit"))
-    data["total_price"] = _clean_num(data.get("total_price"))
-
-    # OWN_COMPANY_ALIASES check
-    supplier = data.get("supplier")
-    if supplier and supplier.strip() in settings.OWN_COMPANY_ALIASES:
-        data["supplier"] = None
-        data["supplier_status"] = "unknown"
-
-    # Validate model and return result
-    try:
-        parsed_data = ParsedData.model_validate(data)
-        elapsed = time.time() - t0
-        elapsed_ms = int(elapsed * 1000)
-        
-        # Record OCR metrics for monitoring
-        ocr_monitor.record(elapsed_ms, total_tokens)
-        
-        # Log detailed performance metrics
-        token_info = f" with {total_tokens} tokens" if total_tokens else ""
-        logging.info(
-            (
-                f"OCR successful after {elapsed:.1f}s{token_info} with "
-                f"{len(parsed_data.positions)} positions"
-            )
-        )
-        
-        # Emit warning if OCR latency is high
-        if elapsed > 6.0:  # 6 seconds threshold
-            logging.warning(f"High OCR latency detected: {elapsed:.1f}s > 6.0s threshold")
-        
-        return parsed_data
-    except Exception as validation_err:
-        # Detailed logging of validation errors
-        logging.error(f"Model validation error: {validation_err}")
-        raise RuntimeError(
-            (
-                "⚠️ Could not process the invoice data: "
-                f"{str(validation_err)}"
-            )
-        ) from validation_err
