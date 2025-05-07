@@ -1468,6 +1468,7 @@ async def text_fallback(message):
 
 import signal
 import sys
+import os
 
 def _graceful_shutdown(signum, frame):
     logger.info(f"Получен сигнал завершения ({signum}), выполняем graceful shutdown...")
@@ -1580,6 +1581,12 @@ def _graceful_shutdown(signum, frame):
                 logger.info("Event loop остановлен")
         except Exception as loop_err:
             logger.error(f"Ошибка при остановке event loop: {loop_err}")
+        
+        # Если loop всё ещё активен, то принудительно останавливаем его
+        if loop.is_running():
+            logger.warning("Event loop всё ещё активен, принудительно останавливаем...")
+            loop.close()
+            logger.info("Event loop принудительно остановлен")
     except Exception as e:
         logger.error(f"Ошибка при завершении: {e}")
     finally:
@@ -1589,7 +1596,7 @@ def _graceful_shutdown(signum, frame):
         
         logger.info("Graceful shutdown завершен")
         # Гарантированное завершение процесса
-        sys.exit(0)
+        os._exit(0)
 
 if __name__ == "__main__":
     signal.signal(signal.SIGTERM, _graceful_shutdown)
