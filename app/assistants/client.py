@@ -91,24 +91,64 @@ def parse_edit_command(user_input: str, invoice_lines=None) -> list:
         # Check for date patterns first
         date_match = (
             re.search(r'(?:дата|date|invoice date)\s+([\d]{1,2})[.\/-]([\d]{1,2})[.\/-]([\d]{4}|\d{2})', cmd, re.IGNORECASE) or
-            re.search(r'(?:дата|date|invoice date)\s+([\d]{4})[.\/-]([\d]{1,2})[.\/-]([\d]{1,2})', cmd, re.IGNORECASE)
+            re.search(r'(?:дата|date|invoice date)\s+([\d]{4})[.\/-]([\d]{1,2})[.\/-]([\d]{1,2})', cmd, re.IGNORECASE) or
+            re.search(r'(?:дата|date|invoice date)\s+([\d]{1,2})(?:\s+|-)?(января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)', cmd, re.IGNORECASE) or
+            re.search(r'(?:дата|date|invoice date)\s+([\d]{1,2})(?:\s+|-)?(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)', cmd, re.IGNORECASE)
         )
         
         if date_match:
             try:
-                # Check which format we matched (DD.MM.YYYY or YYYY.MM.DD)
-                if len(date_match.group(3)) == 4:  # DD.MM.YYYY
+                # Define month name to number mappings
+                ru_month_map = {
+                    "января": 1, "февраля": 2, "марта": 3, "апреля": 4,
+                    "мая": 5, "июня": 6, "июля": 7, "августа": 8,
+                    "сентября": 9, "октября": 10, "ноября": 11, "декабря": 12
+                }
+                
+                en_month_map = {
+                    "january": 1, "february": 2, "march": 3, "april": 4,
+                    "may": 5, "june": 6, "july": 7, "august": 8,
+                    "september": 9, "october": 10, "november": 11, "december": 12,
+                    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "jun": 6, "jul": 7,
+                    "aug": 8, "sep": 9, "sept": 9, "oct": 10, "nov": 11, "dec": 12
+                }
+                
+                # Check which format we matched
+                if len(date_match.groups()) >= 2 and date_match.group(2):
+                    month_name = date_match.group(2).lower()
+                    
+                    # Check if it's Russian or English month
+                    if month_name in ru_month_map:
+                        month = ru_month_map[month_name]
+                    elif month_name in en_month_map:
+                        month = en_month_map[month_name]
+                    else:
+                        raise ValueError(f"Unknown month name: {month_name}")
+                        
+                    # Get day and set current year
                     day = int(date_match.group(1))
-                    month = int(date_match.group(2))
-                    year = int(date_match.group(3))
-                elif len(date_match.group(1)) == 4:  # YYYY.MM.DD
-                    year = int(date_match.group(1))
-                    month = int(date_match.group(2))
-                    day = int(date_match.group(3))
-                else:  # DD.MM.YY
-                    day = int(date_match.group(1))
-                    month = int(date_match.group(2))
-                    year = 2000 + int(date_match.group(3))  # Assume 20xx for 2-digit years
+                    year = datetime.now().year  # Current year if not specified
+                    
+                    # If month is in the past and it's not December, assume next year
+                    current_month = datetime.now().month
+                    if month < current_month and month != 12:
+                        year += 1
+                    
+                elif len(date_match.groups()) >= 3:
+                    if len(date_match.group(3)) == 4:  # DD.MM.YYYY
+                        day = int(date_match.group(1))
+                        month = int(date_match.group(2))
+                        year = int(date_match.group(3))
+                    elif len(date_match.group(1)) == 4:  # YYYY.MM.DD
+                        year = int(date_match.group(1))
+                        month = int(date_match.group(2))
+                        day = int(date_match.group(3))
+                    else:  # DD.MM.YY
+                        day = int(date_match.group(1))
+                        month = int(date_match.group(2))
+                        year = 2000 + int(date_match.group(3))  # Assume 20xx for 2-digit years
+                else:
+                    raise ValueError("Invalid date format")
                 
                 # Format as YYYY-MM-DD (ISO format)
                 date_str = f"{year:04d}-{month:02d}-{day:02d}"

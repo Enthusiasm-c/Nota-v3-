@@ -95,13 +95,18 @@ async def handle_free_edit_text(message: Message, state: FSMContext):
                     action_data["value"] = action_data["date"]
                 
                 # Apply each intent individually
-                new_invoice = apply_intent(new_invoice, action_data)
-                logger.info(f"[edit_flow] Applied action: {action_data.get('action')} - result: {bool(new_invoice != invoice)}")
+                try:
+                    from app.edit.apply_intent import apply_intent
+                    new_invoice = apply_intent(new_invoice, action_data)
+                    logger.info(f"[edit_flow] Applied action: {action_data.get('action')} - result: {bool(new_invoice != invoice)}")
+                except Exception as e:
+                    logger.error(f"[edit_flow] Error in apply_intent: {str(e)}")
             
-            # Clear any suggestions for names if we're handling a date command
+            # Set flag for no fuzzy matching when dealing with dates/prices
+            suggestion_shown = False
             if has_date or has_price:
                 # Skip fuzzy matching when dealing with dates/prices/known values
-                suggestion_shown = False
+                logger.info(f"[edit_flow] Skipping fuzzy matching for date or price command")
             
         else:
             # Fall back to OpenAI interpretation if direct pattern matching fails
