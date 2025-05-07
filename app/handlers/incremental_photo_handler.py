@@ -80,17 +80,43 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         # Get file information
         file = await message.bot.get_file(message.photo[-1].file_id)
         
-        # Animate loading process
-        await ui.start_spinner()
+        # Получаем и выводим URL для тестирования с OpenAI
+        token = getattr(message.bot, 'token', os.environ.get('BOT_TOKEN', 'UNKNOWN_TOKEN'))
+        file_url = f"https://api.telegram.org/file/bot{token}/{file.file_path}"
+        logger.info(f"[{req_id}] TELEGRAM IMAGE URL: {file_url}")
+        print(f"\n\nTELEGRAM IMAGE URL: {file_url}\n\n")  # Печатаем в консоль для удобства
         
-        # Download file content
-        img_bytes_io = await message.bot.download_file(file.file_path)
-        img_bytes = img_bytes_io.getvalue()
-        
-        # Stop spinner and update UI
-        ui.stop_spinner()
-        await ui.update(t("status.image_received", lang=lang) or "✅ Image received")
-        logger.info(f"[{req_id}] Downloaded photo, size {len(img_bytes)} bytes")
+        # Сохраняем в файл для последующего тестирования в OpenAI Playground
+        try:
+            img_path = f"/tmp/telegram_image_{req_id}.jpg"
+            # Animate loading process
+            await ui.start_spinner()
+            
+            # Download file content
+            img_bytes_io = await message.bot.download_file(file.file_path)
+            img_bytes = img_bytes_io.getvalue()
+            
+            # Сохраняем копию для тестирования
+            with open(img_path, 'wb') as f:
+                f.write(img_bytes)
+            logger.info(f"[{req_id}] Saved test image to {img_path}")
+            print(f"Saved test image to {img_path}")
+            
+            # Stop spinner and update UI
+            ui.stop_spinner()
+            await ui.update(t("status.image_received", lang=lang) or "✅ Image received")
+            logger.info(f"[{req_id}] Downloaded photo, size {len(img_bytes)} bytes")
+        except Exception as e:
+            logger.error(f"[{req_id}] Error saving test image: {e}")
+            ui.stop_spinner()  # Все равно останавливаем спиннер
+            
+            # Продолжаем обычную обработку фото при ошибке сохранения тестового файла
+            # Download file content снова, если не удалось ранее
+            if 'img_bytes' not in locals():
+                img_bytes_io = await message.bot.download_file(file.file_path)
+                img_bytes = img_bytes_io.getvalue()
+                await ui.update(t("status.image_received", lang=lang) or "✅ Image received")
+                logger.info(f"[{req_id}] Downloaded photo, size {len(img_bytes)} bytes")
         
         # Step 2: Preprocess image
         await ui.append(t("status.preprocessing_image", lang=lang) or "🖼️ Preprocessing image...")
