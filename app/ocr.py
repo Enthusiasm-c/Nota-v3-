@@ -7,7 +7,7 @@ import re
 import time
 from typing import Any
 from pathlib import Path
-import uuid
+from uuid import uuid4
 
 from app.models import ParsedData
 from app.config import settings, get_ocr_client
