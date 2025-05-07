@@ -31,8 +31,16 @@ async def handle_free_edit_text(message: Message, state: FSMContext):
         message: Incoming Telegram message
         state: FSM context
     """
+    # Log update type for diagnostics
+    logger.info(f"[edit_flow] Received update type: {type(message).__name__}")
+    
+    # Проверка на наличие текстового поля и его содержимого
+    if not hasattr(message, 'text') or message.text is None:
+        logger.warning("[edit_flow] Received message without text field")
+        return
+        
     # Skip empty messages
-    if not message.text or not message.text.strip():
+    if not message.text.strip():
         logger.debug("[edit_flow] Skipping empty message")
         return
         
