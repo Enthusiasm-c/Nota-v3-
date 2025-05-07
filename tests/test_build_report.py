@@ -31,7 +31,7 @@ def test_build_report_with_escape_html():
     assert html.escape("Test #Supplier") in report
     assert "2025-05-04" in report
     # Проверяем summary
-    assert "❗" in report or "<b>Нет ошибок. Все позиции распознаны корректно.</b>" in report
+    assert "❗" in report or "<b>No errors. All items recognized correctly.</b>" in report
 
 
 def test_build_report_without_escape_html():
@@ -62,7 +62,7 @@ def test_build_report_without_escape_html():
     assert "Test #Supplier" in report
     assert "2025-05-04" in report
     # Проверяем summary
-    assert "❗" in report or "<b>Нет ошибок. Все позиции распознаны корректно.</b>" in report
+    assert "❗" in report or "<b>No errors. All items recognized correctly.</b>" in report
 
 
 def test_build_report_edge_cases():
@@ -82,4 +82,4 @@ def test_build_report_edge_cases():
     assert "<pre>" in report
 
     # Проверяем summary
-    assert "❗" in report or "<b>Нет ошибок. Все позиции распознаны корректно.</b>" in report
+    assert "❗" in report or "<b>No errors. All items recognized correctly.</b>" in report

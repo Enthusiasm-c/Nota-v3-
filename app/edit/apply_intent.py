@@ -191,14 +191,12 @@ def apply_intent(invoice: Union[dict, ParsedData], intent: dict) -> dict:
             # Обрабатываем поле name специальным образом для ручного редактирования
             if field == "name":
                 return set_name(invoice, line, value, manual_edit=True)
-            
-            # Для других полей просто обновляем значение
+            # For other fields, just update the value. Do not touch 'status'.
             if field in invoice["positions"][line]:
                 invoice["positions"][line][field] = value
-                
-                # Для ручного редактирования устанавливаем статус "manual"
-                # чтобы пользовательские правки не считались ошибками
-                invoice["positions"][line]["status"] = "manual"
+                # Only set status to 'manual' for name edits
+                if field == "name":
+                    invoice["positions"][line]["status"] = "manual"
                 logger.info(f"Line {line+1} field '{field}' manually edited by user: value = '{value}'")
                 
         return invoice

@@ -1,12 +1,12 @@
 import pytest
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from unittest.mock import AsyncMock, patch, MagicMock
+from aiogram.types import InlineKeyboardMarkup
+from unittest.mock import AsyncMock, MagicMock
 from app.keyboards import build_main_kb
 from app.fsm.states import EditFree
 
 
 def test_keyboard_two_buttons_with_errors():
-    """Тест: при наличии ошибок клавиатура содержит 2 кнопки (Редактировать, Отмена)"""
+    """Test: if there are errors, keyboard has 2 buttons (Edit, Cancel)"""
     kb = build_main_kb(has_errors=True)
     
     # Проверяем, что это InlineKeyboardMarkup
@@ -19,15 +19,15 @@ def test_keyboard_two_buttons_with_errors():
     assert len(kb.inline_keyboard[0]) == 2
     
     # Проверяем текст и callback_data кнопок
-    assert kb.inline_keyboard[0][0].text == "✏️ Редактировать"
+    assert kb.inline_keyboard[0][0].text == "✏️ Edit"
     assert kb.inline_keyboard[0][0].callback_data == "edit:free"
     
-    assert kb.inline_keyboard[0][1].text == "↩ Отмена"
+    assert kb.inline_keyboard[0][1].text == "✖ Cancel"
     assert kb.inline_keyboard[0][1].callback_data == "cancel:all"
 
 
 def test_keyboard_three_buttons_no_errors():
-    """Тест: при отсутствии ошибок клавиатура содержит 3 кнопки (Редактировать, Отмена, Подтвердить)"""
+    """Test: if there are no errors, keyboard has 3 buttons (Edit, Cancel, Confirm)"""
     kb = build_main_kb(has_errors=False)
     
     # Проверяем, что это InlineKeyboardMarkup
@@ -43,13 +43,13 @@ def test_keyboard_three_buttons_no_errors():
     assert len(kb.inline_keyboard[1]) == 1
     
     # Проверяем текст и callback_data кнопок
-    assert kb.inline_keyboard[0][0].text == "✏️ Редактировать"
+    assert kb.inline_keyboard[0][0].text == "✏️ Edit"
     assert kb.inline_keyboard[0][0].callback_data == "edit:free"
     
-    assert kb.inline_keyboard[0][1].text == "↩ Отмена"
+    assert kb.inline_keyboard[0][1].text == "✖ Cancel"
     assert kb.inline_keyboard[0][1].callback_data == "cancel:all"
     
-    assert kb.inline_keyboard[1][0].text == "✅ Подтвердить"
+    assert kb.inline_keyboard[1][0].text == "✅ Confirm"
     assert kb.inline_keyboard[1][0].callback_data == "confirm:invoice"
 
 

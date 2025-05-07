@@ -28,7 +28,7 @@ def test_parse_missing_action():
     cmds = parse_assistant_output(raw)
     assert len(cmds) == 1
     assert cmds[0].action == "clarification_needed"
-    assert "требуется уточнение" in cmds[0].error.lower() or raw in cmds[0].error  # Проверка на гибкое содержимое сообщения об ошибке
+    assert "clarification needed" in cmds[0].error.lower() or raw in cmds[0].error  # Проверка на гибкое содержимое сообщения об ошибке
 
 # --- RED TEST: Нет action в массиве ---
 def test_parse_missing_action_in_array():
@@ -36,7 +36,7 @@ def test_parse_missing_action_in_array():
     cmds = parse_assistant_output(raw)
     assert len(cmds) == 1
     assert cmds[0].action == "clarification_needed"
-    assert "удалось" in cmds[0].error  # Проверяем только часть сообщения, а не точное соответствие
+    assert "valid commands" in cmds[0].error  # Проверяем только часть сообщения, а не точное соответствие
 
 # --- TEST: Plain text (не JSON) ---
 def test_parse_plain_text():
@@ -52,4 +52,4 @@ def test_parse_row_less_than_one():
     cmds = parse_assistant_output(raw)
     assert len(cmds) == 1
     assert cmds[0].action == "clarification_needed"
-    assert "удалось" in cmds[0].error  # Проверяем только часть сообщения, а не точное соответствие
+    assert "valid commands" in cmds[0].error  # Проверяем только часть сообщения, а не точное соответствие

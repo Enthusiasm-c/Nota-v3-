@@ -24,61 +24,30 @@ router = Router()
 @router.message(EditFree.awaiting_input)
 async def handle_free_edit_text(message: Message, state: FSMContext):
     """
-    Handles free-form user input in edit mode.
-    Uses GPT-3.5-turbo for natural language parsing.
-    
-    Args:
-        message: Incoming Telegram message
-        state: FSM context
+    Обработчик свободного ввода пользователя для редактирования инвойса через ядро edit_core.
+    Оставляет только UI-логику, бизнес-логика вынесена в edit_core.py.
     """
-    # Log update type for diagnostics
     logger.info(f"[edit_flow] Received update type: {type(message).__name__}")
-    
-    # Проверка на наличие текстового поля и его содержимого
     if not hasattr(message, 'text') or message.text is None:
         logger.warning("[edit_flow] Received message without text field")
         return
-        
-    # Skip empty messages
     if not message.text.strip():
         logger.debug("[edit_flow] Skipping empty message")
         return
-        
     user_text = message.text.strip()
-    logger.info("[edit_flow] New user input", extra={"data": {"user_text": user_text}})
-    
-    # Get user language preference (default to English)
     data = await state.get_data()
     lang = data.get("lang", "en")
-    
-    # Handle cancel command
-    if user_text.lower() in ["cancel"]:
-        await message.answer(t("status.edit_cancelled", lang=lang))
-        await state.set_state(None)  # Return to initial state
-        return
-    
-    # Get data from state
-    logger.info("[edit_flow] State at handler start", extra={"data": data})
-    invoice = data.get("invoice")
-    
-    if not invoice:
-        logger.warning("[edit_flow] No invoice in user state")
-        await message.answer(t("status.session_expired", lang=lang))
-        await state.clear()
-        return
-    
-    # Send processing indicator
-    processing_msg = await message.answer(t("status.processing", lang=lang))
-    
-    try:
-        logger.info("[edit_flow] Sending user text to OpenAI", extra={"data": {"user_text": user_text}})
-        
-        # First, try direct pattern matching with improved parse_edit_command
-        from app.assistants.client import parse_edit_command
-        direct_actions = parse_edit_command(user_text, len(invoice.get("positions", [])) if invoice else 0)
-        logger.info(f"[edit_flow] Direct pattern matching found {len(direct_actions)} actions: {direct_actions}")
-        
-        # If direct pattern matching works, use those results
+
+    from app.handlers.edit_core import process_user_edit
+    processing_msg = None
+    async def send_processing(text):
+        nonlocal processing_msg
+        processing_msg = await message.answer(text)
+    async def send_result(text):
+        await message.answer(text, parse_mode="HTML")
+    async def send_error(text):
+        await message.answer(text)
+    async def fuzzy_suggester(message, state, name, idx, lang):
         if direct_actions and not any(action.get("error", "").startswith("invalid") for action in direct_actions):
             # Successfully parsed at least one action directly
             logger.info(f"[edit_flow] Using direct pattern matching results: {direct_actions}")
@@ -233,28 +202,25 @@ async def handle_free_edit_text(message: Message, state: FSMContext):
                 "set_unit": "unit",
                 "add_line": "new item"
             }
-            field = field_map.get(intent.get("action", ""), "value")
-            
-            success_message = t("status.edit_success", {"field": field}, lang=lang)
-            if not has_errors:
-                success_message += t("status.edit_success_confirm", {}, lang=lang)
-                
-            await message.answer(success_message)
-    
-        # Stay in the same state for continued editing
         await state.set_state(EditFree.awaiting_input)
-        
-    except Exception as e:
-        logger.error("[edit_flow] Critical error processing command", extra={"data": {"error": str(e)}})
-        
-        # Delete loading message
+
+    await process_user_edit(
+        message=message,
+        state=state,
+        user_text=user_text,
+        lang=lang,
+        send_processing=send_processing,
+        send_result=send_result,
+        send_error=send_error,
+        fuzzy_suggester=fuzzy_suggester,
+        edit_state=edit_state
+    )
+    if processing_msg:
         try:
             await processing_msg.delete()
         except Exception:
             pass
-            
-        await message.answer(t("status.service_unavailable", lang=lang))
-        # Don't clear state so user can try again
+    await state.set_state(EditFree.awaiting_input)
 
 # Handler for the "✏️ Edit" button click
 @router.callback_query(F.data == "edit:free")

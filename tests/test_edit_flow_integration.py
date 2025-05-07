@@ -24,61 +24,61 @@ def fake_redis():
     # --- Граничные условия ---
     # 1. Пустой инвойс: изменение даты и добавление строки
     (
-        "дата 2025-07-01; добавь Сахар 2 кг 150",
+        "date 2025-07-01; add Sugar 2 kg 150",
         {"date": "", "positions": []},
         {"date": "2025-07-01", "positions": [
-            {"name": "Сахар", "qty": "2", "unit": "кг", "price": "150"}
+            {"name": "Sugar", "qty": "2", "unit": "kg", "price": "150"}
         ]},
         [
             {"action": "edit_date", "value": "2025-07-01"},
-            {"action": "add_line", "value": "Сахар 2 кг 150"}
+            {"action": "add_line", "value": "Sugar 2 kg 150"}
         ]
     ),
     # 2. Большой инвойс (50 строк): изменение первой, последней и 25-й строки
     (
-        "строка 1 цена 101; строка 25 количество 25; строка 50 название Последний",
+        "row 1 price 101; row 25 qty 25; row 50 name Last",
         {"date": "2025-05-05", "positions": [
-            *[{"name": f"Товар {i+1}", "qty": f"{i+1}", "unit": "шт", "price": f"{i+1}0"} for i in range(50)]
+            *[{"name": f"Item {i+1}", "qty": f"{i+1}", "unit": "pcs", "price": f"{i+1}0"} for i in range(50)]
         ]},
         {"date": "2025-05-05", "positions": [
-            {"name": "Товар 1", "qty": "1", "unit": "шт", "price": "101"},
-            *[{"name": f"Товар {i+2}", "qty": f"{i+2}", "unit": "шт", "price": f"{i+2}0"} for i in range(23)],
-            {"name": "Товар 25", "qty": "25", "unit": "шт", "price": "250"},
-            *[{"name": f"Товар {i+26}", "qty": f"{i+26}", "unit": "шт", "price": f"{i+26}0"} for i in range(24)],
-            {"name": "Последний", "qty": "50", "unit": "шт", "price": "500"}
+            {"name": "Item 1", "qty": "1", "unit": "pcs", "price": "101"},
+            *[{"name": f"Item {i+2}", "qty": f"{i+2}", "unit": "pcs", "price": f"{i+2}0"} for i in range(23)],
+            {"name": "Item 25", "qty": "25", "unit": "pcs", "price": "250"},
+            *[{"name": f"Item {i+26}", "qty": f"{i+26}", "unit": "pcs", "price": f"{i+26}0"} for i in range(24)],
+            {"name": "Last", "qty": "50", "unit": "pcs", "price": "500", "status": "manual"}
         ]},
         [
             {"action": "edit_line_field", "line": 1, "field": "price", "value": "101"},
             {"action": "edit_line_field", "line": 25, "field": "qty", "value": "25"},
-            {"action": "edit_line_field", "line": 50, "field": "name", "value": "Последний"}
+            {"action": "edit_line_field", "line": 50, "field": "name", "value": "Last"}
         ]
     ),
     # 3. Изменение всех поддерживаемых полей в одной строке
     (
-        "строка 1 название Сыр; строка 1 количество 7; строка 1 цена 350; строка 1 ед кг",
+        "row 1 name Cheese; row 1 qty 7; row 1 price 350; row 1 unit kg",
         {"date": "2025-05-05", "positions": [
-            {"name": "Молоко", "qty": "2", "unit": "л", "price": "100"}
+            {"name": "Milk", "qty": "2", "unit": "l", "price": "100"}
         ]},
         {"date": "2025-05-05", "positions": [
-            {"name": "Сыр", "qty": "7", "unit": "кг", "price": "350"}
+            {"name": "Cheese", "qty": "7", "unit": "kg", "price": "350", "status": "manual"}
         ]},
         [
-            {"action": "edit_line_field", "line": 1, "field": "name", "value": "Сыр"},
+            {"action": "edit_line_field", "line": 1, "field": "name", "value": "Cheese"},
             {"action": "edit_line_field", "line": 1, "field": "qty", "value": "7"},
             {"action": "edit_line_field", "line": 1, "field": "price", "value": "350"},
-            {"action": "edit_line_field", "line": 1, "field": "unit", "value": "кг"}
+            {"action": "edit_line_field", "line": 1, "field": "unit", "value": "kg"}
         ]
     ),
     # --- Существующие тесты ниже ---
     (
-        "строка 1 цена 100; строка 2 количество 5",
+        "row 1 price 100; row 2 qty 5",
         {"date": "2025-05-05", "positions": [
-            {"name": "Молоко", "qty": "2", "unit": "л", "price": "10"},
-            {"name": "Хлеб", "qty": "1", "unit": "шт", "price": "50"}
+            {"name": "Milk", "qty": "2", "unit": "l", "price": "10"},
+            {"name": "Bread", "qty": "1", "unit": "pcs", "price": "50"}
         ]},
         {"date": "2025-05-05", "positions": [
-            {"name": "Молоко", "qty": "2", "unit": "л", "price": "100"},
-            {"name": "Хлеб", "qty": "5", "unit": "шт", "price": "50"}
+            {"name": "Milk", "qty": "2", "unit": "l", "price": "100"},
+            {"name": "Bread", "qty": "5", "unit": "pcs", "price": "50"}
         ]},
         [
             {"action": "edit_line_field", "line": 1, "field": "price", "value": "100"},
@@ -87,71 +87,71 @@ def fake_redis():
     ),
     # Изменение всех полей в одной строке
     (
-        "строка 1 название Яблоки; строка 1 количество 10; строка 1 цена 200; строка 1 ед кг",
+        "row 1 name Apples; row 1 qty 10; row 1 price 200; row 1 unit kg",
         {"date": "2025-05-05", "positions": [
-            {"name": "Молоко", "qty": "2", "unit": "л", "price": "100"}
+            {"name": "Milk", "qty": "2", "unit": "l", "price": "100"}
         ]},
         {"date": "2025-05-05", "positions": [
-            {"name": "Яблоки", "qty": "10", "unit": "кг", "price": "200"}
+            {"name": "Apples", "qty": "10", "unit": "kg", "price": "200", "status": "manual"}
         ]},
         [
-            {"action": "edit_line_field", "line": 1, "field": "name", "value": "Яблоки"},
+            {"action": "edit_line_field", "line": 1, "field": "name", "value": "Apples"},
             {"action": "edit_line_field", "line": 1, "field": "qty", "value": "10"},
             {"action": "edit_line_field", "line": 1, "field": "price", "value": "200"},
-            {"action": "edit_line_field", "line": 1, "field": "unit", "value": "кг"}
+            {"action": "edit_line_field", "line": 1, "field": "unit", "value": "kg"}
         ]
     ),
     # Добавление нескольких строк одной командой
     (
-        "добавь Яблоки 3 кг 300; добавь Груши 2 кг 400",
+        "add Apples 3 kg 300; add Pears 2 kg 400",
         {"date": "2025-05-05", "positions": []},
         {"date": "2025-05-05", "positions": [
-            {"name": "Яблоки", "qty": "3", "unit": "кг", "price": "300"},
-            {"name": "Груши", "qty": "2", "unit": "кг", "price": "400"}
+            {"name": "Apples", "qty": "3", "unit": "kg", "price": "300"},
+            {"name": "Pears", "qty": "2", "unit": "kg", "price": "400"}
         ]},
         [
-            {"action": "add_line", "value": "Яблоки 3 кг 300"},
-            {"action": "add_line", "value": "Груши 2 кг 400"}
+            {"action": "add_line", "value": "Apples 3 kg 300"},
+            {"action": "add_line", "value": "Pears 2 kg 400"}
         ]
     ),
     # Комбинация изменения даты и добавления строк
     (
-        "дата 2025-06-01; добавь Яблоки 2 кг 100",
+        "date 2025-06-01; add Apples 2 kg 100",
         {"date": "2025-05-05", "positions": []},
         {"date": "2025-06-01", "positions": [
-            {"name": "Яблоки", "qty": "2", "unit": "кг", "price": "100"}
+            {"name": "Apples", "qty": "2", "unit": "kg", "price": "100"}
         ]},
         [
             {"action": "edit_date", "value": "2025-06-01"},
-            {"action": "add_line", "value": "Яблоки 2 кг 100"}
+            {"action": "add_line", "value": "Apples 2 kg 100"}
         ]
     ),
     # Оригинальные тесты ниже
     (
-        "строка 1 цена 12345",
+        "row 1 price 12345",
         {"date": "2025-05-05", "positions": [
-            {"name": "Молоко", "qty": "2", "unit": "л", "price": "100"},
-            {"name": "Хлеб", "qty": "1", "unit": "шт", "price": "50"}
+            {"name": "Milk", "qty": "2", "unit": "l", "price": "100"},
+            {"name": "Bread", "qty": "1", "unit": "pcs", "price": "50"}
         ]},
         {"date": "2025-05-05", "positions": [
-            {"name": "Молоко", "qty": "2", "unit": "л", "price": "12345"},
-            {"name": "Хлеб", "qty": "1", "unit": "шт", "price": "50"}
+            {"name": "Milk", "qty": "2", "unit": "l", "price": "12345"},
+            {"name": "Bread", "qty": "1", "unit": "pcs", "price": "50"}
         ]},
         {"action": "edit_line_field", "line": 1, "field": "price", "value": "12345"}
     ),
     (
-        "дата 2025-06-01",
+        "date 2025-06-01",
         {"date": "2025-05-05", "positions": []},
         {"date": "2025-06-01", "positions": []},
         {"action": "edit_date", "value": "2025-06-01"}
     ),
     (
-        "добавь Яблоки 3 кг 300",
+        "add Apples 3 kg 300",
         {"date": "2025-05-05", "positions": []},
         {"date": "2025-05-05", "positions": [
-            {"name": "Яблоки", "qty": "3", "unit": "кг", "price": "300"}
+            {"name": "Apples", "qty": "3", "unit": "kg", "price": "300"}
         ]},
-        {"action": "add_line", "value": "Яблоки 3 кг 300"}
+        {"action": "add_line", "value": "Apples 3 kg 300"}
     ),
 ])
 def test_edit_flow_integration(user_input, invoice_in, expected_invoice, expected_intent):
