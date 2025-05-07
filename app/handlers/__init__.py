@@ -1,5 +1,5 @@
 """
-Модуль обработчиков для Telegram Bot.
+Handlers module for Telegram Bot.
 """
 
 from aiogram import Router

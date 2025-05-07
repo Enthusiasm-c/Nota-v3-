@@ -220,7 +220,7 @@ def call_openai_ocr(image_bytes: bytes) -> ParsedData:
     message = rsp.choices[0].message
     data = _sanitize_response(message)
 
-    # Обработка числовых данных
+    # Process numeric data
     for p in data.get("positions", []):
         p["price"] = _clean_num(p.get("price"))
         p["price_per_unit"] = _clean_num(p.get("price_per_unit"))
@@ -243,7 +243,7 @@ def call_openai_ocr(image_bytes: bytes) -> ParsedData:
         data["supplier"] = None
         data["supplier_status"] = "unknown"
 
-    # Валидация модели и возврат результата
+    # Validate model and return result
     try:
         parsed_data = ParsedData.model_validate(data)
         elapsed = time.time() - t0
@@ -255,7 +255,7 @@ def call_openai_ocr(image_bytes: bytes) -> ParsedData:
         )
         return parsed_data
     except Exception as validation_err:
-        # Детальное логирование ошибок валидации
+        # Detailed logging of validation errors
         logging.error(f"Model validation error: {validation_err}")
         raise RuntimeError(
             (

@@ -86,8 +86,9 @@ async def handle_free_edit_text(message: Message, state: FSMContext):
         # Apply intent to invoice
         new_invoice = apply_intent(invoice, intent)
         
-        # Recalculate errors and update report
-        products = load_products()
+        # Recalculate errors and update report with cached products
+        from app.utils.cached_loader import cached_load_products
+        products = cached_load_products("data/base_products.csv", load_products)
         match_results = match_positions(new_invoice["positions"], products)
         text, has_errors = report.build_report(new_invoice, match_results)
     

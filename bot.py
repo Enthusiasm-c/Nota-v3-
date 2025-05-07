@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import re
+import os
 from app.formatters.report import build_report
 import atexit
 import uuid
@@ -34,25 +35,14 @@ from app.config import settings
 # Импортируем обработчики для свободного редактирования
 from app.handlers.edit_flow import router as edit_flow_router
 
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,  # Default to INFO level
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
-logger = logging.getLogger(__name__)
+# Import optimized logging configuration
+from app.utils.logger_config import configure_logging, get_buffered_logger
 
-# Set logging levels for different modules
-logging.getLogger("aiogram").setLevel(
-    logging.DEBUG
-)  # Повысим уровень логов aiogram для отладки
-logging.getLogger("aiogram.event").setLevel(logging.DEBUG)  # Логи событий aiogram
-logging.getLogger("httpx").setLevel(logging.WARNING)  # Reduce httpx logs
-logging.getLogger("aiohttp").setLevel(logging.WARNING)  # Reduce aiohttp logs
-logging.getLogger("openai").setLevel(logging.WARNING)  # Reduce OpenAI client logs
-logging.getLogger("bot").setLevel(logging.DEBUG)  # Bot logs at DEBUG level для отладки
-logging.getLogger("urllib3").setLevel(logging.WARNING)  # Reduce urllib3 logs
-logging.getLogger("asyncio").setLevel(logging.WARNING)  # Reduce asyncio logs
-logging.getLogger("matplotlib").setLevel(logging.WARNING)  # Reduce matplotlib logs
+# Configure logging with optimized settings
+configure_logging(environment=os.getenv("ENV", "development"), log_dir="logs")
+
+# Get buffered logger for this module
+logger = get_buffered_logger(__name__)
 
 # Create tmp dir if not exists
 TMP_DIR = Path("tmp")
@@ -99,12 +89,14 @@ def is_inline_kb(kb):
     return kb is None or isinstance(kb, InlineKeyboardMarkup)
 
 
+# Import the optimized version of safe_edit
+from app.utils.optimized_safe_edit import optimized_safe_edit
+
 async def safe_edit(bot, chat_id, msg_id, text, kb=None, **kwargs):
     """
     Безопасное редактирование сообщения с обработкой ошибок форматирования.
-    В случае ошибки с parse_mode пытается отправить сообщение без форматирования.
-    Если редактирование не удаётся - отправляет новое сообщение.
-
+    Использует оптимизированную реализацию с кэшированием и обработкой ошибок.
+    
     Args:
         bot: Экземпляр бота
         chat_id: ID чата
@@ -113,127 +105,16 @@ async def safe_edit(bot, chat_id, msg_id, text, kb=None, **kwargs):
         kb: Клавиатура (опционально)
         **kwargs: Дополнительные параметры для edit_message_text
     """
-    if not is_inline_kb(kb):
-        kb = None
-
-    parse_mode = kwargs.get("parse_mode")
-    logger = logging.getLogger("bot")
-
     # Не экранируем HTML-теги, если используется HTML режим
     # Экранируем только для Markdown
+    parse_mode = kwargs.get("parse_mode")
     if parse_mode in ("MarkdownV2", ParseMode.MARKDOWN_V2) and not (
         text and text.startswith("\\")
     ):
         text = escape_html(text)
-
-    logger.debug("OUT >>> %s", text[:200])
     
-    # Попытка 1: Стандартное редактирование с форматированием
-    try:
-        await bot.edit_message_text(
-            chat_id=chat_id, message_id=msg_id, text=text, reply_markup=kb, **kwargs
-        )
-        logger.info(f"Successfully edited message {msg_id}")
-        return True
-    except Exception as e:
-        error_msg = str(e)
-        logger.warning(f"Error editing message: {type(e).__name__} - {error_msg} - in chat_id={chat_id}, msg_id={msg_id}")
-        
-        # Обработка случая с не найденным сообщением - переходим сразу к отправке нового
-        if isinstance(e, TelegramBadRequest) and "message to edit not found" in error_msg:
-            logger.info(f"Message {msg_id} not found, will send new message")
-            # Сразу перейдем к отправке нового сообщения (код ниже)
-            pass
-        # Попытка 2: Если проблема с форматированием, пробуем без него
-        elif isinstance(e, TelegramBadRequest) and (
-            "can't parse entities" in error_msg or "parse_mode" in error_msg
-        ):
-            logger.info("Formatting failed, retrying without parse_mode")
-            try:
-                clean_kwargs = {k: v for k, v in kwargs.items() if k != "parse_mode"}
-                await bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=msg_id,
-                    text=text,
-                    reply_markup=kb,
-                    **clean_kwargs,
-                )
-                logger.info("Message sent without formatting")
-                return True
-            except Exception as retry_error:
-                logger.warning(f"Second attempt failed: {type(retry_error).__name__}")
-                
-                # Попытка 3: Удаляем HTML-теги
-                try:
-                    clean_text = re.sub(r'<[^>]+>', '', text)
-                    await bot.edit_message_text(
-                        chat_id=chat_id,
-                        message_id=msg_id,
-                        text=clean_text,
-                        reply_markup=kb,
-                        parse_mode=None,
-                    )
-                    logger.info("Message edited with stripped HTML tags")
-                    return True
-                except Exception as html_error:
-                    logger.warning(f"Third attempt (HTML strip) failed: {type(html_error).__name__}")
-                    
-                    # Попытка 4: Очищаем от всех спецсимволов
-                    try:
-                        ultra_clean_text = re.sub(r"[^\w\s]", " ", text)
-                        if len(ultra_clean_text) < 10:  # Если текст стал слишком коротким
-                            ultra_clean_text = "Failed to render message with special characters. Please try again."
-                        
-                        await bot.edit_message_text(
-                            chat_id=chat_id,
-                            message_id=msg_id,
-                            text=ultra_clean_text,
-                            reply_markup=kb,
-                            parse_mode=None,
-                        )
-                        logger.info("Sent clean fallback text message")
-                        return True
-                    except Exception as last_edit_error:
-                        logger.error(f"All edit attempts failed: {type(last_edit_error).__name__}")
-        
-        # Попытка 5: Если все способы редактирования не сработали - отправляем новое сообщение
-        try:
-            # Сначала пробуем с форматированием
-            # Храним ID новых сообщений, чтобы избежать дублирования
-            from datetime import datetime
-            msg_key = f"new_msg:{chat_id}:{datetime.now().timestamp()}"
-            
-            result = await bot.send_message(
-                chat_id=chat_id,
-                text=text,
-                reply_markup=kb,
-                **kwargs
-            )
-            logger.info(f"Sent new message instead of editing: {result.message_id}")
-            
-            # Добавляем сообщение в кэш, чтобы избежать дублирования
-            _edit_cache[msg_key] = {"sent": True, "msg_id": result.message_id}
-            return True
-        except Exception as send_error:
-            logger.warning(f"Failed to send formatted message: {type(send_error).__name__}")
-            
-            # Если с форматированием не вышло - пробуем без него
-            try:
-                clean_kwargs = {k: v for k, v in kwargs.items() if k != "parse_mode"}
-                result = await bot.send_message(
-                    chat_id=chat_id,
-                    text=text,
-                    reply_markup=kb,
-                    **clean_kwargs
-                )
-                logger.info(f"Sent new plain message instead of editing: {result.message_id}")
-                return True
-            except Exception as final_error:
-                logger.error(f"All message attempts failed: {type(final_error).__name__}")
-                return False
-        
-        logger.error(f"Unexpected error editing message: {type(e).__name__}")
-        return False
+    # Вызываем оптимизированную версию функции
+    return await optimized_safe_edit(bot, chat_id, msg_id, text, kb, **kwargs)
 
 
 from app.utils.api_decorators import with_async_retry_backoff, ErrorType
@@ -309,10 +190,30 @@ async def ask_assistant(thread_id, message):
         await asyncio.sleep(1)  # Poll every second
 
 
+async def cb_select_language(callback: CallbackQuery, state: FSMContext):
+    """Обработчик выбора языка"""
+    lang = callback.data.split(":")[1]
+    
+    # Сохраняем язык в состоянии пользователя
+    await state.update_data(lang=lang)
+    
+    # Переходим в главное меню
+    await state.set_state(NotaStates.main_menu)
+    
+    # Отправляем приветствие на выбранном языке
+    from app.i18n import t
+    await callback.message.edit_text(
+        t("status.welcome", lang=lang),
+        reply_markup=kb_main(lang)
+    )
+    
+    await callback.answer()
+
 def register_handlers(dp, bot=None):
     dp["__unhandled__"] = _dummy
     logging.getLogger("aiogram.event").setLevel(logging.DEBUG)
     dp.message.register(cmd_start, CommandStart())
+    dp.callback_query.register(cb_select_language, F.data.startswith("lang:"))  # Добавлен обработчик выбора языка
     dp.callback_query.register(cb_new_invoice, F.data == "action:new")
     # dp.message.register(photo_handler, F.photo)  # Заменено на incremental_photo_handler
     dp.message.register(handle_nlu_text, NotaStates.editing)
@@ -351,16 +252,18 @@ def register_handlers(dp, bot=None):
         dp.include_router(admin_router)
         dp._registered_routers.add('admin_router')
     
-    # Закоментированы в пользу новой реализации через GPT
-    # dp.message.register(handle_free_edit_text, EditFree.awaiting_input)
-    # dp.callback_query.register(confirm_fuzzy_name, F.data.startswith("fuzzy:confirm:"))
-    # dp.callback_query.register(reject_fuzzy_name, F.data.startswith("fuzzy:reject:"))
+    # Включаем обработчики fuzzy matching (ранее были отключены)
+    # dp.message.register(handle_free_edit_text, EditFree.awaiting_input)  # Остается закомментированным
+    dp.callback_query.register(confirm_fuzzy_name, F.data.startswith("fuzzy:confirm:"))
+    dp.callback_query.register(reject_fuzzy_name, F.data.startswith("fuzzy:reject:"))
 
 
 # Remove any handler registration from the module/global scope.
 
 __all__ = ["create_bot_and_dispatcher", "register_handlers"]
 
+
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 async def cmd_start(message, state: FSMContext):
     # Получаем текущие данные состояния пользователя
@@ -381,10 +284,18 @@ async def cmd_start(message, state: FSMContext):
         await state.update_data(assistant_thread_id=thread.id)
         logger.info(f"Created new assistant thread for user {message.from_user.id}")
 
+    # Создаем клавиатуру выбора языка
+    lang_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="🇬🇧 English", callback_data="lang:en"),
+            InlineKeyboardButton(text="🇷🇺 Русский", callback_data="lang:ru")
+        ]
+    ])
+    
     await state.set_state(NotaStates.lang)
     await message.answer(
-        "Hi! I'm Nota AI Bot. Choose interface language.",
-        reply_markup=kb_main(),
+        "Hi! I'm Nota AI Bot. Choose interface language.\n\nПривет! Я Nota AI Бот. Выберите язык интерфейса.",
+        reply_markup=lang_keyboard
     )
 
 
@@ -868,18 +779,23 @@ async def cb_edit_line(callback: CallbackQuery, state: FSMContext):
     # Переходим в режим ожидания ввода свободной команды редактирования
     await state.set_state(EditFree.awaiting_input)
     
-    # Отправляем сообщение с инструкцией
-    await callback.message.answer(
-        "Что нужно отредактировать? Примеры команд:\n\n"
-        "• <i>дата 26 апреля</i>\n"
-        "• <i>строка 2 name томаты</i>\n"
-        "• <i>строка 3 цена 90000</i>\n"
-        "• <i>строка 1 qty 5</i>\n"
-        "• <i>строка 4 unit kg</i>\n"
-        "• <i>удали 3</i> — удалить строку\n\n"
-        "Введите команду или <i>отмена</i> для возврата.",
-        parse_mode=ParseMode.HTML
-    )
+    # Отправляем сообщение с инструкцией (используя i18n)
+    # Получаем язык пользователя из state
+    data = await state.get_data()
+    lang = data.get("lang", "en")
+    
+    # Делегируем обработку в edit_flow если возможно
+    try:
+        from app.handlers.edit_flow import handle_edit_free
+        # Используем улучшенный обработчик
+        await handle_edit_free(callback, state)
+    except (ImportError, AttributeError):
+        # Если модуль недоступен, используем старый подход
+        from app.i18n import t
+        await callback.message.answer(
+            t("example.edit_prompt", lang=lang),
+            parse_mode=ParseMode.HTML
+        )
     
     # Отвечаем на callback
     await callback.answer()
@@ -922,10 +838,15 @@ async def cb_field(callback: CallbackQuery, state: FSMContext):
         f"BUGFIX: Field edit callback received for field {field}, idx {idx}, message_id {callback.message.message_id}"
     )
 
-    # Запрашиваем новое значение с force_reply
+    # Получаем пользовательский язык
+    data = await state.get_data()
+    lang = data.get("lang", "en")
+    
+    # Запрашиваем новое значение с force_reply, используя i18n
+    from app.i18n import t
     reply_msg = await callback.message.bot.send_message(
         callback.from_user.id,
-        f"Введите новое значение для {field} (строка {idx+1}):",
+        t("example.enter_field_value", {"field": field, "line": idx+1}, lang=lang),
         reply_markup={"force_reply": True},
         parse_mode=ParseMode.HTML
     )
@@ -1078,7 +999,10 @@ async def handle_field_edit(message, state: FSMContext):
                          str(e), len(formatted_report), formatted_report[:200])
             # Пытаемся отправить сообщение без форматирования и без клавиатуры
             try:
-                simple_msg = f"✅ Редактирование успешно. Поле '{field}' обновлено на '{text}'."
+                from app.i18n import t
+                data = await state.get_data()
+                lang = data.get("lang", "en")
+                simple_msg = t("example.edit_field_success", {"field": field, "value": text, "line": idx+1}, lang=lang)
                 result = await message.answer(simple_msg, parse_mode=None)
                 logger.info("Sent fallback simple message")
                 return  # Выходим досрочно
@@ -1099,9 +1023,12 @@ async def handle_field_edit(message, state: FSMContext):
             logger.debug(f"BUGFIX: Created new report with message_id {new_msg_id}")
         except Exception as e:
             logger.error(f"BUGFIX: Error sending new report: {str(e)}")
-            # Отправляем простое подтверждение
+            # Отправляем простое подтверждение с использованием i18n
+            from app.i18n import t
+            data = await state.get_data()
+            lang = data.get("lang", "en")
             await message.answer(
-                f"✅ Поле '{field}' обновлено на '{text}'. Позиция {idx+1} изменена.",
+                t("example.edit_field_success", {"field": field, "value": text, "line": idx+1}, lang=lang),
                 parse_mode=None,
             )
 
@@ -1123,22 +1050,11 @@ async def handle_field_edit(message, state: FSMContext):
 
 
 async def cb_confirm(callback: CallbackQuery, state: FSMContext):
-    # Вместо редактирования - отправляем новое сообщение
-    chat_id = callback.message.chat.id
-
-    # Логируем для отладки
-    logger.debug(f"BUGFIX: Confirming invoice in chat {chat_id}")
-
-    # Отправляем сообщение о подтверждении
-    await callback.message.answer(
-        "✅ Invoice #123 saved to Syrve. Thank you!", reply_markup=kb_main()
-    )
-
-    # Обновляем состояние пользователя
-    await state.set_state(NotaStates.main_menu)
-
-    # Отвечаем на callback, чтобы убрать индикатор загрузки
-    await callback.answer()
+    # Делегируем обработку в специализированный обработчик
+    from app.handlers.syrve_handler import handle_invoice_confirm
+    
+    # Используем реальную интеграцию с Syrve
+    await handle_invoice_confirm(callback, state)
 
 
 async def help_command(message, state: FSMContext):

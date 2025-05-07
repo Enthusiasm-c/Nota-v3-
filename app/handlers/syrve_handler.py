@@ -67,10 +67,15 @@ async def handle_invoice_confirm(callback: CallbackQuery, state: FSMContext):
         # Prepare data for Syrve XML generation
         syrve_data = prepare_invoice_data(invoice, match_results, invoice_id)
         
-        # Generate XML
-        from openai import AsyncOpenAI
-        openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_OCR_KEY", getattr(settings, "OPENAI_OCR_KEY", "")))
+        # Generate XML with OpenAI using global client if available
+        from app.config import get_ocr_client
+        openai_client = get_ocr_client() or AsyncOpenAI(api_key=os.getenv("OPENAI_OCR_KEY", getattr(settings, "OPENAI_OCR_KEY", "")))
+        
+        # Timer for XML generation to track performance
+        start_time = datetime.now()
         xml = await generate_invoice_xml(syrve_data, openai_client)
+        generation_time = (datetime.now() - start_time).total_seconds()
+        logger.info(f"XML generation took {generation_time:.2f} seconds")
         
         # Authenticate with Syrve
         auth_token = await syrve_client.auth()
@@ -81,9 +86,14 @@ async def handle_invoice_confirm(callback: CallbackQuery, state: FSMContext):
         # Process result
         if result.get("valid", False):
             # Success - update UI
-            await processing_msg.edit_text(
+            # Use optimized safe edit instead of direct edit
+            from app.utils.optimized_safe_edit import optimized_safe_edit
+            await optimized_safe_edit(
+                callback.bot,
+                callback.message.chat.id,
+                processing_msg.message_id,
                 t("status.syrve_success", {"id": invoice_id}, lang=lang),
-                reply_markup=kb_main(lang)
+                kb=kb_main(lang)
             )
             
             # Track successful upload
@@ -103,7 +113,9 @@ async def handle_invoice_confirm(callback: CallbackQuery, state: FSMContext):
                 error_text = t("error.syrve_duplicate", lang=lang)
             else:
                 # Detailed error from Syrve
-                error_text = t("error.syrve_error", {"message": error_msg}, lang=lang)
+                # Limit error message length to 50 chars to prevent overly long messages
+                short_error = error_msg[:50] + ("..." if len(error_msg) > 50 else "")
+                error_text = t("error.syrve_error", {"message": short_error}, lang=lang)
                 
                 # For 500 errors, log to admin chat
                 if status == 500:

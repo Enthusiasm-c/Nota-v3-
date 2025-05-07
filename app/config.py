@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     OPENAI_ASSISTANT_ID: str = os.getenv("OPENAI_ASSISTANT_ID", "")
     
     # Image preprocessing configuration
-    USE_IMAGE_PREPROCESSING: bool = True  # Set to False to disable image preprocessing
+    USE_IMAGE_PREPROCESSING: bool = False  # True=enable, False=disable image preprocessing
 
     # Business logic configuration
     OWN_COMPANY_ALIASES: list[str] = ["Bali Veg Ltd", "Nota AI Cafe"]
@@ -35,18 +35,18 @@ class Settings(BaseSettings):
 settings = Settings()
 
 
-# Кэш для клиентов OpenAI - инициализируются при первом использовании
+# Cache for OpenAI clients - initialized on first use
 _ocr_client = None
 _chat_client = None
 
 
 def get_ocr_client():
     """
-    Получает клиент OpenAI для OCR с ленивой инициализацией.
-    Инициализирует клиент только при первом вызове.
+    Get OpenAI client for OCR with lazy initialization.
+    Initializes client only on first call.
 
     Returns:
-        openai.OpenAI: Инициализированный клиент или None при ошибке
+        openai.OpenAI: Initialized client or None on error
     """
     global _ocr_client
 
@@ -72,11 +72,11 @@ def get_ocr_client():
 
 def get_chat_client():
     """
-    Получает клиент OpenAI для чата с ленивой инициализацией.
-    Инициализирует клиент только при первом вызове.
+    Get OpenAI client for chat with lazy initialization.
+    Initializes client only on first call.
 
     Returns:
-        openai.OpenAI: Инициализированный клиент или None при ошибке
+        openai.OpenAI: Initialized client or None on error
     """
     global _chat_client
 

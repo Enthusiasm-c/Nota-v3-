@@ -207,6 +207,9 @@ class SyrveClient:
                 "errorMessage": f"Internal error: {str(e)}"
             }
 
+# Cache for Syrve prompt to avoid repeated file reads
+_syrve_prompt_cache = ""
+
 async def generate_invoice_xml(invoice_data: Dict[str, Any], openai_client) -> str:
     """
     Generate Syrve-compatible XML from invoice data using OpenAI.
@@ -218,26 +221,35 @@ async def generate_invoice_xml(invoice_data: Dict[str, Any], openai_client) -> s
     Returns:
         XML string for Syrve
     """
+    global _syrve_prompt_cache
+    
     try:
-        # Read the prompt template
-        with open(SYRVE_PROMPT_PATH, "r", encoding="utf-8") as f:
-            prompt = f.read()
+        # Read the prompt template from cache or file
+        if not _syrve_prompt_cache:
+            try:
+                with open(SYRVE_PROMPT_PATH, "r", encoding="utf-8") as f:
+                    _syrve_prompt_cache = f.read()
+                    logger.debug("Loaded Syrve prompt from file")
+            except Exception as e:
+                logger.error(f"Error loading Syrve prompt: {e}")
+                _syrve_prompt_cache = "Generate a valid Syrve XML document for the provided invoice data."
         
         # Convert invoice data to JSON string
         invoice_json = json.dumps(invoice_data, indent=2)
         
         # Create messages for the API call
         messages = [
-            {"role": "system", "content": prompt},
+            {"role": "system", "content": _syrve_prompt_cache},
             {"role": "user", "content": f"Generate Syrve XML for this invoice:\n\n```json\n{invoice_json}\n```"}
         ]
         
-        # Call OpenAI API
+        # Call OpenAI API with optimized parameters
         response = await openai_client.chat.completions.acreate(
-            model="gpt-4o",
+            model="gpt-4o",  # Using the latest model for best results
             messages=messages,
-            temperature=0.1,
-            max_tokens=1500
+            temperature=0.1,  # Low temperature for deterministic output
+            max_tokens=1500,  # Limit token usage
+            timeout=45.0     # Set explicit timeout
         )
         
         # Extract XML from response
@@ -246,10 +258,19 @@ async def generate_invoice_xml(invoice_data: Dict[str, Any], openai_client) -> s
         # Remove code block markers if present
         if xml_content.startswith("```xml"):
             xml_content = xml_content.split("```xml", 1)[1]
+        elif xml_content.startswith("```"):
+            xml_content = xml_content.split("```", 1)[1]
+            
         if xml_content.endswith("```"):
             xml_content = xml_content.rsplit("```", 1)[0]
             
         xml_content = xml_content.strip()
+        
+        # Validate basic XML structure
+        if not xml_content.startswith("<?xml") and not xml_content.startswith("<"):
+            logger.warning("Generated XML is missing XML declaration or root element")
+            # Try to fix by adding XML declaration
+            xml_content = f"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n{xml_content}"
         
         logger.info("Successfully generated Syrve XML")
         return xml_content

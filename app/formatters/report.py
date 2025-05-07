@@ -1,4 +1,4 @@
-from html import escape  # Для экранирования только данных, не тегов
+from html import escape  # For escaping data only, not HTML tags
 import logging
 logging.getLogger("nota.report").debug("escape func = %s", escape)
 from decimal import Decimal
@@ -21,13 +21,13 @@ def paginate_rows(rows, page_size=40):
 
 def build_header(supplier, date):
     """
-    Формирует HTML-заголовок отчета с информацией о поставщике и дате инвойса.
-    Использует escape для безопасного включения данных в HTML.
+    Creates HTML header for the report with supplier and invoice date information.
+    Uses escape for safely including data in HTML.
     
-    Важно: Telegram поддерживает только ограниченное подмножество HTML-тегов.
-    Вместо <br> используем символ новой строки \n.
+    Important: Telegram only supports a limited subset of HTML tags.
+    Instead of <br>, we use newline character \n.
     """
-    # Явно импортируем escape для надежности
+    # Explicitly import escape for reliability
     from html import escape as html_escape
     return (
         f"<b>Supplier:</b> {html_escape(str(supplier))}\n"

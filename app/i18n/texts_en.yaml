@@ -1,4 +1,5 @@
 status:
+  welcome: "👋 Welcome to Nota AI Bot! I'm here to help you process your invoices."
   receiving_image: "📸 Receiving image..."
   image_received: "✅ Image received"
   preprocessing_image: "🖼️ Preprocessing image..."
@@ -17,6 +18,8 @@ status:
   processing: "⏳ Processing your request..."
   service_unavailable: "Sorry, the service is temporarily unavailable. Please try again."
   applying_changes: "🔄 Applying changes..."
+  sending_to_syrve: "📤 Sending invoice to Syrve..."
+  syrve_success: "✅ Invoice #{id} successfully uploaded to Syrve!"
 
 error:
   photo_processing: "⚠️ An error occurred while processing the photo. Please try again or contact the administrator."
@@ -36,6 +39,8 @@ error:
 
 example:
   edit_prompt: "What would you like to edit? Examples:\n\n• <i>date April 26</i>\n• <i>line 2 name tomatoes</i>\n• <i>line 3 price 90000</i>\n• <i>line 1 qty 5</i>\n• <i>line 4 unit kg</i>\n• <i>delete 3</i> — delete line\n\nEnter command or <i>cancel</i> to go back."
+  enter_field_value: "Enter new value for {field} (line {line}):"
+  edit_field_success: "✅ Field '{field}' updated to '{value}'. Line {line} changed."
 
 buttons:
   edit: "Edit"

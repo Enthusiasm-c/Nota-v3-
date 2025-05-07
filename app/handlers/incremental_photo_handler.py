@@ -135,8 +135,9 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         await ui.append(t("status.matching_items", lang=lang) or "🔄 Matching items...")
         await ui.start_spinner()
         
-        # Load product database
-        products = data_loader.load_products("data/base_products.csv")
+        # Load product database with caching
+        from app.utils.cached_loader import cached_load_products
+        products = cached_load_products("data/base_products.csv", data_loader.load_products)
         
         # Match positions
         match_results = matcher.match_positions(ocr_result.positions, products)
