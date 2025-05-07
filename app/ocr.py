@@ -46,9 +46,9 @@ async def call_openai_ocr(image_bytes: bytes) -> ParsedData:
                     "text": "Распознай этот инвойс и верни структурированные данные в JSON формате. Используй формат, где есть поля supplier, date, positions с товарами (name, qty, unit, price), и total_price."
                 },
                 {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/jpeg;base64,{base64_image}"
+                    "type": "image",
+                    "image": {
+                        "data": base64_image
                     }
                 }
             ]
