@@ -16,6 +16,7 @@ status:
   edit_cancelled: "✏️ Editing canceled."
   session_expired: "Your session has expired. Please start again."
   processing: "⏳ Processing your request..."
+  wait_for_processing: "⏳ Please wait while I finish processing your photo."
   service_unavailable: "Sorry, the service is temporarily unavailable. Please try again."
   applying_changes: "🔄 Applying changes..."
   sending_to_syrve: "📤 Sending invoice to Syrve..."

@@ -1604,28 +1604,42 @@ if __name__ == "__main__":
 
     async def main():
         global bot, dp
+        
+        # Создаем бота и диспетчер
         bot, dp = create_bot_and_dispatcher()
         register_handlers(dp, bot)
         
-        # Проверка конфигурации логирования для предотвращения дублирования
+        # Проверка конфигурации логирования
         root_logger = logging.getLogger()
         logger.debug(f"Logger configuration: {len(root_logger.handlers)} handlers")
         
-        # Инициализируем пул потоков OpenAI Assistant API
-        from app.assistants.client import client, initialize_pool
-        logger.info("Initializing OpenAI thread pool...")
-        await initialize_pool(client)
-        logger.info("OpenAI thread pool initialized")
+        # Запускаем бота сразу, не дожидаясь инициализации пула
+        polling_task = asyncio.create_task(dp.start_polling(bot))
+        
+        # Инициализируем пул потоков OpenAI Assistant API в фоновом режиме
+        async def init_openai_pool():
+            try:
+                from app.assistants.client import client, initialize_pool
+                logger.info("Initializing OpenAI thread pool in background...")
+                await initialize_pool(client)
+                logger.info("OpenAI thread pool initialized successfully")
+            except Exception as e:
+                logger.error(f"Error initializing OpenAI pool: {e}")
+        
+        # Запускаем инициализацию пула в фоновом режиме
+        pool_task = asyncio.create_task(init_openai_pool())
         
         # Выводим информацию о включенных оптимизациях
         logger.info("Performance optimizations enabled:")
-        logger.info("✅ OpenAI Thread pooling (saving ~8s per edit)")
+        logger.info("✅ Non-blocking bot startup (immediate response)")
+        logger.info("✅ Background OpenAI Thread pool initialization")
         logger.info("✅ Asynchronous OCR processing")
         logger.info("✅ Incremental UI updates for better UX")
         logger.info("✅ Parallel API processing")
         logger.info("✅ Fixed i18n formatting issues")
         logger.info("✅ Improved logging with duplication prevention")
         
-        await dp.start_polling(bot)
+        # Ожидаем завершения поллинга (не должно произойти до остановки бота)
+        await polling_task
 
     asyncio.run(main())
