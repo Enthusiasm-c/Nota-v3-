@@ -47,15 +47,15 @@ async def handle_invoice_confirm(callback: CallbackQuery, state: FSMContext):
     # Get invoice data from state
     invoice = data.get("invoice")
     if not invoice:
-        await callback.message.answer(t("error.invoice_not_found", lang=lang))
+        await callback.message.answer(t("error.invoice_not_found", {}, lang=lang))
         await callback.answer()
         return
     
     # Show processing indicator
-    await callback.answer(t("status.processing", lang=lang), show_alert=False)
+    await callback.answer(t("status.processing", {}, lang=lang), show_alert=False)
     
     # First message - processing started
-    processing_msg = await callback.message.answer(t("status.sending_to_syrve", lang=lang))
+    processing_msg = await callback.message.answer(t("status.sending_to_syrve", {}, lang=lang))
     
     try:
         # Generate invoice ID
@@ -108,9 +108,9 @@ async def handle_invoice_confirm(callback: CallbackQuery, state: FSMContext):
             status = result.get("status", 500)
             
             if status == 401:
-                error_text = t("error.syrve_auth", lang=lang)
+                error_text = t("error.syrve_auth", {}, lang=lang)
             elif status in (403, 409):
-                error_text = t("error.syrve_duplicate", lang=lang)
+                error_text = t("error.syrve_duplicate", {}, lang=lang)
             else:
                 # Detailed error from Syrve
                 # Limit error message length to 50 chars to prevent overly long messages
@@ -142,7 +142,7 @@ async def handle_invoice_confirm(callback: CallbackQuery, state: FSMContext):
         # Handle unexpected errors
         logger.error(f"Error processing invoice confirmation: {str(e)}", exc_info=True)
         await processing_msg.edit_text(
-            t("error.unexpected", lang=lang),
+            t("error.unexpected", {}, lang=lang),
             reply_markup=kb_main(lang)
         )
         increment_counter("nota_invoices_total", {"status": "failed"})

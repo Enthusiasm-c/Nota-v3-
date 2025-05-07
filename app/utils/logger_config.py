@@ -39,6 +39,9 @@ LOG_LEVELS = {
     }
 }
 
+# Flag to track if logging has already been configured
+_logging_configured = False
+
 def configure_logging(environment="development", log_dir="logs"):
     """
     Configures application logging with optimized settings.
@@ -47,13 +50,24 @@ def configure_logging(environment="development", log_dir="logs"):
         environment: "production" or "development"
         log_dir: Directory for log files
     """
+    global _logging_configured
+    
+    # Only configure logging once - prevent duplicate handlers
+    if _logging_configured:
+        logging.getLogger("app").debug("Logging already configured - skipping")
+        return
+        
     os.makedirs(log_dir, exist_ok=True)
+    
+    # First, remove all existing handlers to avoid duplication
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
     
     # Get log levels for current environment
     levels = LOG_LEVELS.get(environment, LOG_LEVELS["development"])
     
     # Configure root logger
-    root_logger = logging.getLogger()
     root_logger.setLevel(levels["default"])
     
     # Console handler
@@ -94,7 +108,10 @@ def configure_logging(environment="development", log_dir="logs"):
             logging.getLogger(module).setLevel(level)
     
     # Log configuration success
-    logging.getLogger("app").info(f"Logging configured for {environment} environment")
+    logging.getLogger("app").info(f"Logging configured for {environment} environment with {len(root_logger.handlers)} handlers")
+    
+    # Mark logging as configured
+    _logging_configured = True
 
 def get_buffered_logger(name):
     """

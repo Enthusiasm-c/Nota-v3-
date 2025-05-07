@@ -602,6 +602,11 @@ async def handle_nlu_text(message, state: FSMContext):
     1. Редактирование поля в инвойсе (если editing_mode='field_edit')
     2. Обычный диалог с ассистентом
     """
+    # Skip empty messages
+    if not message.text or not message.text.strip():
+        logger.debug(f"Skipping empty message from user {message.from_user.id}")
+        return
+        
     text = message.text
     chat_id = message.chat.id
     user_id = message.from_user.id

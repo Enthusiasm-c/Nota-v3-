@@ -31,6 +31,11 @@ async def handle_free_edit_text(message: Message, state: FSMContext):
         message: Incoming Telegram message
         state: FSM context
     """
+    # Skip empty messages
+    if not message.text or not message.text.strip():
+        logger.debug("[edit_flow] Skipping empty message")
+        return
+        
     user_text = message.text.strip()
     logger.info("[edit_flow] New user input", extra={"data": {"user_text": user_text}})
     
