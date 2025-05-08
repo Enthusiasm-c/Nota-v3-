@@ -33,61 +33,74 @@ async def handle_free_edit_text(message: Message, state: FSMContext):
     Улучшенный обработчик свободного ввода пользователя для редактирования инвойса через ядро edit_core.
     Оставляет только UI-логику и работу с IncrementalUI.
     """
-    logger.info(f"[incremental_edit_flow] Received update type: {type(message).__name__}")
-    if not hasattr(message, 'text') or message.text is None:
-        logger.warning("[incremental_edit_flow] Received message without text field")
-        return
-    if not message.text.strip():
-        logger.debug("[incremental_edit_flow] Skipping empty message")
-        return
-    user_text = message.text.strip()
-    data = await state.get_data()
-    lang = data.get("lang", "ru")
+    try:
+        logger.info(f"[incremental_edit_flow] Received update type: {type(message).__name__}")
+        if not hasattr(message, 'text') or message.text is None:
+            logger.warning("[incremental_edit_flow] Received message without text field")
+            return
+        if not message.text.strip():
+            logger.debug("[incremental_edit_flow] Skipping empty message")
+            return
+        user_text = message.text.strip()
+        data = await state.get_data()
+        lang = data.get("lang", "ru")
 
-    from app.handlers.edit_core import process_user_edit
-    from app.utils.incremental_ui import IncrementalUI
-    ui = IncrementalUI(message.bot, message.chat.id)
-    processing_started = False
-    async def send_processing(text):
-        nonlocal processing_started
-        if not processing_started:
-            await ui.start(text)
-            processing_started = True
-        else:
-            await ui.update(text)
-    async def send_result(text):
-        await ui.complete(text)
-    async def send_error(text):
-        await ui.error(text)
-    async def fuzzy_suggester(message, state, name, idx, lang):
-        # Здесь можно реализовать кастомный UI для fuzzy
-        from app.handlers.name_picker import show_fuzzy_suggestions
-        return await show_fuzzy_suggestions(message, state, name, idx, lang)
-    async def edit_state():
+        from app.handlers.edit_core import process_user_edit
+        from app.utils.incremental_ui import IncrementalUI
+        
+        # Инициализируем переменную ui в блоке try
+        try:
+            ui = IncrementalUI(message.bot, message.chat.id)
+        except Exception as ui_error:
+            logger.error(f"[edit_flow] Не удалось создать IncrementalUI: {ui_error}")
+            await message.answer("Произошла ошибка при обработке команды. Пожалуйста, попробуйте позже.")
+            return
+            
+        processing_started = False
+        async def send_processing(text):
+            nonlocal processing_started
+            if not processing_started:
+                await ui.start(text)
+                processing_started = True
+            else:
+                await ui.update(text)
+        async def send_result(text):
+            await ui.complete(text)
+        async def send_error(text):
+            await ui.error(text)
+        async def fuzzy_suggester(message, state, name, idx, lang):
+            # Здесь можно реализовать кастомный UI для fuzzy
+            from app.handlers.name_picker import show_fuzzy_suggestions
+            return await show_fuzzy_suggestions(message, state, name, idx, lang)
+        async def edit_state():
+            await state.set_state(EditFree.awaiting_input)
+
+        await process_user_edit(
+            message=message,
+            state=state,
+            user_text=user_text,
+            lang=lang,
+            send_processing=send_processing,
+            send_result=send_result,
+            send_error=send_error,
+            fuzzy_suggester=fuzzy_suggester,
+            edit_state=edit_state
+        )
         await state.set_state(EditFree.awaiting_input)
-
-    await process_user_edit(
-        message=message,
-        state=state,
-        user_text=user_text,
-        lang=lang,
-        send_processing=send_processing,
-        send_result=send_result,
-        send_error=send_error,
-        fuzzy_suggester=fuzzy_suggester,
-        edit_state=edit_state
-    )
-    await state.set_state(EditFree.awaiting_input)
         
     except Exception as e:
         logger.error("[edit_flow] Критическая ошибка при обработке команды", 
                     extra={"data": {"error": str(e)}}, exc_info=True)
         
         # Завершаем UI с сообщением об ошибке
-        await ui.error(
-            "Сервис временно недоступен. Пожалуйста, попробуйте позже.\n"
-            "Если проблема повторяется, обратитесь к администратору."
-        )
+        try:
+            ui = IncrementalUI(message.bot, message.chat.id)
+            await ui.error(
+                "Сервис временно недоступен. Пожалуйста, попробуйте позже.\n"
+                "Если проблема повторяется, обратитесь к администратору."
+            )
+        except Exception as ui_error:
+            logger.error(f"[edit_flow] Не удалось отправить сообщение об ошибке: {ui_error}")
 
 # Обработчик нажатия кнопки "✏️ Редактировать"
 @router.callback_query(F.data == "edit:free")

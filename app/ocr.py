@@ -32,7 +32,7 @@ from app.utils.enhanced_logger import log_indonesian_invoice, log_format_issues,
 # Схема для функции получения данных инвойса
 INVOICE_FUNCTION_SCHEMA = {
     "name": "get_parsed_invoice",
-    "description": "Извлекает структурированные данные из накладной, включая список товаров, поставщика, дату и суммы",
+    "description": "Извлекает структурированные данные из накладной, включая список ВСЕХ товаров, поставщика, дату и суммы",
     "parameters": {
         "type": "object",
         "properties": {
@@ -48,13 +48,13 @@ INVOICE_FUNCTION_SCHEMA = {
             },
             "positions": {
                 "type": "array",
-                "description": "Список позиций (товаров) в накладной",
+                "description": "Список ВСЕХ позиций (товаров) в накладной без исключения",
                 "items": {
                     "type": "object",
                     "properties": {
                         "name": {
                             "type": "string",
-                            "description": "Название товара (СТРОГО из списка разрешенных в промпте)"
+                            "description": "Название товара точно как указано в накладной"
                         },
                         "qty": {
                             "type": "number",
@@ -155,11 +155,11 @@ def call_openai_ocr(image_bytes: bytes, _req_id=None) -> ParsedData:
             response = client.chat.completions.create(
                 model="gpt-4o",
                 messages=messages,
-                max_tokens=2048,
+                max_tokens=4096,
                 temperature=0.0,
                 tools=[{"type": "function", "function": INVOICE_FUNCTION_SCHEMA}],
                 tool_choice={"type": "function", "function": {"name": "get_parsed_invoice"}},
-                timeout=90
+                timeout=120
             )
         t_step = log_ocr_performance(t_step, "Vision API call", req_id)
         ocr_logger.info(f"[{req_id}] Получен ответ от Vision API")
