@@ -6,7 +6,7 @@ import time
 import json
 import os
 import traceback
-from datetime import datetime
+from datetime import datetime, date
 from functools import wraps
 
 # Создаем директорию для логов, если её нет
@@ -29,6 +29,16 @@ file_handler.setFormatter(formatter)
 # Добавляем обработчик к логгеру
 ocr_logger.addHandler(file_handler)
 ocr_logger.propagate = False  # Чтобы избежать дублирования в основной лог
+
+
+def json_serialize(obj):
+    """
+    Функция-сериализатор для преобразования объектов в JSON.
+    Обрабатывает типы date и datetime.
+    """
+    if isinstance(obj, (date, datetime)):
+        return obj.isoformat()
+    raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
 
 
 def log_ocr_call(func):
@@ -67,7 +77,7 @@ def log_ocr_call(func):
                     'positions_count': positions_count,
                     'has_empty_positions': any(not p.get('name') for p in result_dict.get('positions', []))
                 }
-                ocr_logger.debug(f"[{request_id}] Результат OCR: {json.dumps(log_result)}")
+                ocr_logger.debug(f"[{request_id}] Результат OCR: {json.dumps(log_result, default=json_serialize)}")
             else:
                 ocr_logger.debug(f"[{request_id}] Результат OCR: {result}")
             

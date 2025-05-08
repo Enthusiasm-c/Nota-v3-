@@ -13,6 +13,7 @@ import time
 import json
 import asyncio
 from pathlib import Path
+from datetime import date, datetime
 
 # Настройка логирования
 logging.basicConfig(
@@ -23,6 +24,16 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger("ocr-debug")
+
+# Функция сериализации для даты
+def json_serialize(obj):
+    """
+    Функция-сериализатор для преобразования объектов в JSON.
+    Обрабатывает типы date и datetime.
+    """
+    if isinstance(obj, (date, datetime)):
+        return obj.isoformat()
+    raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
 
 # Функция для асинхронного запуска OCR
 async def test_ocr(image_path):
@@ -77,7 +88,7 @@ async def test_ocr(image_path):
             
             # Выводим результат в JSON для проверки
             print("\nРезультат OCR (JSON):")
-            print(json.dumps(result.model_dump(), indent=2, ensure_ascii=False))
+            print(json.dumps(result.model_dump(), indent=2, ensure_ascii=False, default=json_serialize))
             return True
         except Exception as ocr_err:
             duration = time.time() - start_time
