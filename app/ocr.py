@@ -108,56 +108,110 @@ def call_openai_ocr(image_bytes: bytes, _req_id=None) -> ParsedData:
     t_step = log_ocr_performance(t0, "Initialization", req_id)
     prompt_prefix = build_prompt()
     
-    # Подготовка base64 изображения
-    base64_image = base64.b64encode(image_bytes).decode()
-    image_url = f"data:image/jpeg;base64,{base64_image}"
-    t_step = log_ocr_performance(t_step, "Base64 encoding", req_id)
-    ocr_logger.debug(f"[{req_id}] Изображение закодировано в base64, размер URL: {len(image_url)} символов")
-    
-    ocr_logger.info(f"[{req_id}] Отправляю запрос к OpenAI API с таймаутом 15 секунд")
-    t_step = log_ocr_performance(t_step, "Before API call", req_id)
+    # НОВЫЙ СПОСОБ: Загрузка файла в Files API
     try:
-        rsp = client.chat.completions.create(
-            model=settings.OPENAI_MODEL,
-            temperature=0,
-            max_tokens=1200,
-            timeout=15,  # Reduced timeout
-            messages=[
-                {"role": "system", "content": prompt_prefix},
-                {"role": "user", "content": [
-                    {"type": "image_url", "image_url": {"url": image_url}}
-                ]}
-            ],
-            tools=[tool_schema],
-            tool_choice={"type": "function", "function": {"name": "parse_invoice"}}
+        ocr_logger.info(f"[{req_id}] Загружаю изображение в Files API")
+        file_obj = client.files.create(
+            file=image_bytes,
+            purpose="vision",
+            file_name=f"invoice_{req_id}.jpg"
         )
-        t_step = log_ocr_performance(t_step, "API call completed", req_id)
-        ocr_logger.info(f"[{req_id}] Получен ответ от OpenAI API")
-        message = rsp.choices[0].message
-        data = _sanitize_response(message)
-        t_step = log_ocr_performance(t_step, "Response sanitized", req_id)
-        ocr_logger.debug(f"[{req_id}] Ответ API успешно обработан")
-        for p in data.get("positions", []):
-            p["price"] = _clean_num(p.get("price"))
-            p["price_per_unit"] = _clean_num(p.get("price_per_unit"))
-            p["total_price"] = _clean_num(p.get("total_price"))
-        data["price"] = _clean_num(data.get("price"))
-        data["price_per_unit"] = _clean_num(data.get("price_per_unit"))
-        data["total_price"] = _clean_num(data.get("total_price"))
-        supplier = data.get("supplier")
-        if supplier and supplier.strip() in settings.OWN_COMPANY_ALIASES:
-            data["supplier"] = None
-            data["supplier_status"] = "unknown"
-        try:
-            parsed_data = ParsedData.model_validate(data)
-            elapsed = time.time() - t0
-            logging.info(f"OCR successful after {elapsed:.1f}s with {len(parsed_data.positions)} positions")
-            t_step = log_ocr_performance(t_step, "Validation completed", req_id)
-            ocr_logger.info(f"[{req_id}] OCR успешно завершен за {elapsed:.2f} сек, найдено {len(parsed_data.positions)} позиций")
-            return parsed_data
-        except Exception as validation_err:
-            logging.error(f"Model validation error: {validation_err}")
-            raise RuntimeError(f"⚠️ Could not process the invoice data: {str(validation_err)}") from validation_err
+        file_id = file_obj.id
+        t_step = log_ocr_performance(t_step, "File upload", req_id)
+        ocr_logger.debug(f"[{req_id}] Изображение успешно загружено, file_id: {file_id}")
+    except Exception as upload_err:
+        ocr_logger.error(f"[{req_id}] Ошибка загрузки файла: {str(upload_err)}")
+        raise RuntimeError(f"Ошибка загрузки изображения: {str(upload_err)}")
+    
+    # Создаем Thread для работы с ассистентом
+    try:
+        thread = client.beta.threads.create()
+        thread_id = thread.id
+        t_step = log_ocr_performance(t_step, "Thread creation", req_id)
+        ocr_logger.debug(f"[{req_id}] Создан thread: {thread_id}")
+        
+        # Отправляем сообщение с изображением
+        client.beta.threads.messages.create(
+            thread_id=thread_id,
+            role="user",
+            content=[
+                {"type": "text", "text": "Extract invoice data as JSON."},
+                {"type": "image_file", "image_file": {"file_id": file_id}}
+            ]
+        )
+        t_step = log_ocr_performance(t_step, "Message creation", req_id)
+        ocr_logger.debug(f"[{req_id}] Отправлено сообщение с изображением")
+        
+        # Запускаем обработку ассистентом
+        ocr_logger.info(f"[{req_id}] Запускаю ассистента с таймаутом 15 секунд")
+        run = client.beta.threads.runs.create(
+            thread_id=thread_id,
+            assistant_id=settings.OPENAI_VISION_ASSISTANT_ID,
+            temperature=0,
+            response_format={"type": "json_object"}
+        )
+        
+        # Ожидаем завершения обработки с таймаутом
+        timeout = 15  # 15 секунд таймаут
+        start_wait = time.time()
+        while run.status in ("queued", "in_progress"):
+            if time.time() - start_wait > timeout:
+                ocr_logger.error(f"[{req_id}] Превышен таймаут ожидания ассистента")
+                raise RuntimeError("Превышен таймаут ожидания. Пожалуйста, попробуйте еще раз.")
+            
+            time.sleep(1)
+            run = client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run.id)
+        
+        t_step = log_ocr_performance(t_step, "Assistant processing", req_id)
+        ocr_logger.info(f"[{req_id}] Ассистент завершил обработку со статусом: {run.status}")
+        
+        # Проверяем статус запуска
+        if run.status != "completed":
+            ocr_logger.error(f"[{req_id}] Ошибка обработки ассистентом: {run.status}")
+            raise RuntimeError(f"Ошибка обработки изображения: {run.status}")
+        
+        # Получаем результат из сообщений
+        messages = client.beta.threads.messages.list(thread_id=thread_id)
+        for msg in messages.data:
+            if msg.role == "assistant":
+                content = msg.content[0]
+                if content.type == "text":
+                    # Извлекаем JSON из текстового ответа
+                    try:
+                        response_text = content.text.value
+                        data = json.loads(response_text)
+                        t_step = log_ocr_performance(t_step, "Response parsing", req_id)
+                        ocr_logger.debug(f"[{req_id}] Ответ API успешно обработан")
+                    except json.JSONDecodeError:
+                        raise ValueError(f"Неверный формат JSON в ответе: {response_text[:100]}...")
+                    
+                    # Постобработка данных
+                    for p in data.get("positions", []):
+                        p["price"] = _clean_num(p.get("price"))
+                        p["price_per_unit"] = _clean_num(p.get("price_per_unit"))
+                        p["total_price"] = _clean_num(p.get("total_price"))
+                    data["price"] = _clean_num(data.get("price"))
+                    data["price_per_unit"] = _clean_num(data.get("price_per_unit"))
+                    data["total_price"] = _clean_num(data.get("total_price"))
+                    supplier = data.get("supplier")
+                    if supplier and supplier.strip() in settings.OWN_COMPANY_ALIASES:
+                        data["supplier"] = None
+                        data["supplier_status"] = "unknown"
+                    
+                    try:
+                        parsed_data = ParsedData.model_validate(data)
+                        elapsed = time.time() - t0
+                        logging.info(f"OCR successful after {elapsed:.1f}s with {len(parsed_data.positions)} positions")
+                        t_step = log_ocr_performance(t_step, "Validation completed", req_id)
+                        ocr_logger.info(f"[{req_id}] OCR успешно завершен за {elapsed:.2f} сек, найдено {len(parsed_data.positions)} позиций")
+                        return parsed_data
+                    except Exception as validation_err:
+                        logging.error(f"Model validation error: {validation_err}")
+                        raise RuntimeError(f"⚠️ Could not process the invoice data: {str(validation_err)}") from validation_err
+        
+        # Если не нашли ответ в сообщениях
+        raise ValueError("Не удалось получить ответ от ассистента")
+    
     except openai.APITimeoutError:
         elapsed = time.time() - t0
         ocr_logger.error(f"[{req_id}] OpenAI API timeout after {elapsed:.1f}s")
@@ -166,6 +220,10 @@ def call_openai_ocr(image_bytes: bytes, _req_id=None) -> ParsedData:
         elapsed = time.time() - t0
         ocr_logger.error(f"[{req_id}] OpenAI API error after {elapsed:.1f}s: {str(api_err)}")
         raise RuntimeError(f"OpenAI API error: {str(api_err)}")
+    except Exception as e:
+        elapsed = time.time() - t0
+        ocr_logger.error(f"[{req_id}] Unexpected error after {elapsed:.1f}s: {str(e)}")
+        raise RuntimeError(f"Unexpected error: {str(e)}")
 
 def _clean_num(v):
     if v in (None, "", "null"):
