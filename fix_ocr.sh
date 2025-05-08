@@ -49,7 +49,7 @@ $PYTHON -c "import openai" 2>/dev/null
 if [ $? -ne 0 ]; then
     echo -e "${RED}[-] Библиотека openai не установлена!${NC}"
     echo -e "${YELLOW}[*] Устанавливаю openai...${NC}"
-    pip install openai
+    pip install openai==1.55.3
 fi
 
 $PYTHON -c "from PIL import Image" 2>/dev/null
@@ -73,6 +73,14 @@ else
     # Анализ возможных причин
     if grep -q "Invalid content type. image_url is only supported by certain models" "$LOG_FILE"; then
         echo -e "${YELLOW}[!] Обнаружена ошибка совместимости модели с image_url. Исправлено в последней версии кода.${NC}"
+    fi
+    
+    if grep -q "Files.create() got an unexpected keyword argument 'file_name'" "$LOG_FILE"; then
+        echo -e "${YELLOW}[!] Обнаружена ошибка с параметром file_name при загрузке файла.${NC}"
+        echo -e "${YELLOW}[*] Устанавливаю совместимую версию библиотеки openai...${NC}"
+        pip install openai==1.55.3
+        echo -e "${YELLOW}[*] Запустите скрипт еще раз после обновления библиотеки.${NC}"
+        exit 0
     fi
     
     if grep -q "Отсутствуют обязательные переменные" "$LOG_FILE"; then

@@ -113,8 +113,7 @@ def call_openai_ocr(image_bytes: bytes, _req_id=None) -> ParsedData:
         ocr_logger.info(f"[{req_id}] Загружаю изображение в Files API")
         file_obj = client.files.create(
             file=image_bytes,
-            purpose="vision",
-            file_name=f"invoice_{req_id}.jpg"
+            purpose="vision"
         )
         file_id = file_obj.id
         t_step = log_ocr_performance(t_step, "File upload", req_id)
