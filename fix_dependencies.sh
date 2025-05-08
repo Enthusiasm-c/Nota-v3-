@@ -112,6 +112,24 @@ else
     $PIP install Pillow | tee -a "$DEBUG_LOG"
 fi
 
+# Проверяем версию OpenAI
+echo -e "${YELLOW}[*] Проверяю версию библиотеки OpenAI...${NC}" | tee -a "$DEBUG_LOG"
+OPENAI_VERSION=$(pip freeze | grep openai | cut -d'=' -f3)
+echo -e "Текущая версия OpenAI: $OPENAI_VERSION" | tee -a "$DEBUG_LOG"
+
+if [ "$OPENAI_VERSION" != "1.55.3" ]; then
+    echo -e "${YELLOW}[*] Обновляю библиотеку OpenAI до версии 1.55.3 для лучшей совместимости...${NC}" | tee -a "$DEBUG_LOG"
+    pip install openai==1.55.3 | tee -a "$DEBUG_LOG"
+    echo -e "${GREEN}[+] Библиотека OpenAI обновлена до версии 1.55.3${NC}" | tee -a "$DEBUG_LOG"
+fi
+
+# Проверяем наличие psutil для мониторинга памяти в OCR
+pip show psutil >/dev/null 2>&1
+if [ $? -ne 0 ]; then
+    echo -e "${YELLOW}[*] Устанавливаю psutil для мониторинга памяти...${NC}" | tee -a "$DEBUG_LOG"
+    pip install psutil | tee -a "$DEBUG_LOG"
+fi
+
 # Пробный запуск бота для диагностики
 echo -e "\n${YELLOW}[*] Тестовый запуск бота для выявления ошибок...${NC}" | tee -a "$DEBUG_LOG"
 TEST_LOG="$LOG_DIR/bot_test_run.log"
