@@ -227,6 +227,12 @@ def with_retry_backoff(
                     logger.error(f"[{req_id}] Full stacktrace:\n{traceback.format_exc()}")
                     
                     # Проверяем, нужно ли повторить попытку для этого типа ошибок
+                    # Ошибки валидации никогда не повторяем
+                    if error_class == ErrorType.VALIDATION or isinstance(e, ValueError):
+                        logger.info(f"[{req_id}] Not retrying validation error: {str(e)}")
+                        last_error = e
+                        break
+                    
                     if error_types and error_class not in error_types:
                         if retries > 0:
                             logger.info(
@@ -251,29 +257,14 @@ def with_retry_backoff(
                             logger.error(
                                 f"[{req_id}] {error_class} error in {func.__name__} after {retries} retries: {str(e)}"
                             )
-                        else:
-                            logger.error(
-                                f"[{req_id}] {error_class} error in {func.__name__}: {str(e)}"
-                            )
+                        last_error = e
+                        break
 
-                        # Оборачиваем ошибку с понятным сообщением
-                        if hasattr(e, "friendly_message"):
-                            raise type(e)(e.friendly_message) from e
-                        else:
-                            e.friendly_message = friendly_msg
-                            # Добавляем фактическую ошибку в сообщение для более простой диагностики
-                            if error_class == ErrorType.UNKNOWN:
-                                enhanced_msg = f"{friendly_msg} ({e.__class__.__name__}: {str(e)})"
-                                raise RuntimeError(enhanced_msg) from e
-                            else:
-                                raise RuntimeError(friendly_msg) from e
-
-            # Никогда не должны сюда попасть, но на всякий случай
             if last_error:
-                raise last_error
-            raise RuntimeError(
-                f"[{req_id}] Unexpected error in retry logic for {func.__name__}"
-            )
+                error_class, friendly_msg = classify_error(last_error)
+                raise RuntimeError(
+                    f"API error ({error_class}): {friendly_msg}"
+                ) from last_error
 
         return wrapper
 

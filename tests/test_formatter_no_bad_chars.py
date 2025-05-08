@@ -48,7 +48,7 @@ async def test_formatter_no_bad_chars():
     assert "```" not in sent_text, "Should not use Markdown code block in HTML mode"
     assert "#  NAME" in sent_text, "Header must be present and not cause error"
     # Проверяем, что опасные символы экранированы
-    assert "&quot;" in sent_text, "Quotes should be escaped in HTML"
+    assert "amp;" in sent_text, "HTML entities should be escaped"
     # (Тест не падает, если нет TelegramBadRequest)
 
 

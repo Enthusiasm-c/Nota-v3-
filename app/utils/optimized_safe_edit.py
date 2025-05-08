@@ -46,8 +46,14 @@ async def optimized_safe_edit(
     # Create cache key from message parameters
     cache_key = f"{chat_id}:{msg_id}:{hash(text)}"
     
+    # Для тестов пропускаем проверку кеша
+    if 'skip_cache_check' in kwargs:
+        skip_cache_check = kwargs.pop('skip_cache_check')
+    else:
+        skip_cache_check = False
+    
     # Check cache to avoid duplicate edits
-    if cache_key in _message_cache and _message_cache[cache_key].get("timestamp", 0) > time.time() - 5:
+    if not skip_cache_check and cache_key in _message_cache and _message_cache[cache_key].get("timestamp", 0) > time.time() - 5:
         logger.debug(f"Skipping duplicate edit request (cache hit)")
         return True
     

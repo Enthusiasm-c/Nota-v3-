@@ -11,6 +11,7 @@ from app.utils.api_decorators import (
     with_progress_stages,
     ErrorType,
     classify_error,
+    FriendlyException,
 )
 
 
@@ -220,7 +221,8 @@ class TestProgressStages:
             # Ошибка на втором этапе
             raise RuntimeError("Error in stage 2")
 
-        with pytest.raises(RuntimeError) as excinfo:
+        # Теперь мы ожидаем FriendlyException вместо RuntimeError
+        with pytest.raises(FriendlyException) as excinfo:
             await test_process(_update_progress=update_progress)
 
         # Проверяем, что сообщение об ошибке содержит информацию о стадии
