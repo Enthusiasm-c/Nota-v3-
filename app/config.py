@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     # Base URL for server (used for image links)
     BASE_URL: str = os.environ.get("BASE_URL", "")
 
-    MAX_PRODUCTS_IN_PROMPT: int = 100
+    MAX_PRODUCTS_IN_PROMPT: int = 50
 
     model_config = SettingsConfigDict(
         extra="allow", env_file=os.getenv("ENV_FILE", ".env"), env_file_encoding="utf-8"

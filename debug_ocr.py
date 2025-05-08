@@ -16,6 +16,7 @@ import argparse
 from pathlib import Path
 from datetime import date, datetime
 import shutil
+import base64
 
 # Настройка логирования
 logging.basicConfig(
@@ -52,6 +53,7 @@ def parse_args():
     parser.add_argument("--model", "-m", type=str, default="gpt-4o", help="Модель OpenAI (по умолчанию gpt-4o)")
     parser.add_argument("--save_intermediate", "-s", action="store_true", help="Сохранять промежуточные изображения")
     parser.add_argument("--no_preprocessing", "-n", action="store_true", help="Отключить предобработку изображения")
+    parser.add_argument("--raw_vision", "-r", action="store_true", help="Выполнить только распознавание сырого текста без структурирования")
     return parser.parse_args()
 
 # Функция для асинхронного запуска OCR
@@ -190,6 +192,128 @@ def get_test_image():
     
     return None
 
+async def test_raw_vision(image_path, timeout=90, use_preprocessing=True):
+    """
+    Отправляет изображение в Vision API для распознавания сырого текста без структурирования.
+    Позволяет сравнить, что именно видит модель на изображении до интерпретации.
+    
+    Args:
+        image_path: Путь к файлу изображения
+        timeout: Таймаут в секундах
+        use_preprocessing: Использовать ли предобработку изображения
+        
+    Returns:
+        True если успешно, False если ошибка
+    """
+    try:
+        logger.info(f"Загружаю тестовое изображение: {image_path}")
+        
+        # Проверка существования файла
+        if not os.path.exists(image_path):
+            logger.error(f"Файл не найден: {image_path}")
+            return False
+        
+        # Загрузка изображения
+        with open(image_path, "rb") as img_file:
+            image_bytes = img_file.read()
+            logger.info(f"Изображение загружено, размер: {len(image_bytes)} байт")
+        
+        # Импорт OpenAI
+        try:
+            import openai
+            from app.config import settings
+            logger.info("OpenAI импортирован")
+        except ImportError as import_err:
+            logger.error(f"Ошибка импорта OpenAI: {import_err}")
+            return False
+        
+        # Импорт модуля для предобработки (если требуется)
+        if use_preprocessing:
+            try:
+                from app.imgprep import prepare_for_ocr
+                # Сохраняем изображение во временный файл
+                tmp_path = f"/tmp/nota_vision_raw_{int(time.time())}.jpg"
+                with open(tmp_path, "wb") as f:
+                    f.write(image_bytes)
+                image_bytes = prepare_for_ocr(tmp_path, use_preprocessing=True)
+                logger.info(f"Изображение предобработано, новый размер: {len(image_bytes)} байт")
+            except ImportError:
+                logger.warning("Модуль предобработки не найден, использую оригинальное изображение")
+            except Exception as prep_err:
+                logger.warning(f"Ошибка предобработки: {prep_err}. Использую оригинал.")
+        
+        # Проверка наличия API ключа
+        api_key = os.environ.get("OPENAI_OCR_KEY") or getattr(settings, "OPENAI_OCR_KEY", "")
+        if not api_key:
+            logger.error("OPENAI_OCR_KEY не установлен")
+            return False
+            
+        # Создание клиента OpenAI
+        client = openai.OpenAI(api_key=api_key)
+        
+        # Формирование base64 изображения
+        b64_image = base64.b64encode(image_bytes).decode("utf-8")
+        
+        # Простой запрос для получения сырого текста
+        system_prompt = """
+        You are an OCR system. Look at the provided invoice image and follow these instructions:
+        
+        1. Extract ALL visible text from the image, line by line.
+        2. Keep the exact format as seen in the image (tables, layout, etc.)
+        3. Do NOT interpret or structure the data in any way
+        4. Maintain the original language if not English
+        5. Include all numbers, dates, and product names as seen on the invoice
+        6. DO NOT add any commentary or explanations
+        """
+        
+        logger.info("Отправляю запрос в Vision API для сырого распознавания текста...")
+        
+        start_time = time.time()
+        
+        # Отправка запроса без function calling - просто для распознавания текста
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": [
+                    {"type": "text", "text": "Extract all visible text from this invoice, preserving the original layout as much as possible."},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_image}", "detail": "high"}}
+                ]}
+            ],
+            max_tokens=2048,
+            temperature=0.0,
+            timeout=timeout
+        )
+        
+        duration = time.time() - start_time
+        
+        # Получаем сырой текстовый ответ
+        raw_text = response.choices[0].message.content
+        
+        # Выводим результат
+        print(f"\n{'='*50}")
+        print(f"РЕЗУЛЬТАТ РАСПОЗНАВАНИЯ СЫРОГО ТЕКСТА (Время: {duration:.2f} сек):")
+        print(f"{'='*50}\n")
+        print(raw_text)
+        print(f"\n{'='*50}")
+        
+        # Сохраняем результат в файл
+        output_file = f"raw_vision_output_{int(time.time())}.txt"
+        with open(output_file, "w", encoding="utf-8") as f:
+            f.write(f"# Сырой текст распознанный с изображения {image_path}\n")
+            f.write(f"# Предобработка: {'Включена' if use_preprocessing else 'Отключена'}\n")
+            f.write(f"# Время распознавания: {duration:.2f} сек\n\n")
+            f.write(raw_text)
+        
+        logger.info(f"Результат сохранен в файл: {output_file}")
+        return True
+    
+    except Exception as e:
+        logger.error(f"Неожиданная ошибка при распознавании сырого текста: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return False
+
 async def main():
     args = parse_args()
     logger.info("Запуск диагностики OCR...")
@@ -228,10 +352,22 @@ async def main():
             logger.error(f"Не удалось создать тестовое изображение: {img_err}")
             return
     
-    # Запуск тестирования OCR
-    logger.info(f"Запуск тестирования OCR на {test_image}")
+    # Запуск тестирования
+    logger.info(f"Запуск тестирования на {test_image}")
     logger.info(f"Таймаут: {args.timeout} сек")
     logger.info(f"Режим подробного логирования: {'Включен' if args.verbose else 'Выключен'}")
+    
+    # Если выбран режим сырого распознавания
+    if args.raw_vision:
+        logger.info("Запуск распознавания сырого текста...")
+        success = await test_raw_vision(test_image, timeout=args.timeout, use_preprocessing=not args.no_preprocessing)
+        if success:
+            logger.info("✅ Распознавание сырого текста успешно выполнено")
+        else:
+            logger.error("❌ Распознавание сырого текста завершилось с ошибкой")
+        return
+    
+    # Обычное тестирование OCR
     logger.info(f"Используемая модель: {args.model}")
     
     success = await test_ocr(test_image, timeout=args.timeout, verbose=args.verbose, save_intermediate=args.save_intermediate, no_preprocessing=args.no_preprocessing)
