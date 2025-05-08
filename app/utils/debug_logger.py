@@ -1,0 +1,129 @@
+"""
+Модуль для расширенного логирования и диагностики проблем OCR.
+"""
+import logging
+import time
+import json
+import os
+import traceback
+from datetime import datetime
+from functools import wraps
+
+# Создаем директорию для логов, если её нет
+LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'logs')
+os.makedirs(LOG_DIR, exist_ok=True)
+
+# Устанавливаем специальный логгер для OCR с записью в файл
+ocr_logger = logging.getLogger('ocr_debug')
+ocr_logger.setLevel(logging.DEBUG)
+
+# Создаем файловый обработчик, который будет записывать логи в отдельный файл
+log_file = os.path.join(LOG_DIR, f'ocr_detailed_{datetime.now().strftime("%Y%m%d")}.log')
+file_handler = logging.FileHandler(log_file)
+file_handler.setLevel(logging.DEBUG)
+
+# Форматирование логов
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(formatter)
+
+# Добавляем обработчик к логгеру
+ocr_logger.addHandler(file_handler)
+ocr_logger.propagate = False  # Чтобы избежать дублирования в основной лог
+
+
+def log_ocr_call(func):
+    """
+    Декоратор для логирования OCR вызовов с детальной информацией
+    о времени выполнения, размере входных данных и результатах.
+    """
+    @wraps(func)
+    def wrapper(image_bytes, *args, **kwargs):
+        request_id = kwargs.get('_req_id', f"ocr_{int(time.time())}")
+        
+        # Логируем начало запроса
+        ocr_logger.info(f"[{request_id}] OCR запрос начат: размер изображения = {len(image_bytes)} байт")
+        start_time = time.time()
+        
+        try:
+            # Выполняем OCR-запрос
+            result = func(image_bytes, *args, **kwargs)
+            
+            # Логируем успешное завершение
+            elapsed = time.time() - start_time
+            ocr_logger.info(f"[{request_id}] OCR запрос успешно завершен за {elapsed:.2f} сек")
+            
+            # Логируем результат
+            if hasattr(result, 'dict'):
+                # Для Pydantic моделей
+                result_dict = result.dict()
+                positions_count = len(result_dict.get('positions', []))
+                ocr_logger.debug(f"[{request_id}] Найдено позиций: {positions_count}")
+                
+                # Ограничиваем вывод для избежания слишком больших логов
+                log_result = {
+                    'supplier': result_dict.get('supplier'),
+                    'date': result_dict.get('date'),
+                    'total_price': result_dict.get('total_price'),
+                    'positions_count': positions_count,
+                    'has_empty_positions': any(not p.get('name') for p in result_dict.get('positions', []))
+                }
+                ocr_logger.debug(f"[{request_id}] Результат OCR: {json.dumps(log_result)}")
+            else:
+                ocr_logger.debug(f"[{request_id}] Результат OCR: {result}")
+            
+            return result
+            
+        except Exception as e:
+            # Логируем ошибку с полным стектрейсом
+            elapsed = time.time() - start_time
+            ocr_logger.error(f"[{request_id}] OCR запрос завершился с ошибкой после {elapsed:.2f} сек: {str(e)}")
+            ocr_logger.error(f"[{request_id}] Стектрейс: {traceback.format_exc()}")
+            
+            # Пробрасываем исключение дальше
+            raise
+    
+    return wrapper
+
+
+def log_ocr_performance(start_time=None, label=None, request_id=None):
+    """
+    Вспомогательная функция для логирования промежуточных шагов обработки OCR.
+    """
+    current_time = time.time()
+    
+    if start_time is not None and label is not None:
+        elapsed = current_time - start_time
+        req_id = request_id or "unknown"
+        ocr_logger.debug(f"[{req_id}] PERFORMANCE: {label} - {elapsed:.4f} сек")
+    
+    return current_time
+
+
+def create_memory_monitor(interval=1.0):
+    """
+    Создает отдельный поток, который будет мониторить использование памяти
+    во время выполнения OCR-запросов.
+    """
+    import threading
+    import psutil
+    import os
+    
+    def monitor_memory(request_id):
+        process = psutil.Process(os.getpid())
+        
+        try:
+            while True:
+                mem_info = process.memory_info()
+                mem_mb = mem_info.rss / (1024 * 1024)
+                ocr_logger.debug(f"[{request_id}] MEMORY: {mem_mb:.2f} MB используется")
+                time.sleep(interval)
+        except:
+            # Просто завершаем поток
+            pass
+    
+    def create_thread(request_id):
+        thread = threading.Thread(target=monitor_memory, args=(request_id,))
+        thread.daemon = True  # Завершится автоматически с основным потоком
+        return thread
+    
+    return create_thread 

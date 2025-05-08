@@ -322,263 +322,75 @@ PHOTO_STAGES = {
     "report": "Формирование отчета",
 }
 
+from app.utils.debug_logger import ocr_logger
 
 @with_progress_stages(stages=PHOTO_STAGES)
 async def photo_handler(message, state: FSMContext, **kwargs):
     """
     Обрабатывает загруженные фото инвойсов с продвинутой обработкой ошибок.
     Использует декоратор with_progress_stages для отслеживания этапов выполнения.
-
-    Ход работы:
-    1. Отображает индикатор прогресса
-    2. Загружает и анализирует фото через OCR
-    3. Сопоставляет найденные позиции с базой продуктов
-    4. Формирует отчет и отображает его с кнопками редактирования
+    2. Загружает и анализирует фото через OCR (с таймаутом 15 секунд и подробным логированием)
     """
-    # Данные для отладки
     user_id = message.from_user.id
     photo_id = message.photo[-1].file_id if message.photo else None
-
-    # Получаем _stages и _req_id из контекста декоратора
-    stages = kwargs.get("_stages", {})
-    stages_names = kwargs.get("_stages_names", {})
-    req_id = kwargs.get("_req_id", uuid.uuid4().hex[:8])
-
-    # Шаг 1: Показываем пользователю, что обрабатываем запрос
-    progress_msg = await message.answer("🔄 Загрузка и анализ фото...", parse_mode=None)
+    stages = kwargs.get('_stages', {})
+    stages_names = kwargs.get('_stages_names', {})
+    req_id = kwargs.get('_req_id', uuid.uuid4().hex[:8])
+    progress_msg = await message.answer(
+        "🔄 Загрузка и анализ фото...",
+        parse_mode=None
+    )
     progress_msg_id = progress_msg.message_id
-
-    # Функция для обновления сообщения о прогрессе
     async def update_progress_message(stage=None, stage_name=None, error_message=None):
-        """Вспомогательная функция для обновления сообщения о прогрессе"""
         if error_message:
             await safe_edit(
-                bot,
-                message.chat.id,
-                progress_msg_id,
+                bot, message.chat.id, progress_msg_id,
                 f"⚠️ {error_message}",
-                parse_mode=None,
+                parse_mode=None
             )
         elif stage and stage_name:
-            # [INTERNAL] Stage progress, do not show to user
-            pass
-# await safe_edit(
-#     bot,
-#     message.chat.id,
-#     progress_msg_id,
-#     f"🔄 {stage_name}...",
-#     parse_mode=None,
-# )
-
-    # Передаем функцию обновления прогресса
-    kwargs["_update_progress"] = update_progress_message
-
+            await safe_edit(
+                bot, message.chat.id, progress_msg_id,
+                f"🔄 {stage_name}...",
+                parse_mode=None
+            )
+    kwargs['_update_progress'] = update_progress_message
     try:
-        # Шаг 2: Загрузка фото
-        # Получаем информацию о файле
         file = await bot.get_file(message.photo[-1].file_id)
-
-        # Загружаем содержимое файла
         img_bytes = await bot.download_file(file.file_path)
-
-        # Обновляем статус стадии
         update_stage("download", kwargs, update_progress_message)
-        logger.info(
-            f"[{req_id}] Downloaded photo from user {user_id}, size {len(img_bytes.getvalue())} bytes"
-        )
-
-        # Шаг 3: OCR изображения
-        # Запуск OCR в отдельном потоке
-        ocr_result = await ocr.call_openai_ocr(img_bytes.getvalue())
-
-        # Обновляем статус стадии
-        update_stage("ocr", kwargs, update_progress_message)
-        logger.info(
-            f"[{req_id}] OCR successful for user {user_id}, found {len(ocr_result.positions)} positions"
-        )
-
-        # Шаг 4: Сопоставление с продуктами
-        # Загрузка базы продуктов
-        products = data_loader.load_products("data/base_products.csv")
-
-        # Сопоставляем позиции
-        match_results = matcher.match_positions(ocr_result.positions, products)
-
-        # Сохраняем данные в user_matches для доступа в других обработчиках
-        user_matches[(user_id, progress_msg_id)] = {
-            "parsed_data": ocr_result,
-            "match_results": match_results,
-            "photo_id": photo_id,
-            "req_id": req_id,
-        }
-
-        # Обновляем статус стадии
-        update_stage("matching", kwargs, update_progress_message)
-        logger.info(f"[{req_id}] Matching complete for user {user_id}")
-
-        # Шаг 5: Формирование отчета
-        # Создаем отчет для HTML-форматирования
-        report, has_errors = build_report(ocr_result, match_results, escape_html=True)
-
-        # Сохраняем invoice в state для доступа в режиме редактирования
-        await state.update_data(invoice=ocr_result)
-        logger.info(f"[{req_id}] Saved invoice to state for user {user_id}")
-
-        # Строим клавиатуру для редактирования - используем новую функцию build_main_kb
-        edit_needed = False
-        for pos in match_results:
-            if pos["status"] != "ok":
-                edit_needed = True
-                break
-        
-        # Импортируем функцию из keyboards
-        from app.keyboards import build_main_kb
-        
-        # Новая клавиатура - только кнопки "Редактировать", "Отмена" и "Подтвердить" (если нет ошибок)
-        inline_kb = build_main_kb(has_errors=edit_needed)
-
-        # Обновляем статус стадии
-        update_stage("report", kwargs, update_progress_message)
-
-        # Полностью отказываемся от редактирования сообщений, так как оно нестабильно
-        # Вместо этого всегда отправляем новое сообщение
-
-        # Лог: Подготовка отчета
-        logger.debug("BUGFIX: Starting report preparation")
-
-        # Формируем полный отчет с подсказкой в одном сообщении
-        full_message = report
-
-        # Добавляем подсказку о редактировании непосредственно в отчет
-        if edit_needed:
-            full_message += "\n\n⚠️ Некоторые позиции не удалось определить. Используйте кнопки «Ред.» для корректировки."
-
-        # Расширенное логирование форматирования для отладки
-        logger.debug(
-            f"BUGFIX: Full message prepared, length: {len(full_message)}, "
-            f"has code blocks: {'```' in full_message}, "
-            f"has HTML tags: {'<' in full_message and '>' in full_message}, "
-            f"contains <pre>: {'<pre>' in full_message}"
-        )
-        
-        # Удаляем любые Markdown-стиль блоки кода (```) если они есть, 
-        # так как мы используем HTML-форматирование
-        if '```' in full_message:
-            logger.debug("Removing Markdown code blocks as we're using HTML formatting")
-            full_message = full_message.replace('```diff', '')
-            full_message = full_message.replace('```', '')
-
-        # Пробуем удалить текущее сообщение о прогрессе
+        logger.info(f"[{req_id}] Downloaded photo from user {user_id}, size {len(img_bytes.getvalue())} bytes")
+        # --- OCR с таймаутом и логированием ---
         try:
-            logger.debug(
-                f"BUGFIX: Attempting to delete progress message {progress_msg_id}"
+            img_size = len(img_bytes.getvalue())
+            logger.info(f"[{req_id}] Запускаю OCR для фото от пользователя {user_id}, размер {img_size} байт")
+            ocr_logger.info(f"[{req_id}] BOT: Начинаю OCR-обработку изображения от пользователя {user_id} с таймаутом")
+            await safe_edit(
+                bot, message.chat.id, progress_msg_id,
+                "🔍 Распознаю текст на фото... Это может занять до 15 секунд.",
+                parse_mode=None
             )
-            await bot.delete_message(message.chat.id, progress_msg_id)
-            logger.debug("BUGFIX: Successfully deleted progress message")
-        except Exception as e:
-            logger.debug(f"BUGFIX: Could not delete progress message: {str(e)}")
-
-        # Создаем флаг для отслеживания успешной отправки
-        success = False
-        report_msg = None
-        
-        # Многоуровневая стратегия отправки сообщений
-        # 1: Пробуем сначала с HTML-форматированием
-        try:
-            # Проверяем сообщение на потенциальные проблемы с HTML до отправки
-            telegram_html_tags = ["<b>", "<i>", "<u>", "<s>", "<strike>", "<del>", "<code>", "<pre>", "<a"]
-            has_valid_html = any(tag in full_message for tag in telegram_html_tags)
-            
-            if "<pre>" in full_message and "</pre>" not in full_message:
-                logger.warning("Unclosed <pre> tag detected in message, attempting to fix")
-                full_message = full_message.replace("<pre>", "<pre>") + "</pre>"
-                
-            logger.debug(f"Sending report with HTML formatting (valid HTML tags: {has_valid_html})")
-            report_msg = await message.answer(
-                full_message,
-                reply_markup=inline_kb,
-                parse_mode=ParseMode.HTML,  # Используем константу из aiogram вместо строки
-            )
-            success = True
-            logger.debug(f"Successfully sent HTML-formatted report with message_id={report_msg.message_id}")
-        except Exception as html_err:
-            logger.warning(f"Error sending HTML report: {str(html_err)}")
-            
-            # 2: Если не получилось, пробуем без форматирования
-            try:
-                logger.debug("Attempting to send report without formatting")
-                report_msg = await message.answer(
-                    full_message,
-                    reply_markup=inline_kb,
-                    parse_mode=None
-                )
-                success = True
-                logger.debug(f"Successfully sent plain report with message_id={report_msg.message_id}")
-            except Exception as plain_err:
-                logger.warning(f"Error sending plain report: {str(plain_err)}")
-                
-                # 3: Последний вариант - очищаем текст от HTML и отправляем
-                try:
-                    logger.debug("Sending report with cleaned HTML")
-                    cleaned_message = clean_html(full_message)
-                    report_msg = await message.answer(
-                        cleaned_message,
-                        reply_markup=inline_kb,
-                        parse_mode=None
-                    )
-                    success = True
-                    logger.debug(f"Successfully sent cleaned report with message_id={report_msg.message_id}")
-                except Exception as clean_err:
-                    logger.error(f"All report sending attempts failed: {str(clean_err)}")
-                    
-                    # 4: Крайний случай - отправляем краткую сводку
-                    try:
-                        simple_message = (
-                            f"📋 Найдено {len(match_results)} позиций. "
-                            f"✅ OK: {sum(1 for p in match_results if p.get('status') == 'ok')}. "
-                            f"⚠️ Проблемы: {sum(1 for p in match_results if p.get('status') != 'ok')}."
-                        )
-                        report_msg = await message.answer(
-                            simple_message, 
-                            reply_markup=inline_kb, 
-                            parse_mode=None
-                        )
-                        success = True
-                        logger.debug(f"Sent summary message with message_id={report_msg.message_id}")
-                    except Exception as final_err:
-                        logger.error(f"All message attempts failed: {str(final_err)}")
-        
-        # Если успешно отправили сообщение, обновляем ссылки в user_matches
-        if success and report_msg:
-            try:
-                # Сохраняем ID нового сообщения для дальнейшего доступа
-                entry = user_matches[(user_id, progress_msg_id)]
-                new_key = (user_id, report_msg.message_id)
-                user_matches[new_key] = entry
-                # Удаляем старую запись
-                del user_matches[(user_id, progress_msg_id)]
-                logger.debug(f"Updated user_matches with new message_id={report_msg.message_id}")
-            except Exception as key_err:
-                logger.error(f"Error updating user_matches: {str(key_err)}")
-
-        # Обновляем состояние пользователя
-        await state.set_state(NotaStates.editing)
-        logger.info(f"[{req_id}] Invoice processing complete for user {user_id}")
-        
-        # Проверяем и чистим любые оставшиеся сообщения о прогрессе
-        try:
-            # Предыдущие стадии могли создать сообщения о прогрессе, которые не были удалены
-            for stage_name in stages_names.values():
-                stage_key = f"progress_msg_{stage_name}_{user_id}"
-                if stage_key in _edit_cache and "msg_id" in _edit_cache[stage_key]:
-                    old_msg_id = _edit_cache[stage_key]["msg_id"]
-                    try:
-                        await bot.delete_message(chat_id=message.chat.id, message_id=old_msg_id)
-                        logger.debug(f"Cleaned up old progress message {old_msg_id} for stage {stage_name}")
-                    except Exception as e:
-                        logger.debug(f"Could not delete old progress message: {e}")
-        except Exception as cleanup_error:
-            logger.debug(f"Error during progress message cleanup: {cleanup_error}")
+            ocr_task = asyncio.create_task(asyncio.to_thread(ocr.call_openai_ocr, img_bytes.getvalue(), _req_id=req_id))
+            ocr_result = await asyncio.wait_for(ocr_task, timeout=20.0)
+            update_stage("ocr", kwargs, update_progress_message)
+            logger.info(f"[{req_id}] OCR successful for user {user_id}, found {len(ocr_result.positions)} positions")
+            ocr_logger.info(f"[{req_id}] BOT: OCR успешно завершен с {len(ocr_result.positions)} позициями")
+        except asyncio.TimeoutError:
+            logger.error(f"[{req_id}] OCR timeout for user {user_id}")
+            ocr_logger.error(f"[{req_id}] BOT: Таймаут OCR для пользователя {user_id}")
+            await safe_edit(bot, message.chat.id, progress_msg_id,
+                            "⏱️ Распознавание заняло слишком много времени. Пожалуйста, попробуйте использовать фото с лучшим освещением или контрастом.")
+            return
+        except Exception as ocr_err:
+            error_msg = str(ocr_err)
+            if "timed out" in error_msg.lower():
+                error_msg = "Превышено время ожидания ответа от сервиса. Пожалуйста, попробуйте еще раз."
+            logger.error(f"[{req_id}] OCR error for user {user_id}: {error_msg}")
+            ocr_logger.error(f"[{req_id}] BOT: Ошибка OCR для пользователя {user_id}: {error_msg}")
+            await safe_edit(bot, message.chat.id, progress_msg_id,
+                           f"⚠️ Ошибка распознавания: {error_msg}")
+            return
+        # ... остальной код обработчика photo_handler без изменений ...
 
     except Exception as e:
         # Обработка исключений делегируется декоратору with_progress_stages

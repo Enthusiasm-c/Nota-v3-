@@ -1,114 +1,1120 @@
 ============================= test session starts ==============================
-platform darwin -- Python 3.13.3, pytest-8.3.5, pluggy-1.5.0 -- /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/venv/bin/python3
-cachedir: .pytest_cache
-rootdir: /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1
+platform darwin -- Python 3.13.3, pytest-8.3.5, pluggy-1.5.0
+rootdir: /Users/Denis/notav3 cursor /Nota-v3-
 configfile: pytest.ini
 plugins: anyio-4.9.0, vcr-1.0.2
-collecting ... collected 87 items / 2 errors
+collected 174 items
+
+tests/test_alias_flow.py .                                               [  0%]
+tests/test_api_decorators.py ..........sssss                             [  9%]
+tests/test_api_signatures.py ..                                          [ 10%]
+tests/test_apply_intent.py .......                                       [ 14%]
+tests/test_assistant_http.py ..                                          [ 15%]
+tests/test_basic.py ..                                                   [ 16%]
+tests/test_build_report.py ...                                           [ 18%]
+tests/test_callbacks.py ssss                                             [ 20%]
+tests/test_data_loader.py ..                                             [ 21%]
+tests/test_edit_callback.py .                                            [ 22%]
+tests/test_edit_flow.py .                                                [ 22%]
+tests/test_edit_flow_integration.py ..........                           [ 28%]
+tests/test_edit_keyboard_inline.py s                                     [ 29%]
+tests/test_edit_parser.py ......                                         [ 32%]
+tests/test_formatter_layout.py .                                         [ 33%]
+tests/test_formatter_no_bad_chars.py ss                                  [ 34%]
+tests/test_free_edit.py ......                                           [ 37%]
+tests/test_free_edit_date.py s                                           [ 38%]
+tests/test_free_edit_price.py s                                          [ 39%]
+tests/test_free_parser.py ...................                            [ 50%]
+tests/test_fuzzy_confirm.py sss                                          [ 51%]
+tests/test_fuzzy_match.py ......                                         [ 55%]
+tests/test_fuzzy_rename.py .                                             [ 55%]
+tests/test_handlers.py ss                                                [ 56%]
+tests/test_html_kept.py .                                                [ 57%]
+tests/test_integration_real.py .                                         [ 58%]
+tests/test_intent_adapter_array.py ......                                [ 61%]
+tests/test_keyboard_main_edit.py ...s                                    [ 63%]
+tests/test_latency_logging.py FE                                         [ 64%]
+tests/test_md_escape.py ...                                              [ 66%]
+tests/test_monitor.py FE.E.                                              [ 67%]
+tests/test_ocr.py s                                                      [ 68%]
+tests/test_ocr_cleaner.py .                                              [ 68%]
+tests/test_ocr_function_call.py s                                        [ 69%]
+tests/test_ocr_live.py s                                                 [ 70%]
+tests/test_parse_assistant_array.py .....                                [ 72%]
+tests/test_parse_commands_edge_cases.py ..........FFF.....               [ 83%]
+tests/test_parse_commands_en.py ...F.......                              [ 89%]
+tests/test_parse_commands_ru.py ..........                               [ 95%]
+tests/test_parse_mode.py s                                               [ 95%]
+tests/test_photo_handler.py ss                                           [ 97%]
+tests/test_redis_cache.py FF                                             [ 98%]
+tests/test_single_message_ux.py s                                        [ 98%]
+tests/test_trace_logging.py .E                                           [ 99%]
+tests/test_unknown_flow.py F                                             [100%]
 
 ==================================== ERRORS ====================================
-_________________ ERROR collecting tests/test_edit_callback.py _________________
-ImportError while importing test module '/Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_edit_callback.py'.
-Hint: make sure your test modules/packages have valid Python names.
-Traceback:
-/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/importlib/__init__.py:88: in import_module
-    return _bootstrap._gcd_import(name[level:], package, level)
-tests/test_edit_callback.py:1: in <module>
-    from app.keyboards import kb_edit
-E   ImportError: cannot import name 'kb_edit' from 'app.keyboards' (/Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/app/keyboards.py)
-_________________ ERROR collecting tests/test_unknown_flow.py __________________
-ImportError while importing test module '/Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_unknown_flow.py'.
-Hint: make sure your test modules/packages have valid Python names.
-Traceback:
-/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/importlib/__init__.py:88: in import_module
-    return _bootstrap._gcd_import(name[level:], package, level)
-tests/test_unknown_flow.py:3: in <module>
-    from app.keyboards import kb_edit
-E   ImportError: cannot import name 'kb_edit' from 'app.keyboards' (/Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/app/keyboards.py)
+__________ ERROR at teardown of test_latency_logging_info_and_warning __________
+
+level = <MagicMock name='mock.manager.disable' id='4395265264'>
+
+    def disable(level=CRITICAL):
+        """
+        Disable all logging calls of severity 'level' and below.
+        """
+>       root.manager.disable = level
+
+/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/logging/__init__.py:2221: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/logging/__init__.py:1359: in disable
+    self._disable = _checkLevel(value)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+level = <MagicMock name='mock.manager.disable' id='4395265264'>
+
+    def _checkLevel(level):
+        if isinstance(level, int):
+            rv = level
+        elif str(level) == level:
+            if level not in _nameToLevel:
+                raise ValueError("Unknown level: %r" % level)
+            rv = _nameToLevel[level]
+        else:
+>           raise TypeError("Level not an integer or a valid string: %r"
+                            % (level,))
+E           TypeError: Level not an integer or a valid string: <MagicMock name='mock.manager.disable' id='4395265264'>
+
+/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/logging/__init__.py:213: TypeError
+----------------------------- Captured stderr call -----------------------------
+2025-05-08 08:04:01,204 - app.assistants.trace_openai - INFO - OpenAI call: prompt
+2025-05-08 08:04:01,204 - app.assistants.trace_openai - INFO - OpenAI call: prompt
+2025-05-08 08:04:01,204 - app.assistants.trace_openai - INFO - OpenAI call: result
+2025-05-08 08:04:01,204 - app.assistants.thread_pool - INFO - Created new thread outside pool: thread-123
+2025-05-08 08:04:01,204 - app.assistants.client - INFO - [run_thread_safe_async] Using thread from pool: thread-123
+2025-05-08 08:04:01,204 - app.assistants.client - INFO - [run_thread_safe_async] Using assistant ID: 
+2025-05-08 08:04:01,204 - app.assistants.client - INFO - [run_thread_safe_async] Adding user message: 'fast input'
+2025-05-08 08:04:01,204 - app.assistants.client - INFO - [run_thread_safe_async] Creating run with assistant ID: 
+2025-05-08 08:04:01,205 - app.assistants.client - INFO - assistant_latency_ms=0
+2025-05-08 08:04:01,205 - app.assistants.client - INFO - [LATENCY] OpenAI response time: 0.00 sec
+2025-05-08 08:04:01,205 - app.assistants.client - INFO - [run_thread_safe_async] Waiting for run completion, run ID: <MagicMock name='client.beta.threads.runs.create().id' id='4395258208'>
+2025-05-08 08:04:01,205 - app.assistants.client - INFO - [run_thread_safe_async] Run completed, retrieving assistant messages
+2025-05-08 08:04:01,205 - app.assistants.client - ERROR - [run_thread_safe_async] Assistant did not generate any response
+2025-05-08 08:04:01,205 - app.assistants.trace_openai - INFO - OpenAI call: result
+2025-05-08 08:04:01,205 - app.assistants.trace_openai - INFO - OpenAI call: prompt
+2025-05-08 08:04:01,206 - app.assistants.trace_openai - INFO - OpenAI call: prompt
+2025-05-08 08:04:01,206 - app.assistants.trace_openai - INFO - OpenAI call: result
+2025-05-08 08:04:01,206 - app.assistants.thread_pool - INFO - Created new thread outside pool: thread-123
+2025-05-08 08:04:01,206 - app.assistants.client - ERROR - [run_thread_safe_async] Error in OpenAI Assistant API call: 
+Traceback (most recent call last):
+  File "/Users/Denis/notav3 cursor /Nota-v3-/app/assistants/client.py", line 518, in run_thread_safe_async
+    cache_set(thread_key, thread_id, ex=300)
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/Denis/notav3 cursor /Nota-v3-/app/utils/redis_cache.py", line 151, in cache_set
+    _local_cache.set(key, value, ex)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "/Users/Denis/notav3 cursor /Nota-v3-/app/utils/redis_cache.py", line 38, in set
+    now = time.time()
+  File "/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py", line 1169, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py", line 1173, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py", line 1230, in _execute_mock_call
+    result = next(effect)
+StopIteration
+2025-05-08 08:04:01,208 - app.assistants.trace_openai - INFO - OpenAI call: result
+------------------------------ Captured log call -------------------------------
+INFO     app.assistants.trace_openai:trace_openai.py:11 OpenAI call: prompt
+INFO     app.assistants.trace_openai:trace_openai.py:11 OpenAI call: prompt
+INFO     app.assistants.trace_openai:trace_openai.py:14 OpenAI call: result
+INFO     app.assistants.thread_pool:thread_pool.py:73 Created new thread outside pool: thread-123
+INFO     app.assistants.client:client.py:519 [run_thread_safe_async] Using thread from pool: thread-123
+INFO     app.assistants.client:client.py:529 [run_thread_safe_async] Using assistant ID: 
+INFO     app.assistants.client:client.py:532 [run_thread_safe_async] Adding user message: 'fast input'
+INFO     app.assistants.client:client.py:551 [run_thread_safe_async] Creating run with assistant ID: 
+INFO     app.assistants.client:client.py:573 assistant_latency_ms=0
+INFO     app.assistants.client:client.py:577 [LATENCY] OpenAI response time: 0.00 sec
+INFO     app.assistants.client:client.py:580 [run_thread_safe_async] Waiting for run completion, run ID: <MagicMock name='client.beta.threads.runs.create().id' id='4395258208'>
+INFO     app.assistants.client:client.py:771 [run_thread_safe_async] Run completed, retrieving assistant messages
+ERROR    app.assistants.client:client.py:793 [run_thread_safe_async] Assistant did not generate any response
+INFO     app.assistants.trace_openai:trace_openai.py:14 OpenAI call: result
+INFO     app.assistants.trace_openai:trace_openai.py:11 OpenAI call: prompt
+INFO     app.assistants.trace_openai:trace_openai.py:11 OpenAI call: prompt
+INFO     app.assistants.trace_openai:trace_openai.py:14 OpenAI call: result
+INFO     app.assistants.thread_pool:thread_pool.py:73 Created new thread outside pool: thread-123
+ERROR    app.assistants.client:client.py:881 [run_thread_safe_async] Error in OpenAI Assistant API call: 
+Traceback (most recent call last):
+  File "/Users/Denis/notav3 cursor /Nota-v3-/app/assistants/client.py", line 518, in run_thread_safe_async
+    cache_set(thread_key, thread_id, ex=300)
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/Denis/notav3 cursor /Nota-v3-/app/utils/redis_cache.py", line 151, in cache_set
+    _local_cache.set(key, value, ex)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "/Users/Denis/notav3 cursor /Nota-v3-/app/utils/redis_cache.py", line 38, in set
+    now = time.time()
+  File "/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py", line 1169, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py", line 1173, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py", line 1230, in _execute_mock_call
+    result = next(effect)
+StopIteration
+INFO     app.assistants.trace_openai:trace_openai.py:14 OpenAI call: result
+_______________ ERROR at teardown of test_monitor_triggers_alert _______________
+
+level = <MagicMock name='mock.manager.disable' id='4395265264'>
+
+    def disable(level=CRITICAL):
+        """
+        Disable all logging calls of severity 'level' and below.
+        """
+>       root.manager.disable = level
+
+/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/logging/__init__.py:2221: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/logging/__init__.py:1359: in disable
+    self._disable = _checkLevel(value)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+level = <MagicMock name='mock.manager.disable' id='4395265264'>
+
+    def _checkLevel(level):
+        if isinstance(level, int):
+            rv = level
+        elif str(level) == level:
+            if level not in _nameToLevel:
+                raise ValueError("Unknown level: %r" % level)
+            rv = _nameToLevel[level]
+        else:
+>           raise TypeError("Level not an integer or a valid string: %r"
+                            % (level,))
+E           TypeError: Level not an integer or a valid string: <MagicMock name='mock.manager.disable' id='4395265264'>
+
+/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/logging/__init__.py:213: TypeError
+----------------------------- Captured stderr call -----------------------------
+2025-05-08 08:04:01,265 - app.assistants.client - INFO - [parse_assistant_output] Начало разбора ассистент-ответа
+2025-05-08 08:04:01,265 - app.assistants.client - INFO - [parse_assistant_output] JSON успешно разобран
+2025-05-08 08:04:01,265 - app.assistants.client - WARNING - Assistant output: ни 'action', ни 'actions' не найдено, требуется уточнение
+2025-05-08 08:04:01,266 - app.assistants.client - INFO - [parse_assistant_output] Начало разбора ассистент-ответа
+2025-05-08 08:04:01,266 - app.assistants.client - INFO - [parse_assistant_output] JSON успешно разобран
+2025-05-08 08:04:01,266 - app.assistants.client - WARNING - Assistant output: ни 'action', ни 'actions' не найдено, требуется уточнение
+2025-05-08 08:04:01,266 - app.assistants.client - INFO - [parse_assistant_output] Начало разбора ассистент-ответа
+2025-05-08 08:04:01,266 - app.assistants.client - INFO - [parse_assistant_output] JSON успешно разобран
+2025-05-08 08:04:01,266 - app.assistants.client - WARNING - Assistant output: ни 'action', ни 'actions' не найдено, требуется уточнение
+2025-05-08 08:04:01,266 - app.assistants.client - INFO - [parse_assistant_output] Начало разбора ассистент-ответа
+2025-05-08 08:04:01,266 - app.assistants.client - INFO - [parse_assistant_output] JSON успешно разобран
+2025-05-08 08:04:01,266 - app.assistants.client - WARNING - Assistant output: ни 'action', ни 'actions' не найдено, требуется уточнение
+2025-05-08 08:04:01,266 - app.assistants.client - INFO - [parse_assistant_output] Начало разбора ассистент-ответа
+2025-05-08 08:04:01,266 - app.assistants.client - INFO - [parse_assistant_output] JSON успешно разобран
+2025-05-08 08:04:01,266 - app.assistants.client - WARNING - Assistant output: ни 'action', ни 'actions' не найдено, требуется уточнение
+------------------------------ Captured log call -------------------------------
+INFO     app.assistants.client:client.py:325 [parse_assistant_output] Начало разбора ассистент-ответа
+INFO     app.assistants.client:client.py:328 [parse_assistant_output] JSON успешно разобран
+WARNING  app.assistants.client:client.py:349 Assistant output: ни 'action', ни 'actions' не найдено, требуется уточнение
+INFO     app.assistants.client:client.py:325 [parse_assistant_output] Начало разбора ассистент-ответа
+INFO     app.assistants.client:client.py:328 [parse_assistant_output] JSON успешно разобран
+WARNING  app.assistants.client:client.py:349 Assistant output: ни 'action', ни 'actions' не найдено, требуется уточнение
+INFO     app.assistants.client:client.py:325 [parse_assistant_output] Начало разбора ассистент-ответа
+INFO     app.assistants.client:client.py:328 [parse_assistant_output] JSON успешно разобран
+WARNING  app.assistants.client:client.py:349 Assistant output: ни 'action', ни 'actions' не найдено, требуется уточнение
+INFO     app.assistants.client:client.py:325 [parse_assistant_output] Начало разбора ассистент-ответа
+INFO     app.assistants.client:client.py:328 [parse_assistant_output] JSON успешно разобран
+WARNING  app.assistants.client:client.py:349 Assistant output: ни 'action', ни 'actions' не найдено, требуется уточнение
+INFO     app.assistants.client:client.py:325 [parse_assistant_output] Начало разбора ассистент-ответа
+INFO     app.assistants.client:client.py:328 [parse_assistant_output] JSON успешно разобран
+WARNING  app.assistants.client:client.py:349 Assistant output: ни 'action', ни 'actions' не найдено, требуется уточнение
+________ ERROR at teardown of test_monitor_not_triggered_for_few_errors ________
+
+level = <MagicMock name='mock.manager.disable' id='4395265264'>
+
+    def disable(level=CRITICAL):
+        """
+        Disable all logging calls of severity 'level' and below.
+        """
+>       root.manager.disable = level
+
+/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/logging/__init__.py:2221: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/logging/__init__.py:1359: in disable
+    self._disable = _checkLevel(value)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+level = <MagicMock name='mock.manager.disable' id='4395265264'>
+
+    def _checkLevel(level):
+        if isinstance(level, int):
+            rv = level
+        elif str(level) == level:
+            if level not in _nameToLevel:
+                raise ValueError("Unknown level: %r" % level)
+            rv = _nameToLevel[level]
+        else:
+>           raise TypeError("Level not an integer or a valid string: %r"
+                            % (level,))
+E           TypeError: Level not an integer or a valid string: <MagicMock name='mock.manager.disable' id='4395265264'>
+
+/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/logging/__init__.py:213: TypeError
+----------------------------- Captured stderr call -----------------------------
+2025-05-08 08:04:01,286 - app.assistants.client - INFO - [parse_assistant_output] Начало разбора ассистент-ответа
+2025-05-08 08:04:01,286 - app.assistants.client - INFO - [parse_assistant_output] JSON успешно разобран
+2025-05-08 08:04:01,286 - app.assistants.client - WARNING - Assistant output: ни 'action', ни 'actions' не найдено, требуется уточнение
+2025-05-08 08:04:01,286 - app.assistants.client - INFO - [parse_assistant_output] Начало разбора ассистент-ответа
+2025-05-08 08:04:01,286 - app.assistants.client - INFO - [parse_assistant_output] JSON успешно разобран
+2025-05-08 08:04:01,286 - app.assistants.client - WARNING - Assistant output: ни 'action', ни 'actions' не найдено, требуется уточнение
+2025-05-08 08:04:01,286 - app.assistants.client - INFO - [parse_assistant_output] Начало разбора ассистент-ответа
+2025-05-08 08:04:01,286 - app.assistants.client - INFO - [parse_assistant_output] JSON успешно разобран
+2025-05-08 08:04:01,286 - app.assistants.client - WARNING - Assistant output: ни 'action', ни 'actions' не найдено, требуется уточнение
+------------------------------ Captured log call -------------------------------
+INFO     app.assistants.client:client.py:325 [parse_assistant_output] Начало разбора ассистент-ответа
+INFO     app.assistants.client:client.py:328 [parse_assistant_output] JSON успешно разобран
+WARNING  app.assistants.client:client.py:349 Assistant output: ни 'action', ни 'actions' не найдено, требуется уточнение
+INFO     app.assistants.client:client.py:325 [parse_assistant_output] Начало разбора ассистент-ответа
+INFO     app.assistants.client:client.py:328 [parse_assistant_output] JSON успешно разобран
+WARNING  app.assistants.client:client.py:349 Assistant output: ни 'action', ни 'actions' не найдено, требуется уточнение
+INFO     app.assistants.client:client.py:325 [parse_assistant_output] Начало разбора ассистент-ответа
+INFO     app.assistants.client:client.py:328 [parse_assistant_output] JSON успешно разобран
+WARNING  app.assistants.client:client.py:349 Assistant output: ни 'action', ни 'actions' не найдено, требуется уточнение
+_________ ERROR at teardown of test_run_thread_safe_logs_error_traceid _________
+
+level = <MagicMock name='mock.manager.disable' id='4395265264'>
+
+    def disable(level=CRITICAL):
+        """
+        Disable all logging calls of severity 'level' and below.
+        """
+>       root.manager.disable = level
+
+/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/logging/__init__.py:2221: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/logging/__init__.py:1359: in disable
+    self._disable = _checkLevel(value)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+level = <MagicMock name='mock.manager.disable' id='4395265264'>
+
+    def _checkLevel(level):
+        if isinstance(level, int):
+            rv = level
+        elif str(level) == level:
+            if level not in _nameToLevel:
+                raise ValueError("Unknown level: %r" % level)
+            rv = _nameToLevel[level]
+        else:
+>           raise TypeError("Level not an integer or a valid string: %r"
+                            % (level,))
+E           TypeError: Level not an integer or a valid string: <MagicMock name='mock.manager.disable' id='4395265264'>
+
+/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/logging/__init__.py:213: TypeError
+----------------------------- Captured stderr call -----------------------------
+2025-05-08 08:04:01,374 - app.assistants.trace_openai - INFO - OpenAI call: prompt
+2025-05-08 08:04:01,374 - app.assistants.trace_openai - INFO - OpenAI call: prompt
+2025-05-08 08:04:01,374 - app.assistants.trace_openai - INFO - OpenAI call: result
+2025-05-08 08:04:01,446 - openai._base_client - INFO - Retrying request to /threads in 0.404565 seconds
+2025-05-08 08:04:01,919 - openai._base_client - INFO - Retrying request to /threads in 0.943194 seconds
+2025-05-08 08:04:02,923 - app.assistants.thread_pool - ERROR - Error creating thread: Connection error.
+2025-05-08 08:04:02,923 - app.assistants.client - ERROR - [run_thread_safe_async] OpenAI API connection error: Connection error.
+Traceback (most recent call last):
+  File "/opt/homebrew/lib/python3.13/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
+    yield
+  File "/opt/homebrew/lib/python3.13/site-packages/httpx/_transports/default.py", line 250, in handle_request
+    resp = self._pool.handle_request(req)
+  File "/opt/homebrew/lib/python3.13/site-packages/httpcore/_sync/connection_pool.py", line 256, in handle_request
+    raise exc from None
+  File "/opt/homebrew/lib/python3.13/site-packages/httpcore/_sync/connection_pool.py", line 236, in handle_request
+    response = connection.handle_request(
+        pool_request.request
+    )
+  File "/opt/homebrew/lib/python3.13/site-packages/httpcore/_sync/connection.py", line 103, in handle_request
+    return self._connection.handle_request(request)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/opt/homebrew/lib/python3.13/site-packages/httpcore/_sync/http11.py", line 136, in handle_request
+    raise exc
+  File "/opt/homebrew/lib/python3.13/site-packages/httpcore/_sync/http11.py", line 86, in handle_request
+    self._send_request_headers(**kwargs)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/opt/homebrew/lib/python3.13/site-packages/httpcore/_sync/http11.py", line 144, in _send_request_headers
+    with map_exceptions({h11.LocalProtocolError: LocalProtocolError}):
+         ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/opt/homebrew/lib/python3.13/site-packages/httpcore/_exceptions.py", line 14, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore.LocalProtocolError: Illegal header value b'Bearer '
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/homebrew/lib/python3.13/site-packages/openai/_base_client.py", line 969, in request
+    response = self._client.send(
+        request,
+        stream=stream or self._should_stream_response_body(request=request),
+        **kwargs,
+    )
+  File "/opt/homebrew/lib/python3.13/site-packages/httpx/_client.py", line 914, in send
+    response = self._send_handling_auth(
+        request,
+    ...<2 lines>...
+        history=[],
+    )
+  File "/opt/homebrew/lib/python3.13/site-packages/httpx/_client.py", line 942, in _send_handling_auth
+    response = self._send_handling_redirects(
+        request,
+        follow_redirects=follow_redirects,
+        history=history,
+    )
+  File "/opt/homebrew/lib/python3.13/site-packages/httpx/_client.py", line 979, in _send_handling_redirects
+    response = self._send_single_request(request)
+  File "/opt/homebrew/lib/python3.13/site-packages/httpx/_client.py", line 1014, in _send_single_request
+    response = transport.handle_request(request)
+  File "/opt/homebrew/lib/python3.13/site-packages/httpx/_transports/default.py", line 249, in handle_request
+    with map_httpcore_exceptions():
+         ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/opt/homebrew/lib/python3.13/site-packages/httpx/_transports/default.py", line 118, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx.LocalProtocolError: Illegal header value b'Bearer '
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/Denis/notav3 cursor /Nota-v3-/app/assistants/client.py", line 517, in run_thread_safe_async
+    thread_id = await get_thread(client)
+                ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/Denis/notav3 cursor /Nota-v3-/app/assistants/thread_pool.py", line 72, in get_thread
+    thread = client.beta.threads.create()
+  File "/opt/homebrew/lib/python3.13/site-packages/openai/resources/beta/threads/threads.py", line 130, in create
+    return self._post(
+           ~~~~~~~~~~^
+        "/threads",
+        ^^^^^^^^^^^
+    ...<11 lines>...
+        cast_to=Thread,
+        ^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/opt/homebrew/lib/python3.13/site-packages/openai/_base_client.py", line 1239, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+                           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/lib/python3.13/site-packages/openai/_base_client.py", line 1001, in request
+    raise APIConnectionError(request=request) from err
+openai.APIConnectionError: Connection error.
+2025-05-08 08:04:02,938 - app.assistants.trace_openai - INFO - OpenAI call: result
+------------------------------ Captured log call -------------------------------
+INFO     app.assistants.trace_openai:trace_openai.py:11 OpenAI call: prompt
+INFO     app.assistants.trace_openai:trace_openai.py:11 OpenAI call: prompt
+INFO     app.assistants.trace_openai:trace_openai.py:14 OpenAI call: result
+INFO     openai._base_client:_base_client.py:1058 Retrying request to /threads in 0.404565 seconds
+INFO     openai._base_client:_base_client.py:1058 Retrying request to /threads in 0.943194 seconds
+ERROR    app.assistants.thread_pool:thread_pool.py:76 Error creating thread: Connection error.
+ERROR    app.assistants.client:client.py:865 [run_thread_safe_async] OpenAI API connection error: Connection error.
+Traceback (most recent call last):
+  File "/opt/homebrew/lib/python3.13/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
+    yield
+  File "/opt/homebrew/lib/python3.13/site-packages/httpx/_transports/default.py", line 250, in handle_request
+    resp = self._pool.handle_request(req)
+  File "/opt/homebrew/lib/python3.13/site-packages/httpcore/_sync/connection_pool.py", line 256, in handle_request
+    raise exc from None
+  File "/opt/homebrew/lib/python3.13/site-packages/httpcore/_sync/connection_pool.py", line 236, in handle_request
+    response = connection.handle_request(
+        pool_request.request
+    )
+  File "/opt/homebrew/lib/python3.13/site-packages/httpcore/_sync/connection.py", line 103, in handle_request
+    return self._connection.handle_request(request)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/opt/homebrew/lib/python3.13/site-packages/httpcore/_sync/http11.py", line 136, in handle_request
+    raise exc
+  File "/opt/homebrew/lib/python3.13/site-packages/httpcore/_sync/http11.py", line 86, in handle_request
+    self._send_request_headers(**kwargs)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/opt/homebrew/lib/python3.13/site-packages/httpcore/_sync/http11.py", line 144, in _send_request_headers
+    with map_exceptions({h11.LocalProtocolError: LocalProtocolError}):
+         ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/opt/homebrew/lib/python3.13/site-packages/httpcore/_exceptions.py", line 14, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore.LocalProtocolError: Illegal header value b'Bearer '
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/homebrew/lib/python3.13/site-packages/openai/_base_client.py", line 969, in request
+    response = self._client.send(
+        request,
+        stream=stream or self._should_stream_response_body(request=request),
+        **kwargs,
+    )
+  File "/opt/homebrew/lib/python3.13/site-packages/httpx/_client.py", line 914, in send
+    response = self._send_handling_auth(
+        request,
+    ...<2 lines>...
+        history=[],
+    )
+  File "/opt/homebrew/lib/python3.13/site-packages/httpx/_client.py", line 942, in _send_handling_auth
+    response = self._send_handling_redirects(
+        request,
+        follow_redirects=follow_redirects,
+        history=history,
+    )
+  File "/opt/homebrew/lib/python3.13/site-packages/httpx/_client.py", line 979, in _send_handling_redirects
+    response = self._send_single_request(request)
+  File "/opt/homebrew/lib/python3.13/site-packages/httpx/_client.py", line 1014, in _send_single_request
+    response = transport.handle_request(request)
+  File "/opt/homebrew/lib/python3.13/site-packages/httpx/_transports/default.py", line 249, in handle_request
+    with map_httpcore_exceptions():
+         ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/opt/homebrew/lib/python3.13/site-packages/httpx/_transports/default.py", line 118, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx.LocalProtocolError: Illegal header value b'Bearer '
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/Denis/notav3 cursor /Nota-v3-/app/assistants/client.py", line 517, in run_thread_safe_async
+    thread_id = await get_thread(client)
+                ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/Denis/notav3 cursor /Nota-v3-/app/assistants/thread_pool.py", line 72, in get_thread
+    thread = client.beta.threads.create()
+  File "/opt/homebrew/lib/python3.13/site-packages/openai/resources/beta/threads/threads.py", line 130, in create
+    return self._post(
+           ~~~~~~~~~~^
+        "/threads",
+        ^^^^^^^^^^^
+    ...<11 lines>...
+        cast_to=Thread,
+        ^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/opt/homebrew/lib/python3.13/site-packages/openai/_base_client.py", line 1239, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+                           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/lib/python3.13/site-packages/openai/_base_client.py", line 1001, in request
+    raise APIConnectionError(request=request) from err
+openai.APIConnectionError: Connection error.
+INFO     app.assistants.trace_openai:trace_openai.py:14 OpenAI call: result
+=================================== FAILURES ===================================
+____________________ test_latency_logging_info_and_warning _____________________
+
+caplog = <_pytest.logging.LogCaptureFixture object at 0x105e45bd0>
+
+    def test_latency_logging_info_and_warning(caplog):
+        # Мокаем OpenAI client и Redis
+        with patch.object(assistant_client, 'client') as mock_client, \
+             patch('app.utils.redis_cache.cache_get', return_value=None), \
+             patch('app.utils.redis_cache.cache_set'):
+    
+            # Мокаем создание thread, message, run
+            mock_thread = MagicMock()
+            mock_thread.id = 'thread-123'
+            mock_client.beta.threads.create.return_value = mock_thread
+            mock_message = MagicMock()
+            mock_client.beta.threads.messages.create.return_value = mock_message
+            mock_run = MagicMock()
+            mock_run.status = 'completed'
+            mock_client.beta.threads.runs.create.return_value = mock_run
+            # simulate fast response
+            caplog.set_level(logging.INFO)
+            start = time.time()
+            assistant_client.run_thread_safe('fast input', timeout=5)
+            info_logs = [r for r in caplog.records if '[LATENCY]' in r.getMessage()]
+            assert any('OpenAI response time' in r.getMessage() for r in info_logs)
+    
+            # simulate slow response
+            with patch('time.time', side_effect=[start, start+11]):
+                caplog.clear()
+                assistant_client.run_thread_safe('slow input', timeout=5)
+                warn_logs = [r for r in caplog.records if '[LATENCY]' in r.getMessage()]
+>               assert any('slow' in r.getMessage().lower() or 'warning' in r.getMessage().lower() for r in warn_logs)
+E               assert False
+E                +  where False = any(<generator object test_latency_logging_info_and_warning.<locals>.<genexpr> at 0x105d45b10>)
+
+tests/test_latency_logging.py:33: AssertionError
+----------------------------- Captured stderr call -----------------------------
+2025-05-08 08:04:01,204 - app.assistants.trace_openai - INFO - OpenAI call: prompt
+2025-05-08 08:04:01,204 - app.assistants.trace_openai - INFO - OpenAI call: prompt
+2025-05-08 08:04:01,204 - app.assistants.trace_openai - INFO - OpenAI call: result
+2025-05-08 08:04:01,204 - app.assistants.thread_pool - INFO - Created new thread outside pool: thread-123
+2025-05-08 08:04:01,204 - app.assistants.client - INFO - [run_thread_safe_async] Using thread from pool: thread-123
+2025-05-08 08:04:01,204 - app.assistants.client - INFO - [run_thread_safe_async] Using assistant ID: 
+2025-05-08 08:04:01,204 - app.assistants.client - INFO - [run_thread_safe_async] Adding user message: 'fast input'
+2025-05-08 08:04:01,204 - app.assistants.client - INFO - [run_thread_safe_async] Creating run with assistant ID: 
+2025-05-08 08:04:01,205 - app.assistants.client - INFO - assistant_latency_ms=0
+2025-05-08 08:04:01,205 - app.assistants.client - INFO - [LATENCY] OpenAI response time: 0.00 sec
+2025-05-08 08:04:01,205 - app.assistants.client - INFO - [run_thread_safe_async] Waiting for run completion, run ID: <MagicMock name='client.beta.threads.runs.create().id' id='4395258208'>
+2025-05-08 08:04:01,205 - app.assistants.client - INFO - [run_thread_safe_async] Run completed, retrieving assistant messages
+2025-05-08 08:04:01,205 - app.assistants.client - ERROR - [run_thread_safe_async] Assistant did not generate any response
+2025-05-08 08:04:01,205 - app.assistants.trace_openai - INFO - OpenAI call: result
+2025-05-08 08:04:01,205 - app.assistants.trace_openai - INFO - OpenAI call: prompt
+2025-05-08 08:04:01,206 - app.assistants.trace_openai - INFO - OpenAI call: prompt
+2025-05-08 08:04:01,206 - app.assistants.trace_openai - INFO - OpenAI call: result
+2025-05-08 08:04:01,206 - app.assistants.thread_pool - INFO - Created new thread outside pool: thread-123
+2025-05-08 08:04:01,206 - app.assistants.client - ERROR - [run_thread_safe_async] Error in OpenAI Assistant API call: 
+Traceback (most recent call last):
+  File "/Users/Denis/notav3 cursor /Nota-v3-/app/assistants/client.py", line 518, in run_thread_safe_async
+    cache_set(thread_key, thread_id, ex=300)
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/Denis/notav3 cursor /Nota-v3-/app/utils/redis_cache.py", line 151, in cache_set
+    _local_cache.set(key, value, ex)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "/Users/Denis/notav3 cursor /Nota-v3-/app/utils/redis_cache.py", line 38, in set
+    now = time.time()
+  File "/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py", line 1169, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py", line 1173, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py", line 1230, in _execute_mock_call
+    result = next(effect)
+StopIteration
+2025-05-08 08:04:01,208 - app.assistants.trace_openai - INFO - OpenAI call: result
+------------------------------ Captured log call -------------------------------
+INFO     app.assistants.trace_openai:trace_openai.py:11 OpenAI call: prompt
+INFO     app.assistants.trace_openai:trace_openai.py:11 OpenAI call: prompt
+INFO     app.assistants.trace_openai:trace_openai.py:14 OpenAI call: result
+INFO     app.assistants.thread_pool:thread_pool.py:73 Created new thread outside pool: thread-123
+INFO     app.assistants.client:client.py:519 [run_thread_safe_async] Using thread from pool: thread-123
+INFO     app.assistants.client:client.py:529 [run_thread_safe_async] Using assistant ID: 
+INFO     app.assistants.client:client.py:532 [run_thread_safe_async] Adding user message: 'fast input'
+INFO     app.assistants.client:client.py:551 [run_thread_safe_async] Creating run with assistant ID: 
+INFO     app.assistants.client:client.py:573 assistant_latency_ms=0
+INFO     app.assistants.client:client.py:577 [LATENCY] OpenAI response time: 0.00 sec
+INFO     app.assistants.client:client.py:580 [run_thread_safe_async] Waiting for run completion, run ID: <MagicMock name='client.beta.threads.runs.create().id' id='4395258208'>
+INFO     app.assistants.client:client.py:771 [run_thread_safe_async] Run completed, retrieving assistant messages
+ERROR    app.assistants.client:client.py:793 [run_thread_safe_async] Assistant did not generate any response
+INFO     app.assistants.trace_openai:trace_openai.py:14 OpenAI call: result
+INFO     app.assistants.trace_openai:trace_openai.py:11 OpenAI call: prompt
+INFO     app.assistants.trace_openai:trace_openai.py:11 OpenAI call: prompt
+INFO     app.assistants.trace_openai:trace_openai.py:14 OpenAI call: result
+INFO     app.assistants.thread_pool:thread_pool.py:73 Created new thread outside pool: thread-123
+ERROR    app.assistants.client:client.py:881 [run_thread_safe_async] Error in OpenAI Assistant API call: 
+Traceback (most recent call last):
+  File "/Users/Denis/notav3 cursor /Nota-v3-/app/assistants/client.py", line 518, in run_thread_safe_async
+    cache_set(thread_key, thread_id, ex=300)
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/Denis/notav3 cursor /Nota-v3-/app/utils/redis_cache.py", line 151, in cache_set
+    _local_cache.set(key, value, ex)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "/Users/Denis/notav3 cursor /Nota-v3-/app/utils/redis_cache.py", line 38, in set
+    now = time.time()
+  File "/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py", line 1169, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py", line 1173, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py", line 1230, in _execute_mock_call
+    result = next(effect)
+StopIteration
+INFO     app.assistants.trace_openai:trace_openai.py:14 OpenAI call: result
+_________________________ test_monitor_triggers_alert __________________________
+
+caplog = <_pytest.logging.LogCaptureFixture object at 0x105e46850>
+
+    def test_monitor_triggers_alert(caplog):
+        caplog.set_level(logging.ERROR)
+        # Сгенерировать 5 ошибок подряд (без поля 'action')
+        bad_json = '{"foo": "bar"}'
+        for _ in range(5):
+            result = parse_assistant_output(bad_json)
+            assert result[0].action == "clarification_needed"
+        # Проверить, что ALERT сработал
+        alerts = [r for r in caplog.records if '[ALERT]' in r.getMessage()]
+>       assert alerts, 'ALERT не сработал при 5 ошибках'
+E       AssertionError: ALERT не сработал при 5 ошибках
+E       assert []
+
+tests/test_monitor.py:23: AssertionError
+----------------------------- Captured stderr call -----------------------------
+2025-05-08 08:04:01,265 - app.assistants.client - INFO - [parse_assistant_output] Начало разбора ассистент-ответа
+2025-05-08 08:04:01,265 - app.assistants.client - INFO - [parse_assistant_output] JSON успешно разобран
+2025-05-08 08:04:01,265 - app.assistants.client - WARNING - Assistant output: ни 'action', ни 'actions' не найдено, требуется уточнение
+2025-05-08 08:04:01,266 - app.assistants.client - INFO - [parse_assistant_output] Начало разбора ассистент-ответа
+2025-05-08 08:04:01,266 - app.assistants.client - INFO - [parse_assistant_output] JSON успешно разобран
+2025-05-08 08:04:01,266 - app.assistants.client - WARNING - Assistant output: ни 'action', ни 'actions' не найдено, требуется уточнение
+2025-05-08 08:04:01,266 - app.assistants.client - INFO - [parse_assistant_output] Начало разбора ассистент-ответа
+2025-05-08 08:04:01,266 - app.assistants.client - INFO - [parse_assistant_output] JSON успешно разобран
+2025-05-08 08:04:01,266 - app.assistants.client - WARNING - Assistant output: ни 'action', ни 'actions' не найдено, требуется уточнение
+2025-05-08 08:04:01,266 - app.assistants.client - INFO - [parse_assistant_output] Начало разбора ассистент-ответа
+2025-05-08 08:04:01,266 - app.assistants.client - INFO - [parse_assistant_output] JSON успешно разобран
+2025-05-08 08:04:01,266 - app.assistants.client - WARNING - Assistant output: ни 'action', ни 'actions' не найдено, требуется уточнение
+2025-05-08 08:04:01,266 - app.assistants.client - INFO - [parse_assistant_output] Начало разбора ассистент-ответа
+2025-05-08 08:04:01,266 - app.assistants.client - INFO - [parse_assistant_output] JSON успешно разобран
+2025-05-08 08:04:01,266 - app.assistants.client - WARNING - Assistant output: ни 'action', ни 'actions' не найдено, требуется уточнение
+------------------------------ Captured log call -------------------------------
+INFO     app.assistants.client:client.py:325 [parse_assistant_output] Начало разбора ассистент-ответа
+INFO     app.assistants.client:client.py:328 [parse_assistant_output] JSON успешно разобран
+WARNING  app.assistants.client:client.py:349 Assistant output: ни 'action', ни 'actions' не найдено, требуется уточнение
+INFO     app.assistants.client:client.py:325 [parse_assistant_output] Начало разбора ассистент-ответа
+INFO     app.assistants.client:client.py:328 [parse_assistant_output] JSON успешно разобран
+WARNING  app.assistants.client:client.py:349 Assistant output: ни 'action', ни 'actions' не найдено, требуется уточнение
+INFO     app.assistants.client:client.py:325 [parse_assistant_output] Начало разбора ассистент-ответа
+INFO     app.assistants.client:client.py:328 [parse_assistant_output] JSON успешно разобран
+WARNING  app.assistants.client:client.py:349 Assistant output: ни 'action', ни 'actions' не найдено, требуется уточнение
+INFO     app.assistants.client:client.py:325 [parse_assistant_output] Начало разбора ассистент-ответа
+INFO     app.assistants.client:client.py:328 [parse_assistant_output] JSON успешно разобран
+WARNING  app.assistants.client:client.py:349 Assistant output: ни 'action', ни 'actions' не найдено, требуется уточнение
+INFO     app.assistants.client:client.py:325 [parse_assistant_output] Начало разбора ассистент-ответа
+INFO     app.assistants.client:client.py:328 [parse_assistant_output] JSON успешно разобран
+WARNING  app.assistants.client:client.py:349 Assistant output: ни 'action', ни 'actions' не найдено, требуется уточнение
+_________ test_parse_commands_edge_cases[totall 1234-None-expected10] __________
+
+user_input = 'totall 1234', invoice_lines = None, expected = []
+
+    @pytest.mark.parametrize("user_input,invoice_lines,expected", [
+        # Пустой ввод
+        ("", None, []),
+        ("   ", None, []),
+        # Некорректные индексы строк
+        ("строка -1 количество 5", 3, [{"action": "unknown", "error": "line_out_of_range", "line": 0}]),
+        ("row 0 qty 3", 2, [{"action": "unknown", "error": "line_out_of_range", "line": 0}]),
+        ("строка 10 количество 1", 2, [{"action": "unknown", "error": "line_out_of_range", "line": 9}]),
+        ("row 5 qty 2", 3, [{"action": "unknown", "error": "line_out_of_range", "line": 4}]),
+        # Неправильный формат чисел
+        ("строка 1 количество пять", None, [{"action": "unknown", "error": "invalid_line_or_qty"}]),
+        ("row 1 qty five", None, [{"action": "unknown", "error": "invalid_line_or_qty"}]),
+        ("общая сумма 12,34,56", None, [{"action": "unknown", "error": "invalid_total_value"}]),
+        # Неоднозначные команды или команды с опечатками
+        ("поставщиик ООО Ромашка", None, []),  # опечатка
+        ("totall 1234", None, []),  # опечатка
+        ("change name in row two to Bread", None, []),  # нераспознанный индекс
+        # Многострочные команды
+        ("поставщик ООО Ромашка\nстрока 1 количество 2", None, [
+            {"action": "set_supplier", "supplier": "ООО Ромашка"},
+            {"action": "set_qty", "line": 0, "qty": 2.0}
+        ]),
+        ("supplier Acme Corp; row 2 name Milk", None, [
+            {"action": "set_supplier", "supplier": "Acme Corp"},
+            {"action": "set_name", "line": 1, "name": "Milk"}
+        ]),
+        # Команды с запятыми
+        ("строка 1 цена 100, строка 2 количество 5", None, [
+            {"action": "set_price", "line": 0, "price": 100.0},
+            {"action": "set_qty", "line": 1, "qty": 5.0}
+        ]),
+        # Команды с точками
+        ("строка 1 название Молоко. строка 1 цена 200. строка 1 количество 3", None, [
+            {"action": "set_name", "line": 0, "name": "Молоко"},
+            {"action": "set_price", "line": 0, "price": 200.0},
+            {"action": "set_qty", "line": 0, "qty": 3.0}
+        ]),
+        # Комбинированные разделители
+        ("поставщик ООО Ромашка; строка 1 цена 100, строка 2 количество 5.", None, [
+            {"action": "set_supplier", "supplier": "ООО Ромашка"},
+            {"action": "set_price", "line": 0, "price": 100.0},
+            {"action": "set_qty", "line": 1, "qty": 5.0}
+        ]),
+        # Проверка, что точки внутри чисел не разделяют команды
+        ("строка 1 цена 10.5, строка 2 количество 3.14", None, [
+            {"action": "set_price", "line": 0, "price": 10.5},
+            {"action": "set_qty", "line": 1, "qty": 3.14}
+        ]),
+    ])
+    def test_parse_commands_edge_cases(user_input, invoice_lines, expected):
+        result = parse_edit_command(user_input, invoice_lines) if invoice_lines is not None else parse_edit_command(user_input)
+>       assert len(result) == len(expected)
+E       AssertionError: assert 1 == 0
+E        +  where 1 = len([{'action': 'unknown', 'error': 'no_pattern_match', 'user_input': 'totall 1234'}])
+E        +  and   0 = len([])
+
+tests/test_parse_commands_edge_cases.py:55: AssertionError
+_ test_parse_commands_edge_cases[change name in row two to Bread-None-expected11] _
+
+user_input = 'change name in row two to Bread', invoice_lines = None
+expected = []
+
+    @pytest.mark.parametrize("user_input,invoice_lines,expected", [
+        # Пустой ввод
+        ("", None, []),
+        ("   ", None, []),
+        # Некорректные индексы строк
+        ("строка -1 количество 5", 3, [{"action": "unknown", "error": "line_out_of_range", "line": 0}]),
+        ("row 0 qty 3", 2, [{"action": "unknown", "error": "line_out_of_range", "line": 0}]),
+        ("строка 10 количество 1", 2, [{"action": "unknown", "error": "line_out_of_range", "line": 9}]),
+        ("row 5 qty 2", 3, [{"action": "unknown", "error": "line_out_of_range", "line": 4}]),
+        # Неправильный формат чисел
+        ("строка 1 количество пять", None, [{"action": "unknown", "error": "invalid_line_or_qty"}]),
+        ("row 1 qty five", None, [{"action": "unknown", "error": "invalid_line_or_qty"}]),
+        ("общая сумма 12,34,56", None, [{"action": "unknown", "error": "invalid_total_value"}]),
+        # Неоднозначные команды или команды с опечатками
+        ("поставщиик ООО Ромашка", None, []),  # опечатка
+        ("totall 1234", None, []),  # опечатка
+        ("change name in row two to Bread", None, []),  # нераспознанный индекс
+        # Многострочные команды
+        ("поставщик ООО Ромашка\nстрока 1 количество 2", None, [
+            {"action": "set_supplier", "supplier": "ООО Ромашка"},
+            {"action": "set_qty", "line": 0, "qty": 2.0}
+        ]),
+        ("supplier Acme Corp; row 2 name Milk", None, [
+            {"action": "set_supplier", "supplier": "Acme Corp"},
+            {"action": "set_name", "line": 1, "name": "Milk"}
+        ]),
+        # Команды с запятыми
+        ("строка 1 цена 100, строка 2 количество 5", None, [
+            {"action": "set_price", "line": 0, "price": 100.0},
+            {"action": "set_qty", "line": 1, "qty": 5.0}
+        ]),
+        # Команды с точками
+        ("строка 1 название Молоко. строка 1 цена 200. строка 1 количество 3", None, [
+            {"action": "set_name", "line": 0, "name": "Молоко"},
+            {"action": "set_price", "line": 0, "price": 200.0},
+            {"action": "set_qty", "line": 0, "qty": 3.0}
+        ]),
+        # Комбинированные разделители
+        ("поставщик ООО Ромашка; строка 1 цена 100, строка 2 количество 5.", None, [
+            {"action": "set_supplier", "supplier": "ООО Ромашка"},
+            {"action": "set_price", "line": 0, "price": 100.0},
+            {"action": "set_qty", "line": 1, "qty": 5.0}
+        ]),
+        # Проверка, что точки внутри чисел не разделяют команды
+        ("строка 1 цена 10.5, строка 2 количество 3.14", None, [
+            {"action": "set_price", "line": 0, "price": 10.5},
+            {"action": "set_qty", "line": 1, "qty": 3.14}
+        ]),
+    ])
+    def test_parse_commands_edge_cases(user_input, invoice_lines, expected):
+        result = parse_edit_command(user_input, invoice_lines) if invoice_lines is not None else parse_edit_command(user_input)
+>       assert len(result) == len(expected)
+E       AssertionError: assert 1 == 0
+E        +  where 1 = len([{'action': 'unknown', 'error': 'no_pattern_match', 'user_input': 'change name in row two to Bread'}])
+E        +  and   0 = len([])
+
+tests/test_parse_commands_edge_cases.py:55: AssertionError
+_ test_parse_commands_edge_cases[\u043f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a \u041e\u041e\u041e \u0420\u043e\u043c\u0430\u0448\u043a\u0430\n\u0441\u0442\u0440\u043e\u043a\u0430 1 \u043a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u043e 2-None-expected12] _
+
+user_input = 'поставщик ООО Ромашка\nстрока 1 количество 2'
+invoice_lines = None
+expected = [{'action': 'set_supplier', 'supplier': 'ООО Ромашка'}, {'action': 'set_qty', 'line': 0, 'qty': 2.0}]
+
+    @pytest.mark.parametrize("user_input,invoice_lines,expected", [
+        # Пустой ввод
+        ("", None, []),
+        ("   ", None, []),
+        # Некорректные индексы строк
+        ("строка -1 количество 5", 3, [{"action": "unknown", "error": "line_out_of_range", "line": 0}]),
+        ("row 0 qty 3", 2, [{"action": "unknown", "error": "line_out_of_range", "line": 0}]),
+        ("строка 10 количество 1", 2, [{"action": "unknown", "error": "line_out_of_range", "line": 9}]),
+        ("row 5 qty 2", 3, [{"action": "unknown", "error": "line_out_of_range", "line": 4}]),
+        # Неправильный формат чисел
+        ("строка 1 количество пять", None, [{"action": "unknown", "error": "invalid_line_or_qty"}]),
+        ("row 1 qty five", None, [{"action": "unknown", "error": "invalid_line_or_qty"}]),
+        ("общая сумма 12,34,56", None, [{"action": "unknown", "error": "invalid_total_value"}]),
+        # Неоднозначные команды или команды с опечатками
+        ("поставщиик ООО Ромашка", None, []),  # опечатка
+        ("totall 1234", None, []),  # опечатка
+        ("change name in row two to Bread", None, []),  # нераспознанный индекс
+        # Многострочные команды
+        ("поставщик ООО Ромашка\nстрока 1 количество 2", None, [
+            {"action": "set_supplier", "supplier": "ООО Ромашка"},
+            {"action": "set_qty", "line": 0, "qty": 2.0}
+        ]),
+        ("supplier Acme Corp; row 2 name Milk", None, [
+            {"action": "set_supplier", "supplier": "Acme Corp"},
+            {"action": "set_name", "line": 1, "name": "Milk"}
+        ]),
+        # Команды с запятыми
+        ("строка 1 цена 100, строка 2 количество 5", None, [
+            {"action": "set_price", "line": 0, "price": 100.0},
+            {"action": "set_qty", "line": 1, "qty": 5.0}
+        ]),
+        # Команды с точками
+        ("строка 1 название Молоко. строка 1 цена 200. строка 1 количество 3", None, [
+            {"action": "set_name", "line": 0, "name": "Молоко"},
+            {"action": "set_price", "line": 0, "price": 200.0},
+            {"action": "set_qty", "line": 0, "qty": 3.0}
+        ]),
+        # Комбинированные разделители
+        ("поставщик ООО Ромашка; строка 1 цена 100, строка 2 количество 5.", None, [
+            {"action": "set_supplier", "supplier": "ООО Ромашка"},
+            {"action": "set_price", "line": 0, "price": 100.0},
+            {"action": "set_qty", "line": 1, "qty": 5.0}
+        ]),
+        # Проверка, что точки внутри чисел не разделяют команды
+        ("строка 1 цена 10.5, строка 2 количество 3.14", None, [
+            {"action": "set_price", "line": 0, "price": 10.5},
+            {"action": "set_qty", "line": 1, "qty": 3.14}
+        ]),
+    ])
+    def test_parse_commands_edge_cases(user_input, invoice_lines, expected):
+        result = parse_edit_command(user_input, invoice_lines) if invoice_lines is not None else parse_edit_command(user_input)
+>       assert len(result) == len(expected)
+E       AssertionError: assert 1 == 2
+E        +  where 1 = len([{'action': 'set_supplier', 'supplier': 'ООО Ромашка;строка 1 количество 2'}])
+E        +  and   2 = len([{'action': 'set_supplier', 'supplier': 'ООО Ромашка'}, {'action': 'set_qty', 'line': 0, 'qty': 2.0}])
+
+tests/test_parse_commands_edge_cases.py:55: AssertionError
+____________ test_parse_commands_en[total amount 9999.50-expected3] ____________
+
+user_input = 'total amount 9999.50'
+expected = [{'action': 'set_total', 'total': 9999.5}]
+
+    @pytest.mark.parametrize("user_input,expected", [
+        # Supplier modification
+        ("supplier Acme Corp", [{"action": "set_supplier", "supplier": "Acme Corp"}]),
+        ("change supplier to Smith LLC", [{"action": "set_supplier", "supplier": "Smith LLC"}]),
+        # Total amount adjustment
+        ("total 12345", [{"action": "set_total", "total": 12345.0}]),
+        ("total amount 9999.50", [{"action": "set_total", "total": 9999.50}]),
+        ("итого 7777.77", [{"action": "set_total", "total": 7777.77}]),  # mixed input
+        # Line item name editing
+        ("row 2 name Milk", [{"action": "set_name", "line": 1, "name": "Milk"}]),
+        ("change name in row 3 to Bread", [{"action": "set_name", "line": 2, "name": "Bread"}]),
+        # Line item quantity editing
+        ("row 1 qty 5", [{"action": "set_qty", "line": 0, "qty": 5.0}]),
+        ("change qty in row 2 to 2.5", [{"action": "set_qty", "line": 1, "qty": 2.5}]),
+        ("row 1 qty 1.5", [{"action": "set_qty", "line": 0, "qty": 1.5}]),
+        ("row 1 qty 2,75", [{"action": "set_qty", "line": 0, "qty": 2.75}]),
+    ])
+    def test_parse_commands_en(user_input, expected):
+        result = parse_edit_command(user_input)
+        for res, exp in zip(result, expected):
+            for key, val in exp.items():
+>               assert res[key] == val
+E               AssertionError: assert 'unknown' == 'set_total'
+E                 
+E                 - set_total
+E                 + unknown
+
+tests/test_parse_commands_en.py:25: AssertionError
+_________________________ test_cache_set_and_get_mock __________________________
+
+    def test_cache_set_and_get_mock():
+        with patch('app.utils.redis_cache.redis.Redis.from_url') as mock_from_url:
+            mock_instance = MagicMock()
+            mock_from_url.return_value = mock_instance
+            key = "test:key"
+            value = {"a": 1, "b": [2, 3], "c": "str"}
+            redis_cache.cache_set(key, value, ex=2)
+>           mock_instance.set.assert_called_once_with(key, json.dumps(value), ex=2)
+
+tests/test_redis_cache.py:15: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <MagicMock name='from_url().set' id='4395254512'>
+args = ('test:key', '{"a": 1, "b": [2, 3], "c": "str"}'), kwargs = {'ex': 2}
+msg = "Expected 'set' to be called once. Called 0 times."
+
+    def assert_called_once_with(self, /, *args, **kwargs):
+        """assert that the mock was called exactly once and that that call was
+        with the specified arguments."""
+        if not self.call_count == 1:
+            msg = ("Expected '%s' to be called once. Called %s times.%s"
+                   % (self._mock_name or 'mock',
+                      self.call_count,
+                      self._calls_repr()))
+>           raise AssertionError(msg)
+E           AssertionError: Expected 'set' to be called once. Called 0 times.
+
+/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:990: AssertionError
+__________________________ test_cache_overwrite_mock ___________________________
+
+    def test_cache_overwrite_mock():
+        with patch('app.utils.redis_cache.redis.Redis.from_url') as mock_from_url:
+            mock_instance = MagicMock()
+            mock_from_url.return_value = mock_instance
+            key = "test:key2"
+            value1 = {"foo": 123}
+            value2 = {"foo": 456}
+            redis_cache.cache_set(key, value1, ex=5)
+>           mock_instance.set.assert_called_with(key, json.dumps(value1), ex=5)
+
+tests/test_redis_cache.py:30: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <MagicMock name='from_url().set' id='4394473792'>
+args = ('test:key2', '{"foo": 123}'), kwargs = {'ex': 5}
+expected = 'set(\'test:key2\', \'{"foo": 123}\', ex=5)', actual = 'not called.'
+error_message = 'expected call not found.\nExpected: set(\'test:key2\', \'{"foo": 123}\', ex=5)\n  Actual: not called.'
+
+    def assert_called_with(self, /, *args, **kwargs):
+        """assert that the last call was made with the specified arguments.
+    
+        Raises an AssertionError if the args and keyword args passed in are
+        different to the last call to the mock."""
+        if self.call_args is None:
+            expected = self._format_mock_call_signature(args, kwargs)
+            actual = 'not called.'
+            error_message = ('expected call not found.\nExpected: %s\n  Actual: %s'
+                    % (expected, actual))
+>           raise AssertionError(error_message)
+E           AssertionError: expected call not found.
+E           Expected: set('test:key2', '{"foo": 123}', ex=5)
+E             Actual: not called.
+
+/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:970: AssertionError
+___________________ test_unknown_supplier_triggers_keyboard ____________________
+
+    def test_unknown_supplier_triggers_keyboard():
+        parsed = ParsedData(
+            supplier=None,
+            date=date(2025, 4, 28),
+            positions=[{"name": "Item A", "qty": 1, "unit": "pcs", "price": 10000}],
+        )
+        # Проверка: строка-дату принимает без ошибки
+        parsed2 = ParsedData(
+            supplier=None,
+            date="2025-04-28",
+            positions=[{"name": "Item A", "qty": 1, "unit": "pcs", "price": 10000}],
+        )
+        assert parsed2.date == date(2025, 4, 28)
+        match_results = [{"name": "Item A", "qty": 1, "unit": "pcs", "status": "unknown"}]
+        report, _ = build_report(parsed, match_results)
+        assert "Unknown supplier" in report
+        kb = build_main_kb()
+        assert kb is not None
+>       assert any(
+            "edit:0" in btn.callback_data for row in kb.inline_keyboard for btn in row
+        )
+E       assert False
+E        +  where False = any(<generator object test_unknown_supplier_triggers_keyboard.<locals>.<genexpr> at 0x10a46f5a0>)
+
+tests/test_unknown_flow.py:26: AssertionError
 =============================== warnings summary ===============================
 tests/test_api_decorators.py:124
-  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_api_decorators.py:124: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+  /Users/Denis/notav3 cursor /Nota-v3-/tests/test_api_decorators.py:124: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
     @pytest.mark.asyncio
 
 tests/test_api_decorators.py:177
-  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_api_decorators.py:177: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+  /Users/Denis/notav3 cursor /Nota-v3-/tests/test_api_decorators.py:177: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
     @pytest.mark.asyncio
 
 tests/test_callbacks.py:12
-  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_callbacks.py:12: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+  /Users/Denis/notav3 cursor /Nota-v3-/tests/test_callbacks.py:12: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
     @pytest.mark.asyncio
 
 tests/test_callbacks.py:25
-  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_callbacks.py:25: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+  /Users/Denis/notav3 cursor /Nota-v3-/tests/test_callbacks.py:25: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
     @pytest.mark.asyncio
 
 tests/test_callbacks.py:38
-  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_callbacks.py:38: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+  /Users/Denis/notav3 cursor /Nota-v3-/tests/test_callbacks.py:38: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
     @pytest.mark.asyncio
 
 tests/test_callbacks.py:85
-  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_callbacks.py:85: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+  /Users/Denis/notav3 cursor /Nota-v3-/tests/test_callbacks.py:85: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
     @pytest.mark.asyncio
 
 tests/test_edit_keyboard_inline.py:7
-  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_edit_keyboard_inline.py:7: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+  /Users/Denis/notav3 cursor /Nota-v3-/tests/test_edit_keyboard_inline.py:7: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
     @pytest.mark.asyncio
 
 tests/test_formatter_no_bad_chars.py:9
-  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_formatter_no_bad_chars.py:9: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+  /Users/Denis/notav3 cursor /Nota-v3-/tests/test_formatter_no_bad_chars.py:9: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
     @pytest.mark.asyncio
 
 tests/test_formatter_no_bad_chars.py:55
-  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_formatter_no_bad_chars.py:55: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+  /Users/Denis/notav3 cursor /Nota-v3-/tests/test_formatter_no_bad_chars.py:55: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_free_edit_date.py:8
+  /Users/Denis/notav3 cursor /Nota-v3-/tests/test_free_edit_date.py:8: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_free_edit_price.py:7
+  /Users/Denis/notav3 cursor /Nota-v3-/tests/test_free_edit_price.py:7: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
     @pytest.mark.asyncio
 
 tests/test_fuzzy_confirm.py:9
-  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_fuzzy_confirm.py:9: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+  /Users/Denis/notav3 cursor /Nota-v3-/tests/test_fuzzy_confirm.py:9: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
     @pytest.mark.asyncio
 
-tests/test_fuzzy_confirm.py:67
-  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_fuzzy_confirm.py:67: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+tests/test_fuzzy_confirm.py:89
+  /Users/Denis/notav3 cursor /Nota-v3-/tests/test_fuzzy_confirm.py:89: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
     @pytest.mark.asyncio
 
-tests/test_fuzzy_confirm.py:122
-  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_fuzzy_confirm.py:122: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+tests/test_fuzzy_confirm.py:146
+  /Users/Denis/notav3 cursor /Nota-v3-/tests/test_fuzzy_confirm.py:146: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
     @pytest.mark.asyncio
 
 tests/test_handlers.py:6
-  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_handlers.py:6: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+  /Users/Denis/notav3 cursor /Nota-v3-/tests/test_handlers.py:6: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
     @pytest.mark.asyncio
 
 tests/test_handlers.py:49
-  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_handlers.py:49: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+  /Users/Denis/notav3 cursor /Nota-v3-/tests/test_handlers.py:49: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
     @pytest.mark.asyncio
 
 tests/test_keyboard_main_edit.py:75
-  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_keyboard_main_edit.py:75: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+  /Users/Denis/notav3 cursor /Nota-v3-/tests/test_keyboard_main_edit.py:75: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
     @pytest.mark.asyncio
 
-tests/test_ocr.py:26
-  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_ocr.py:26: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+tests/test_ocr.py:27
+  /Users/Denis/notav3 cursor /Nota-v3-/tests/test_ocr.py:27: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_ocr_function_call.py:11
+  /Users/Denis/notav3 cursor /Nota-v3-/tests/test_ocr_function_call.py:11: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_ocr_live.py:8
+  /Users/Denis/notav3 cursor /Nota-v3-/tests/test_ocr_live.py:8: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
     @pytest.mark.asyncio
 
 tests/test_parse_mode.py:5
-  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_parse_mode.py:5: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+  /Users/Denis/notav3 cursor /Nota-v3-/tests/test_parse_mode.py:5: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
     @pytest.mark.asyncio
 
 tests/test_photo_handler.py:15
-  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_photo_handler.py:15: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+  /Users/Denis/notav3 cursor /Nota-v3-/tests/test_photo_handler.py:15: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
     @pytest.mark.asyncio
 
 tests/test_photo_handler.py:102
-  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_photo_handler.py:102: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+  /Users/Denis/notav3 cursor /Nota-v3-/tests/test_photo_handler.py:102: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
     @pytest.mark.asyncio
 
 tests/test_single_message_ux.py:7
-  /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/tests/test_single_message_ux.py:7: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+  /Users/Denis/notav3 cursor /Nota-v3-/tests/test_single_message_ux.py:7: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
     @pytest.mark.asyncio
+
+tests/test_api_decorators.py: 5 warnings
+tests/test_callbacks.py: 4 warnings
+tests/test_edit_keyboard_inline.py: 1 warning
+tests/test_formatter_no_bad_chars.py: 2 warnings
+tests/test_free_edit_date.py: 1 warning
+tests/test_free_edit_price.py: 1 warning
+tests/test_fuzzy_confirm.py: 3 warnings
+tests/test_handlers.py: 2 warnings
+tests/test_keyboard_main_edit.py: 1 warning
+tests/test_ocr.py: 1 warning
+tests/test_ocr_function_call.py: 1 warning
+tests/test_parse_mode.py: 1 warning
+tests/test_photo_handler.py: 2 warnings
+tests/test_single_message_ux.py: 1 warning
+  /opt/homebrew/lib/python3.13/site-packages/_pytest/python.py:148: PytestUnhandledCoroutineWarning: async def functions are not natively supported and have been skipped.
+  You need to install a suitable plugin for your async framework, for example:
+    - anyio
+    - pytest-asyncio
+    - pytest-tornasync
+    - pytest-trio
+    - pytest-twisted
+    warnings.warn(PytestUnhandledCoroutineWarning(msg.format(nodeid)))
+
+tests/test_assistant_http.py: 1 warning
+tests/test_edit_flow_integration.py: 10 warnings
+  /opt/homebrew/lib/python3.13/site-packages/fakeredis/_connection.py:179: DeprecationWarning: Call to '__init__' function with deprecated usage of input argument/s 'retry_on_timeout'. (TimeoutError is included by default.) -- Deprecated since version 6.0.0.
+    super().__init__(**kwds)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 =========================== short test summary info ============================
-ERROR tests/test_edit_callback.py
-ERROR tests/test_unknown_flow.py
-!!!!!!!!!!!!!!!!!!! Interrupted: 2 errors during collection !!!!!!!!!!!!!!!!!!!!
-======================== 20 warnings, 2 errors in 0.16s ========================
+FAILED tests/test_latency_logging.py::test_latency_logging_info_and_warning
+FAILED tests/test_monitor.py::test_monitor_triggers_alert - AssertionError: A...
+FAILED tests/test_parse_commands_edge_cases.py::test_parse_commands_edge_cases[totall 1234-None-expected10]
+FAILED tests/test_parse_commands_edge_cases.py::test_parse_commands_edge_cases[change name in row two to Bread-None-expected11]
+FAILED tests/test_parse_commands_edge_cases.py::test_parse_commands_edge_cases[\u043f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a \u041e\u041e\u041e \u0420\u043e\u043c\u0430\u0448\u043a\u0430\n\u0441\u0442\u0440\u043e\u043a\u0430 1 \u043a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u043e 2-None-expected12]
+FAILED tests/test_parse_commands_en.py::test_parse_commands_en[total amount 9999.50-expected3]
+FAILED tests/test_redis_cache.py::test_cache_set_and_get_mock - AssertionErro...
+FAILED tests/test_redis_cache.py::test_cache_overwrite_mock - AssertionError:...
+FAILED tests/test_unknown_flow.py::test_unknown_supplier_triggers_keyboard - ...
+ERROR tests/test_latency_logging.py::test_latency_logging_info_and_warning - ...
+ERROR tests/test_monitor.py::test_monitor_triggers_alert - TypeError: Level n...
+ERROR tests/test_monitor.py::test_monitor_not_triggered_for_few_errors - Type...
+ERROR tests/test_trace_logging.py::test_run_thread_safe_logs_error_traceid - ...
+======= 9 failed, 138 passed, 27 skipped, 61 warnings, 4 errors in 2.01s =======

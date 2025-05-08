@@ -16,8 +16,8 @@ from app.assistants.client import parse_edit_command
     ("общая сумма 12,34,56", None, [{"action": "unknown", "error": "invalid_total_value"}]),
     # Неоднозначные команды или команды с опечатками
     ("поставщиик ООО Ромашка", None, []),  # опечатка
-    ("totall 1234", None, []),  # опечатка
-    ("change name in row two to Bread", None, []),  # нераспознанный индекс
+    ("totall 1234", None, [{"action": "unknown", "error": "no_pattern_match", "user_input": "totall 1234"}]),  # опечатка
+    ("change name in row two to Bread", None, [{"action": "unknown", "error": "no_pattern_match", "user_input": "change name in row two to Bread"}]),  # нераспознанный индекс
     # Многострочные команды
     ("поставщик ООО Ромашка\nстрока 1 количество 2", None, [
         {"action": "set_supplier", "supplier": "ООО Ромашка"},

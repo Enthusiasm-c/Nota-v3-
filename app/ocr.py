@@ -12,164 +12,105 @@ from uuid import uuid4
 from app.models import ParsedData
 from app.config import settings, get_ocr_client
 from app.utils.monitor import increment_counter, ocr_monitor
-from app.utils.api_decorators import with_async_retry_backoff
+from app.utils.api_decorators import with_async_retry_backoff, with_retry_backoff, ErrorType
+from app.utils.debug_logger import log_ocr_call, log_ocr_performance, ocr_logger, create_memory_monitor
 
 VISION_ASSISTANT_TIMEOUT_SECONDS = int(getattr(settings, "VISION_ASSISTANT_TIMEOUT_SECONDS", 120))
 
-@with_async_retry_backoff(max_retries=2, initial_backoff=2.0)
-async def call_openai_ocr(image_bytes: bytes) -> ParsedData:
+@log_ocr_call
+@with_retry_backoff(max_retries=1, initial_backoff=0.5, backoff_factor=2.0)
+def call_openai_ocr(image_bytes: bytes, _req_id=None) -> ParsedData:
     """
-    Отправляет изображение OpenAI Vision Assistant для распознавания инвойса.
+    Отправляет изображение в OpenAI Vision API для распознавания инвойса.
+    Использует декоратор with_retry_backoff для автоматической обработки ошибок и повторных попыток.
+    Включает детальное логирование для диагностики проблем производительности.
+    
+    Args:
+        image_bytes: Байты изображения для обработки
+        _req_id: Идентификатор запроса для логирования
+    Returns:
+        ParsedData: Структурированные данные инвойса
+    Raises:
+        RuntimeError: При ошибках API или парсинга данных с дружественными сообщениями
     """
-    start_time = time.time()
     client = get_ocr_client()
-    vision_assistant_id = getattr(settings, "OPENAI_VISION_ASSISTANT_ID", None)
     if not client:
-        logging.error("Vision Assistant unavailable: no OpenAI client")
-        raise RuntimeError("Vision Assistant unavailable: Please check your OPENAI_API_KEY")
-    if not vision_assistant_id:
-        logging.error("Vision Assistant unavailable: no Assistant ID configured")
-        raise RuntimeError("Vision Assistant unavailable: Please set OPENAI_VISION_ASSISTANT_ID in .env")
-
-    loop = asyncio.get_running_loop()
-    # u0421u043eu0445u0440u0430u043du044fu0435u043c u043au043eu043fu0438u044e u0438u0437u043eu0431u0440u0430u0436u0435u043du0438u044f u0434u043bu044f u0434u0438u0430u0433u043du043eu0441u0442u0438u043au0438
-    tmp_path = Path("/tmp") / f"ocr_input_{uuid4()}.jpg"
-    tmp_path.write_bytes(image_bytes)
-    logging.debug("OCR input image saved to %s, size: %d bytes", tmp_path, len(image_bytes))
-    print(f"\n\n[DIAGNOSTIC] OCR input image saved to {tmp_path}, size: {len(image_bytes)/1024:.1f} KB\n\n")
-
+        logging.error("OCR unavailable: no OpenAI OCR client")
+        raise RuntimeError("OCR unavailable: Please check your OPENAI_OCR_KEY")
+    
+    t0 = time.time()
+    req_id = _req_id or f"ocr_{int(t0)}"
+    ocr_logger.info(f"[{req_id}] Начинаю OCR-обработку изображения размером {len(image_bytes)} байт")
+    
+    # Создаем и запускаем поток для мониторинга памяти
     try:
-        # u0424u043eu0440u043cu0438u0440u0443u0435u043c base64 u0438u0437 u0438u0437u043eu0431u0440u0430u0436u0435u043du0438u044f u0434u043bu044f u043fu0435u0440u0435u0434u0430u0447u0438 u0432 URL
-        image_base64 = base64.b64encode(image_bytes).decode('utf-8')
-        image_url = f"data:image/jpeg;base64,{image_base64}"
-        
-        # u041bu043eu0433u0438u0440u0443u0435u043c u0434u043bu044f u0442u0435u0441u0442u0438u0440u043eu0432u0430u043du0438u044f (u043fu0435u0440u0432u044bu0435 100 u0441u0438u043cu0432u043eu043bu043eu0432 u0434u043bu044f u0443u0431u0435u0436u0434u0435u043du0438u044f, u0447u0442u043e URL u043au043eu0440u0440u0435u043au0442u043du044bu0439)
-        truncated_url = image_url[:100] + "..." if len(image_url) > 100 else image_url
-        print(f"\n\n[DIAGNOSTIC] OpenAI Vision URL (truncated): {truncated_url}\n\n")
-        logging.debug("Created base64 image URL, length: %d characters", len(image_url))
-        
-        # 2. u0421u043eu0437u0434u0430u0442u044c thread
-        thread = await loop.run_in_executor(None, lambda: client.beta.threads.create())
-        # 3. u0421u0444u043eu0440u043cu0438u0440u043eu0432u0430u0442u044c content u0441 image_url u0432u043cu0435u0441u0442u043e image_file
-        content = [
-            {
-                "type": "text",
-                "text": "Extract items as JSON."
-            },
-            {
-                "type": "image_url",
-                "image_url": {"url": image_url}
-            }
-        ]
-        logging.debug("Content payload: %s", json.dumps(content, indent=2)[:300])
-        # 4. Отправить в Vision-ассистент
-        message = await loop.run_in_executor(
-            None,
-            lambda: client.beta.threads.messages.create(
-                thread_id=thread.id,
-                role="user",
-                content=content
-            )
+        memory_monitor = create_memory_monitor()(req_id)
+        memory_monitor.start()
+        ocr_logger.debug(f"[{req_id}] Запущен мониторинг памяти")
+    except Exception as mon_err:
+        ocr_logger.warning(f"[{req_id}] Не удалось запустить мониторинг памяти: {str(mon_err)}")
+    
+    t_step = log_ocr_performance(t0, "Initialization", req_id)
+    prompt_prefix = build_prompt()
+    
+    # Подготовка base64 изображения
+    base64_image = base64.b64encode(image_bytes).decode()
+    image_url = f"data:image/jpeg;base64,{base64_image}"
+    t_step = log_ocr_performance(t_step, "Base64 encoding", req_id)
+    ocr_logger.debug(f"[{req_id}] Изображение закодировано в base64, размер URL: {len(image_url)} символов")
+    
+    ocr_logger.info(f"[{req_id}] Отправляю запрос к OpenAI API с таймаутом 15 секунд")
+    t_step = log_ocr_performance(t_step, "Before API call", req_id)
+    try:
+        rsp = client.chat.completions.create(
+            model=settings.OPENAI_MODEL,
+            temperature=0,
+            max_tokens=1200,
+            timeout=15,  # Reduced timeout
+            messages=[
+                {"role": "system", "content": prompt_prefix},
+                {"role": "user", "content": [
+                    {"type": "image_url", "image_url": {"url": image_url}}
+                ]}
+            ],
+            tools=[tool_schema],
+            tool_choice={"type": "function", "function": {"name": "parse_invoice"}}
         )
-        # 5. Создать запуск ассистента
-        run = await loop.run_in_executor(
-            None,
-            lambda: client.beta.threads.runs.create(
-                thread_id=thread.id,
-                assistant_id=vision_assistant_id
-            )
-        )
-        timeout = VISION_ASSISTANT_TIMEOUT_SECONDS
-        completion_time = time.time() + timeout
-        iteration = 0
-        while time.time() < completion_time:
-            iteration += 1
-            run_status = await loop.run_in_executor(
-                None,
-                lambda: client.beta.threads.runs.retrieve(
-                    thread_id=thread.id,
-                    run_id=run.id
-                )
-            )
-            status = getattr(run_status, 'status', None)
-            # u041bu043eu0433u0438u0440u0443u0435u043c u043au0430u0436u0434u044bu0435 5 u0438u0442u0435u0440u0430u0446u0438u0439 u0438u043bu0438 u043fu0440u0438 u0438u0437u043cu0435u043du0435u043du0438u0438 u0441u0442u0430u0442u0443u0441u0430
-            if iteration % 5 == 0 or getattr(run_status, '_previous_status', None) != status:
-                logging.debug(f"Run status: {status}, elapsed: {time.time() - start_time:.1f}s, timeout in: {completion_time - time.time():.1f}s")
-                setattr(run_status, '_previous_status', status)
-            
-            if status == 'completed':
-                logging.info(f"Assistant run completed after {time.time() - start_time:.1f}s")
-                break
-            elif status in ['failed', 'cancelled', 'expired']:
-                raise RuntimeError(f"Assistant run failed with status: {status}")
-            # u041fu0440u043eu0432u0435u0440u044fu0435u043c u0435u0441u0442u044c u043bu0438 u0441u043eu043eu0431u0449u0435u043du0438u044f, u0434u0430u0436u0435 u0435u0441u043bu0438 u0441u0442u0430u0442u0443u0441 u0435u0449u0435 u043du0435 'completed'
-            if status == 'in_progress' and iteration % 10 == 0:
-                try:
-                    messages_check = await loop.run_in_executor(
-                        None,
-                        lambda: client.beta.threads.messages.list(thread_id=thread.id)
-                    )
-                    if messages_check.data and len(messages_check.data) > 1:
-                        logging.info(f"Found {len(messages_check.data)} messages while run status is still {status}")
-                except Exception as e:
-                    logging.warning(f"Failed to check messages during run: {e}")
-            
-            await asyncio.sleep(1)
-        else:
-            await loop.run_in_executor(
-                None,
-                lambda: client.beta.threads.runs.cancel(
-                    thread_id=thread.id,
-                    run_id=run.id
-                )
-            )
-            raise RuntimeError(f"Assistant run timed out after {timeout} seconds")
-        # 6. Получить результат
-        messages = await loop.run_in_executor(
-            None,
-            lambda: client.beta.threads.messages.list(
-                thread_id=thread.id
-            )
-        )
-        if not messages.data:
-            raise RuntimeError("No messages returned from Assistant")
-        last_message = messages.data[0]
-        if getattr(last_message, 'role', None) != "assistant":
-            raise RuntimeError("Unexpected message format from Assistant")
-        invoice_data = None
-        for content_part in getattr(last_message, 'content', []):
-            if getattr(content_part, 'type', None) == "text":
-                json_match = re.search(r'```(?:json)?\n(.*?)\n```', content_part.text, re.DOTALL)
-                if json_match:
-                    invoice_data = json_match.group(1)
-                    break
-        if not invoice_data:
-            raise RuntimeError("No invoice data found in Assistant response")
-        # Попробовать распарсить JSON и провалидировать результат
+        t_step = log_ocr_performance(t_step, "API call completed", req_id)
+        ocr_logger.info(f"[{req_id}] Получен ответ от OpenAI API")
+        message = rsp.choices[0].message
+        data = _sanitize_response(message)
+        t_step = log_ocr_performance(t_step, "Response sanitized", req_id)
+        ocr_logger.debug(f"[{req_id}] Ответ API успешно обработан")
+        for p in data.get("positions", []):
+            p["price"] = _clean_num(p.get("price"))
+            p["price_per_unit"] = _clean_num(p.get("price_per_unit"))
+            p["total_price"] = _clean_num(p.get("total_price"))
+        data["price"] = _clean_num(data.get("price"))
+        data["price_per_unit"] = _clean_num(data.get("price_per_unit"))
+        data["total_price"] = _clean_num(data.get("total_price"))
+        supplier = data.get("supplier")
+        if supplier and supplier.strip() in settings.OWN_COMPANY_ALIASES:
+            data["supplier"] = None
+            data["supplier_status"] = "unknown"
         try:
-            parsed = json.loads(invoice_data)
-        except Exception as e:
-            logging.error(f"Failed to parse invoice JSON: {e}")
-            logging.error(f"Raw invoice data: {invoice_data}")
-            raise RuntimeError(f"Invalid invoice data format: {str(e)}") from e
-        try:
-            result = ParsedData.model_validate(parsed)
-        except Exception as e:
-            logging.error(f"Failed to validate invoice data: {str(e)}")
-            logging.error(f"Raw invoice data: {invoice_data}")
-            raise RuntimeError(f"Invalid invoice data format: {str(e)}") from e
-        elapsed = time.time() - start_time
-        logging.info(f"Vision Assistant OCR successful after {elapsed:.1f}s")
-        increment_counter("nota_ocr_requests_total", {"status": "ok"})
-        ocr_monitor.record(int(elapsed * 1000), 0)
-        if elapsed > 6.0:
-            logging.warning(f"High Vision Assistant OCR latency detected: {elapsed:.1f}s > 6.0s threshold")
-        return result
-    finally:
-        try:
-            tmp_path.unlink(missing_ok=True)
-        except Exception as e:
-            logging.warning(f"Failed to remove temp file {tmp_path}: {e}")
+            parsed_data = ParsedData.model_validate(data)
+            elapsed = time.time() - t0
+            logging.info(f"OCR successful after {elapsed:.1f}s with {len(parsed_data.positions)} positions")
+            t_step = log_ocr_performance(t_step, "Validation completed", req_id)
+            ocr_logger.info(f"[{req_id}] OCR успешно завершен за {elapsed:.2f} сек, найдено {len(parsed_data.positions)} позиций")
+            return parsed_data
+        except Exception as validation_err:
+            logging.error(f"Model validation error: {validation_err}")
+            raise RuntimeError(f"⚠️ Could not process the invoice data: {str(validation_err)}") from validation_err
+    except openai.APITimeoutError:
+        elapsed = time.time() - t0
+        ocr_logger.error(f"[{req_id}] OpenAI API timeout after {elapsed:.1f}s")
+        raise RuntimeError("OCR processing timed out. Please try with a clearer image.")
+    except openai.APIError as api_err:
+        elapsed = time.time() - t0
+        ocr_logger.error(f"[{req_id}] OpenAI API error after {elapsed:.1f}s: {str(api_err)}")
+        raise RuntimeError(f"OpenAI API error: {str(api_err)}")
 
 def _clean_num(v):
     if v in (None, "", "null"):
