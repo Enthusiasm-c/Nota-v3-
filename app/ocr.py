@@ -93,7 +93,7 @@ INVOICE_FUNCTION_SCHEMA = {
 @with_retry_backoff(max_retries=1, initial_backoff=0.5, backoff_factor=2.0)
 def call_openai_ocr(image_bytes: bytes, _req_id=None) -> ParsedData:
     """
-    Прямой вызов OpenAI Vision API (gpt-4.5) для распознавания инвойса с использованием function calling.
+    Прямой вызов OpenAI Vision API (gpt-4o) для распознавания инвойса с использованием function calling.
     Args:
         image_bytes: Байты изображения для обработки
         _req_id: Идентификатор запроса для логирования
@@ -150,10 +150,10 @@ def call_openai_ocr(image_bytes: bytes, _req_id=None) -> ParsedData:
     ]
 
     try:
-        ocr_logger.info(f"[{req_id}] Отправляю запрос в gpt-4.5 с использованием function calling")
+        ocr_logger.info(f"[{req_id}] Отправляю запрос в gpt-4o с использованием function calling")
         with PerformanceTimer(req_id, "openai_vision_api_call"):
             response = client.chat.completions.create(
-                model="gpt-4.5",
+                model="gpt-4o",
                 messages=messages,
                 max_tokens=2048,
                 temperature=0.0,

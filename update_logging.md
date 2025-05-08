@@ -6,6 +6,7 @@
 2. Обновлен файл `json_trace_logger.py` для расширенного логирования 
 3. Изменен файл `nota-bot.service.override.conf` для настройки systemd
 4. Добавлен скрипт `view_logs.sh` для удобного просмотра всех логов
+5. **ИСПРАВЛЕНО:** Заменена несуществующая модель `gpt-4.5` на `gpt-4o` во всех файлах проекта
 
 ## Инструкции по обновлению
 
@@ -17,6 +18,9 @@ scp run_bot.sh user@server:/opt/nota-bot/
 scp json_trace_logger.py user@server:/opt/nota-bot/
 scp nota-bot.service.override.conf user@server:/etc/systemd/system/nota-bot.service.d/override.conf
 scp view_logs.sh user@server:/opt/nota-bot/
+scp app/ocr.py user@server:/opt/nota-bot/app/
+scp debug_ocr.py user@server:/opt/nota-bot/
+scp debug_ocr_detailed.py user@server:/opt/nota-bot/
 ```
 
 ### 2. Установите права на скрипты

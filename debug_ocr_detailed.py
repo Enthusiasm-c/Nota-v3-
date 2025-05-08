@@ -130,7 +130,7 @@ async def run_step_by_step_debug(image_path, debug_dir, timeout=120):
             logger.info("Отправка запроса в API...")
             
             response = client.chat.completions.create(
-                model="gpt-4.5",
+                model="gpt-4o",
                 messages=messages,
                 max_tokens=4096,
                 temperature=0.0,

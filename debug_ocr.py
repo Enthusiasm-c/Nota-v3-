@@ -73,7 +73,7 @@ def parse_args():
     parser.add_argument("--image", "-i", type=str, help="Путь к тестовому изображению")
     parser.add_argument("--timeout", "-t", type=int, default=90, help="Таймаут OCR в секундах (по умолчанию 90)")
     parser.add_argument("--verbose", "-v", action="store_true", help="Включить подробное логирование")
-    parser.add_argument("--model", "-m", type=str, default="gpt-4.5", help="Модель OpenAI (по умолчанию gpt-4.5)")
+    parser.add_argument("--model", "-m", type=str, default="gpt-4o", help="Модель OpenAI (по умолчанию gpt-4o)")
     parser.add_argument("--save_intermediate", "-s", action="store_true", help="Сохранять промежуточные изображения")
     parser.add_argument("--raw_vision", "-r", action="store_true", help="Запустить распознавание сырого текста без структурирования")
     return parser.parse_args()
@@ -266,7 +266,7 @@ async def test_raw_vision(image_path, timeout=90):
         try:
             # Устанавливаем таймаут и логируем HTTP-заголовки
             response = client.chat.completions.create(
-                model="gpt-4.5",
+                model="gpt-4o",
                 messages=messages,
                 max_tokens=4096,
                 temperature=0.0,
