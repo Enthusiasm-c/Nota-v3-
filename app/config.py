@@ -10,10 +10,19 @@ class Settings(BaseSettings):
     OPENAI_MODEL: str = "gpt-3.5-turbo"
 
     # Fuzzy matching configuration
-    MATCH_THRESHOLD: float = 0.75  # Default match threshold (0-1.0)
+    MATCH_THRESHOLD: float = 0.85  # Повышаем порог сравнения с 0.75 до 0.85
     MATCH_EXACT_BONUS: float = 0.05  # Bonus for substring matches (0-1.0)
-    MATCH_LENGTH_PENALTY: float = 0.1  # Penalty weight for length differences (0-1.0)
-    MATCH_MIN_SCORE: float = 0.5  # Minimum score to show in suggestions (0-1.0)
+    MATCH_LENGTH_PENALTY: float = 0.15  # Увеличиваем штраф за разницу в длине
+    MATCH_MIN_SCORE: float = 0.6  # Повышаем минимальный порог для предложений
+    
+    # Часто ошибочно распознаваемые слова
+    SIMILAR_WORD_PAIRS: list[tuple[str, str]] = [
+        ("rice", "milk"),
+        ("milk", "rice"),
+        ("cream", "crean"),
+        ("salt", "solt"),
+        ("sugar", "suger")
+    ]
 
     # OpenAI API configuration
     USE_OPENAI_OCR: bool = False

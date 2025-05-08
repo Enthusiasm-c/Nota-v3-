@@ -107,6 +107,31 @@ def calculate_string_similarity(s1: str, s2: str) -> float:
     if s1 == s2:
         return 1.0
 
+    # Проверка на совпадение отдельных слов
+    words1 = s1.split()
+    words2 = s2.split()
+    
+    # Если одинаковое количество слов, анализируем каждое слово
+    if len(words1) == len(words2):
+        word_matches = sum(1 for w1, w2 in zip(words1, words2) if w1 == w2)
+        # Если большинство слов совпадают, но не все, увеличиваем вес для проверки
+        if word_matches > 0 and word_matches == len(words1) - 1:
+            # Находим несовпадающее слово и проверяем, не слишком ли оно похоже
+            non_matching_idx = [i for i, (w1, w2) in enumerate(zip(words1, words2)) if w1 != w2][0]
+            word1 = words1[non_matching_idx]
+            word2 = words2[non_matching_idx]
+            
+            # Проверка по списку известных похожих слов
+            for sim_pair in getattr(settings, 'SIMILAR_WORD_PAIRS', []):
+                if (word1, word2) == sim_pair or (word2, word1) == sim_pair:
+                    logger.warning(f"Обнаружена известная проблемная пара слов: '{word1}' и '{word2}' в '{s1}' и '{s2}'")
+                    # Уменьшаем коэффициент сходства для известных проблемных пар
+                    return 0.7  # Достаточно для "partial", но не для "ok"
+            
+            # Особая проверка для других похожих слов
+            if levenshtein_ratio(word1, word2) > 0.7:
+                logger.warning(f"Обнаружены похожие, но разные слова: '{word1}' и '{word2}' в '{s1}' и '{s2}'")
+    
     ratio = levenshtein_ratio(s1, s2)
     if s1 in s2 or s2 in s1:
         ratio = min(ratio + settings.MATCH_EXACT_BONUS, 1.0)
@@ -215,6 +240,7 @@ def match_positions(
         best_score: float = -1.0
         status = "unknown"
         fuzzy_scores = []
+        has_similar_words = False  # Флаг для отметки похожих слов
 
         for product in products:
             if isinstance(product, dict):
@@ -224,6 +250,25 @@ def match_positions(
 
             normalized_name = name.lower().strip()
             normalized_compare = compare_val.lower().strip()
+            
+            # Проверка на похожие слова
+            words1 = normalized_name.split()
+            words2 = normalized_compare.split()
+            
+            # Если одинаковая структура, но возможно есть похожие слова
+            if len(words1) == len(words2) and len(words1) > 1:
+                word_matches = sum(1 for w1, w2 in zip(words1, words2) if w1 == w2)
+                # Если большинство слов совпадают, но не все, проверяем похожие слова
+                if word_matches > 0 and word_matches == len(words1) - 1:
+                    # Находим несовпадающие слова
+                    non_matching = [(i, w1, w2) for i, (w1, w2) in enumerate(zip(words1, words2)) if w1 != w2]
+                    for idx, word1, word2 in non_matching:
+                        # Специальная проверка для часто путаемых слов
+                        if (word1 in ['rice', 'milk'] and word2 in ['rice', 'milk']) or \
+                           (len(word1) > 2 and len(word2) > 2 and levenshtein_ratio(word1, word2) > 0.7):
+                            logger.warning(f"Похожие слова в '{normalized_name}' и '{normalized_compare}': '{word1}' и '{word2}'")
+                            has_similar_words = True
+            
             similarity = calculate_string_similarity(
                 normalized_name, normalized_compare
             )
@@ -234,8 +279,12 @@ def match_positions(
                 best_score = score
                 best_match = product
 
+        # Определяем статус с учетом похожих слов
         if best_score >= threshold:
-            status = "ok"
+            if has_similar_words:
+                status = "partial"  # Если похожие слова, то частичное совпадение
+            else:
+                status = "ok"       # Иначе полное совпадение
         else:
             status = "unknown"
 
