@@ -234,11 +234,9 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
             for part in split_message(report_text):
                 report_msg = await message.answer(
                     part,
-            report_msg = await message.answer(
-                report_text,
-                reply_markup=inline_kb,
-                parse_mode=ParseMode.HTML
-            )
+                    reply_markup=inline_kb,
+                    parse_mode=ParseMode.HTML
+                )
             logger.debug(f"Successfully sent HTML-formatted report with message_id={report_msg.message_id}")
         except Exception as html_err:
             logger.warning(f"Error sending HTML report: {str(html_err)}")
