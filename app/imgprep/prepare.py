@@ -214,7 +214,7 @@ def detect_invoice_properties(img: np.ndarray) -> Dict[str, Any]:
     
     # Calculate stats on edges to detect dot-matrix patterns
     # Dot-matrix has characteristic small, regular dots
-    _, contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
     small_dots_count = 0
     for contour in contours:
         area = cv2.contourArea(contour)

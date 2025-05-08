@@ -161,6 +161,12 @@ def call_openai_ocr(image_bytes: bytes, _req_id=None) -> ParsedData:
             )
         t_step = log_ocr_performance(t_step, "Vision API call", req_id)
         ocr_logger.info(f"[{req_id}] Получен ответ от Vision API")
+        # Логируем полный ответ Vision API
+        try:
+            import json as _json
+            ocr_logger.debug(f"[{req_id}] RAW Vision API response: {_json.dumps(response.model_dump() if hasattr(response, 'model_dump') else str(response), ensure_ascii=False)[:2000]}")
+        except Exception as log_raw_err:
+            ocr_logger.warning(f"[{req_id}] Не удалось залогировать сырой ответ Vision API: {log_raw_err}")
 
         # Извлекаем данные из ответа с function calling
         function_call = response.choices[0].message.tool_calls[0]

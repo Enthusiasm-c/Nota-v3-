@@ -15,6 +15,7 @@ import asyncio
 import argparse
 from pathlib import Path
 from datetime import date, datetime
+import shutil
 
 # Настройка логирования
 logging.basicConfig(
@@ -49,10 +50,12 @@ def parse_args():
     parser.add_argument("--timeout", "-t", type=int, default=90, help="Таймаут OCR в секундах (по умолчанию 90)")
     parser.add_argument("--verbose", "-v", action="store_true", help="Включить подробное логирование")
     parser.add_argument("--model", "-m", type=str, default="gpt-4o", help="Модель OpenAI (по умолчанию gpt-4o)")
+    parser.add_argument("--save_intermediate", "-s", action="store_true", help="Сохранять промежуточные изображения")
+    parser.add_argument("--no_preprocessing", "-n", action="store_true", help="Отключить предобработку изображения")
     return parser.parse_args()
 
 # Функция для асинхронного запуска OCR
-async def test_ocr(image_path, timeout=90, verbose=False):
+async def test_ocr(image_path, timeout=90, verbose=False, save_intermediate=False, no_preprocessing=False):
     try:
         logger.info(f"Загружаю тестовое изображение: {image_path}")
         
@@ -98,6 +101,21 @@ async def test_ocr(image_path, timeout=90, verbose=False):
         
         # Запускаем OCR
         start_time = time.time()
+        
+        # Предобработка изображения (если используется)
+        if hasattr(ocr, 'prepare_for_ocr') and not no_preprocessing:
+            tmp_path = f"/tmp/nota_ocr_debug_{int(time.time())}.jpg"
+            shutil.copy(image_path, tmp_path)
+            processed_bytes = ocr.prepare_for_ocr(tmp_path, use_preprocessing=True)
+            if save_intermediate:
+                with open(tmp_path + '.webp', 'wb') as f:
+                    f.write(processed_bytes)
+                logger.info(f"Промежуточное изображение после предобработки сохранено: {tmp_path + '.webp'}")
+            image_bytes = processed_bytes
+            logger.info("Изображение обработано с предобработкой")
+        else:
+            if no_preprocessing:
+                logger.info("Предобработка изображения отключена")
         
         # Запуск с перехватом всех возможных исключений
         try:
@@ -216,7 +234,7 @@ async def main():
     logger.info(f"Режим подробного логирования: {'Включен' if args.verbose else 'Выключен'}")
     logger.info(f"Используемая модель: {args.model}")
     
-    success = await test_ocr(test_image, timeout=args.timeout, verbose=args.verbose)
+    success = await test_ocr(test_image, timeout=args.timeout, verbose=args.verbose, save_intermediate=args.save_intermediate, no_preprocessing=args.no_preprocessing)
     if success:
         logger.info("✅ Тест OCR успешно выполнен")
     else:
