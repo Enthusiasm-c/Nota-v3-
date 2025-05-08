@@ -212,16 +212,33 @@ def with_retry_backoff(
 
                 except Exception as e:
                     error_class, friendly_msg = classify_error(e)
-                    current_backoff = initial_backoff * (backoff_factor**retries)
+                    
+                    # Улучшенное логирование для отладки - показываем всю цепочку ошибок
+                    logger.error(f"[{req_id}] Exception: {e.__class__.__name__}: {str(e)}")
+                    if hasattr(e, '__cause__') and e.__cause__:
+                        cause = e.__cause__
+                        logger.error(f"[{req_id}] Caused by: {cause.__class__.__name__}: {str(cause)}")
+                        if hasattr(cause, '__cause__') and cause.__cause__:
+                            root = cause.__cause__
+                            logger.error(f"[{req_id}] Root cause: {root.__class__.__name__}: {str(root)}")
+                    
+                    # Детальный стектрейс
+                    import traceback
+                    logger.error(f"[{req_id}] Full stacktrace:\n{traceback.format_exc()}")
+                    
+                    # Проверяем, нужно ли повторить попытку для этого типа ошибок
+                    if error_types and error_class not in error_types:
+                        if retries > 0:
+                            logger.info(
+                                f"[{req_id}] Not retrying {error_class} error (not in retry types)"
+                            )
+                        raise
 
-                    # Проверяем, нужно ли повторять для этого типа ошибки
-                    can_retry = error_types is None or error_class in error_types
+                    # Рассчитываем backoff
+                    current_backoff = initial_backoff * (backoff_factor ** retries)
 
-                    # Не повторяем для ошибок валидации и авторизации
-                    if error_class in [ErrorType.VALIDATION, ErrorType.AUTHENTICATION]:
-                        can_retry = False
-
-                    if can_retry and retries < max_retries:
+                    # Проверяем, нужно ли повторять попытку
+                    if retries < max_retries:
                         logger.warning(
                             f"[{req_id}] {error_class} error in {func.__name__}: {str(e)}. "
                             f"Retrying in {current_backoff:.1f}s ({retries+1}/{max_retries})"
@@ -244,7 +261,12 @@ def with_retry_backoff(
                             raise type(e)(e.friendly_message) from e
                         else:
                             e.friendly_message = friendly_msg
-                            raise RuntimeError(friendly_msg) from e
+                            # Добавляем фактическую ошибку в сообщение для более простой диагностики
+                            if error_class == ErrorType.UNKNOWN:
+                                enhanced_msg = f"{friendly_msg} ({e.__class__.__name__}: {str(e)})"
+                                raise RuntimeError(enhanced_msg) from e
+                            else:
+                                raise RuntimeError(friendly_msg) from e
 
             # Никогда не должны сюда попасть, но на всякий случай
             if last_error:
