@@ -1,6 +1,6 @@
 import logging
 from typing import (
-    List, Dict, Optional, Tuple, Sequence, Hashable, Callable, Any
+    List, Dict, Optional, Tuple, Sequence, Hashable, Callable, Any, Union
 )
 from app.config import settings
 
@@ -12,8 +12,8 @@ try:
         s1: Sequence[Hashable],
         s2: Sequence[Hashable],
         *,
-        processor: Callable[..., Sequence[Hashable]] | None = None,
-        score_cutoff: float | None = None,
+        processor: Union[Callable[..., Sequence[Hashable]], None] = None,
+        score_cutoff: Union[float, None] = None,
     ) -> float:
         return _levenshtein_ratio(s1, s2)
 
@@ -21,10 +21,10 @@ try:
         s1: Sequence[Hashable],
         s2: Sequence[Hashable],
         *,
-        weights: tuple[int, int, int] | None = None,
-        processor: Callable[..., Sequence[Hashable]] | None = None,
-        score_cutoff: float | None = None,
-        score_hint: float | None = None,
+        weights: Union[tuple[int, int, int], None] = None,
+        processor: Union[Callable[..., Sequence[Hashable]], None] = None,
+        score_cutoff: Union[float, None] = None,
+        score_hint: Union[float, None] = None,
     ) -> int:
         return _levenshtein_distance(s1, s2)
 
@@ -36,8 +36,8 @@ except ImportError:
         s1: Sequence[Hashable],
         s2: Sequence[Hashable],
         *,
-        processor: Callable[..., Sequence[Hashable]] | None = None,
-        score_cutoff: float | None = None,
+        processor: Union[Callable[..., Sequence[Hashable]], None] = None,
+        score_cutoff: Union[float, None] = None,
     ) -> float:
         a = "".join(map(str, s1))
         b = "".join(map(str, s2))
@@ -47,10 +47,10 @@ except ImportError:
         s1: Sequence[Hashable],
         s2: Sequence[Hashable],
         *,
-        weights: tuple[int, int, int] | None = None,
-        processor: Callable[..., Sequence[Hashable]] | None = None,
-        score_cutoff: float | None = None,
-        score_hint: float | None = None,
+        weights: Union[tuple[int, int, int], None] = None,
+        processor: Union[Callable[..., Sequence[Hashable]], None] = None,
+        score_cutoff: Union[float, None] = None,
+        score_hint: Union[float, None] = None,
     ) -> int:
         a = "".join(map(str, s1))
         b = "".join(map(str, s2))

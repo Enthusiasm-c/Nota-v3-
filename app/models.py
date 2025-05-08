@@ -1,5 +1,5 @@
 from datetime import date
-from typing import Optional
+from typing import Optional, Union
 from pydantic import BaseModel
 
 
@@ -9,7 +9,7 @@ class Product(BaseModel):
     name: str
     alias: str
     unit: str
-    price_hint: float | None = None
+    price_hint: Union[float, None] = None
 
 
 class Position(BaseModel):
@@ -28,7 +28,7 @@ import sys
 if sys.version_info >= (3, 10):
     from typing import TypeAlias
 
-    DateOrNone: TypeAlias = date | None
+    DateOrNone: TypeAlias = Union[date, None]
 else:
     from typing import Optional as DateOrNone
 
