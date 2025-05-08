@@ -72,15 +72,19 @@ def parse_edit_command(user_input: str, invoice_lines=None) -> list:
     from datetime import datetime
     
     # First replace newlines with semicolons, then split by semicolons, commas, or periods
-    # We use a regex to avoid splitting on periods within numbers (e.g., "3.14")
-    cleaned_input = user_input.replace('\n', ';')
-    
-    # Split on semicolons, commas, or periods that are followed by a space or end of string
-    commands = [c.strip() for c in re.split(r'[;,.](?=\s|\Z)', cleaned_input) if c.strip()]
-    
+    # Улучшенное разбиение: сначала по \n, затем по ;, затем по разделителям с пробелом/концом строки
+    lines = user_input.split('\n')
+    commands = []
+    for line in lines:
+        # Сначала делим по ;
+        semi_split = [c.strip() for c in line.split(';') if c.strip()]
+        for semi in semi_split:
+            # Теперь делим по запятым или точкам, если они стоят перед пробелом или концом строки
+            parts = [c.strip() for c in re.split(r'[,.](?=\s|\Z)', semi) if c.strip()]
+            commands.extend(parts)
     # If no commands found after splitting, try to process whole input
-    if not commands and cleaned_input.strip():
-        commands = [cleaned_input.strip()]
+    if not commands and user_input.strip():
+        commands = [user_input.strip()]
         
     results = []
     reserved_keywords = ['date', 'дата', 'supplier', 'поставщик', 'total', 'итог', 'line', 'row', 'строка']
