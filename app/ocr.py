@@ -148,7 +148,7 @@ def call_openai_ocr(image_bytes: bytes, _req_id=None) -> ParsedData:
         ocr_logger.debug(f"[{req_id}] Отправлено сообщение с изображением")
         
         # Запускаем обработку ассистентом
-        ocr_logger.info(f"[{req_id}] Запускаю ассистента с таймаутом 15 секунд")
+        ocr_logger.info(f"[{req_id}] Запускаю ассистента с таймаутом 60 секунд")
         run = client.beta.threads.runs.create(
             thread_id=thread_id,
             assistant_id=settings.OPENAI_VISION_ASSISTANT_ID,
@@ -157,15 +157,30 @@ def call_openai_ocr(image_bytes: bytes, _req_id=None) -> ParsedData:
         )
         
         # Ожидаем завершения обработки с таймаутом
-        timeout = 15  # 15 секунд таймаут
+        timeout = 60  # 60 секунд таймаут (увеличено с 15)
         start_wait = time.time()
+        poll_interval = 3  # Проверять статус каждые 3 секунды
+        ocr_logger.info(f"[{req_id}] Ожидаю ответа от OpenAI каждые {poll_interval} сек, таймаут {timeout} сек")
+        
         while run.status in ("queued", "in_progress"):
             if time.time() - start_wait > timeout:
-                ocr_logger.error(f"[{req_id}] Превышен таймаут ожидания ассистента")
-                raise RuntimeError("Превышен таймаут ожидания. Пожалуйста, попробуйте еще раз.")
+                ocr_logger.error(f"[{req_id}] Превышен таймаут ожидания ассистента ({timeout} сек)")
+                raise RuntimeError(f"Превышен таймаут ожидания ({timeout} сек). Пожалуйста, попробуйте еще раз или используйте изображение меньшего размера.")
             
-            time.sleep(1)
-            run = client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run.id)
+            # Больше не проверяем статус каждую секунду, а делаем паузу
+            time.sleep(poll_interval)
+            
+            # Логируем текущий статус и время ожидания
+            elapsed = time.time() - start_wait
+            ocr_logger.debug(f"[{req_id}] Статус выполнения: {run.status}, прошло {elapsed:.1f} сек из {timeout}")
+            
+            # Получаем обновленный статус
+            try:
+                run = client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run.id)
+            except Exception as status_err:
+                # Если возникла ошибка при получении статуса, логируем и продолжаем ожидание
+                ocr_logger.warning(f"[{req_id}] Ошибка при получении статуса: {str(status_err)}")
+                # Не поднимаем исключение, продолжаем ожидание до таймаута
         
         t_step = log_ocr_performance(t_step, "Assistant processing", req_id)
         ocr_logger.info(f"[{req_id}] Ассистент завершил обработку со статусом: {run.status}")
