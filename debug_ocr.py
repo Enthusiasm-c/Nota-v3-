@@ -25,6 +25,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger("ocr-debug")
 
+# Включаем отладочные логи для всех модулей OpenAI и HTTP
+logging.getLogger("openai").setLevel(logging.DEBUG)
+logging.getLogger("httpx").setLevel(logging.DEBUG)
+logging.getLogger("app.ocr").setLevel(logging.DEBUG)
+logging.getLogger("app.utils.api_decorators").setLevel(logging.DEBUG)
+
 # Функция сериализации для даты
 def json_serialize(obj):
     """
@@ -95,6 +101,16 @@ async def test_ocr(image_path):
             logger.error(f"OCR завершился с ошибкой через {duration:.2f} сек")
             logger.error(f"Тип ошибки: {ocr_err.__class__.__name__}")
             logger.error(f"Сообщение ошибки: {str(ocr_err)}")
+            
+            # Получаем доступ к исходной ошибке через __cause__
+            if hasattr(ocr_err, '__cause__') and ocr_err.__cause__:
+                cause = ocr_err.__cause__
+                logger.error(f"Исходная ошибка: {cause.__class__.__name__}: {str(cause)}")
+                
+                # Если у исходной ошибки тоже есть причина, показываем и её
+                if hasattr(cause, '__cause__') and cause.__cause__:
+                    root_cause = cause.__cause__
+                    logger.error(f"Корневая причина: {root_cause.__class__.__name__}: {str(root_cause)}")
             
             # Подробная диагностика
             import traceback

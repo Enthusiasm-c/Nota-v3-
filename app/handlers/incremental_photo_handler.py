@@ -161,13 +161,31 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         await ui.start_spinner()
         
         # Run OCR in a separate thread for non-blocking operation
-        ocr_result = await ocr.call_openai_ocr(img_bytes)
-        
-        ui.stop_spinner()
-        positions_count = len(ocr_result.positions) if ocr_result.positions else 0
-        await ui.update(t("status.text_recognized", {"count": positions_count}, lang=lang) or 
-                       f"✅ Text recognized: found {positions_count} items")
-        logger.info(f"[{req_id}] OCR completed successfully, found {positions_count} items")
+        try:
+            logger.info(f"[{req_id}] Начинаю OCR-обработку изображения")
+            ocr_result = await ocr.call_openai_ocr(img_bytes)
+            ui.stop_spinner()
+            positions_count = len(ocr_result.positions) if ocr_result.positions else 0
+            await ui.update(t("status.text_recognized", {"count": positions_count}, lang=lang) or 
+                           f"✅ Text recognized: found {positions_count} items")
+            logger.info(f"[{req_id}] OCR completed successfully, found {positions_count} items")
+        except Exception as ocr_err:
+            ui.stop_spinner()
+            # Подробная информация об ошибке
+            logger.error(f"[{req_id}] OCR error: {ocr_err.__class__.__name__}: {str(ocr_err)}")
+            
+            # Попытка получить изначальную причину ошибки
+            if hasattr(ocr_err, '__cause__') and ocr_err.__cause__:
+                cause = ocr_err.__cause__
+                logger.error(f"[{req_id}] OCR error cause: {cause.__class__.__name__}: {str(cause)}")
+                
+                # Если у первопричины тоже есть причина
+                if hasattr(cause, '__cause__') and cause.__cause__:
+                    root_cause = cause.__cause__
+                    logger.error(f"[{req_id}] OCR root cause: {root_cause.__class__.__name__}: {str(root_cause)}")
+            
+            await ui.update(t("status.text_recognition_failed", lang=lang) or "❌ Text recognition failed")
+            raise  # Re-raise для общего обработчика ошибок
         
         # Step 4: Match with products
         await ui.append(t("status.matching_items", lang=lang) or "🔄 Matching items...")
@@ -221,7 +239,7 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         # Send full report as a separate message
         try:
             # Check message for potential HTML problems before sending
-            telegram_html_tags = ["<b>", "<i>", "<u>", "<s>", "<strike>", "<del>", "<code>", "<pre>", "<a"]
+            telegram_html_tags = ["<b>", "<i>", "<u>", "", "<strike>", "<del>", "<code>", "<pre>", "<a"]
             has_valid_html = any(tag in report_text for tag in telegram_html_tags)
             
             if "<pre>" in report_text and "</pre>" not in report_text:
