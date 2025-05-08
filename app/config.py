@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     # Business logic configuration
     OWN_COMPANY_ALIASES: list[str] = ["Bali Veg Ltd", "Nota AI Cafe"]
 
+    # Base URL for server (used for image links)
+    BASE_URL = os.environ.get("BASE_URL", "")
+
     model_config = SettingsConfigDict(
         extra="allow", env_file=os.getenv("ENV_FILE", ".env"), env_file_encoding="utf-8"
     )

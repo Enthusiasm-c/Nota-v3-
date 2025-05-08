@@ -6,15 +6,18 @@ and analyzing invoices with progressive UI updates.
 """
 
 import asyncio
+import json
 import logging
-import uuid
 import os
 import tempfile
 from pathlib import Path
+import uuid
+from datetime import datetime
 from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
 from aiogram.enums import ParseMode
+from typing import Dict, List, Optional, Tuple
 
 from app.utils.incremental_ui import IncrementalUI
 from app import ocr, matcher, data_loader
@@ -159,6 +162,21 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         # Step 3: OCR image
         await ui.append(t("status.recognizing_text", lang=lang) or "🔍 Recognizing text (OCR)...")
         await ui.start_spinner()
+        
+        # Сохраняем изображение в PNG для тестирования в playground
+        test_image_id = str(uuid.uuid4())[:8]
+        test_image_path = f"tmp/ocr_test_{test_image_id}.png"
+        try:
+            # Сохраняем копию изображения в PNG для тестирования
+            with open(test_image_path, "wb") as f:
+                f.write(img_bytes)
+            logger.info(f"[{req_id}] Сохранено тестовое изображение: {test_image_path}")
+            # Отправляем пользователю сообщение со ссылкой
+            base_url = settings.BASE_URL or "http://yourserver.com"
+            playground_msg = f"🔍 Для тестирования в playground: {base_url}/{test_image_path}"
+            await message.answer(playground_msg)
+        except Exception as img_save_err:
+            logger.warning(f"[{req_id}] Не удалось сохранить тестовое изображение: {str(img_save_err)}")
         
         # Run OCR in a separate thread for non-blocking operation
         try:
