@@ -23,11 +23,11 @@ from app.utils.enhanced_logger import log_indonesian_invoice, log_format_issues,
 # --- Удалено: tool_schema, VISION_ASSISTANT_TIMEOUT_SECONDS ---
 
 # --- Добавляю импорт оптимизации изображений ---
-try:
-    from app.imgprep import prepare_for_ocr
-    IMG_PREP_AVAILABLE = True
-except ImportError:
-    IMG_PREP_AVAILABLE = False
+# try:
+#     from app.imgprep import prepare_for_ocr
+#     IMG_PREP_AVAILABLE = True
+# except ImportError:
+#     IMG_PREP_AVAILABLE = False
 
 # Схема для функции получения данных инвойса
 INVOICE_FUNCTION_SCHEMA = {
@@ -93,7 +93,7 @@ INVOICE_FUNCTION_SCHEMA = {
 @with_retry_backoff(max_retries=1, initial_backoff=0.5, backoff_factor=2.0)
 def call_openai_ocr(image_bytes: bytes, _req_id=None) -> ParsedData:
     """
-    Прямой вызов OpenAI Vision API (gpt-4o) для распознавания инвойса с использованием function calling.
+    Прямой вызов OpenAI Vision API (gpt-4.5) для распознавания инвойса с использованием function calling.
     Args:
         image_bytes: Байты изображения для обработки
         _req_id: Идентификатор запроса для логирования
@@ -123,16 +123,18 @@ def call_openai_ocr(image_bytes: bytes, _req_id=None) -> ParsedData:
     prompt = build_prompt()
 
     # --- Автоматическая оптимизация изображения ---
-    if IMG_PREP_AVAILABLE:
-        try:
-            # Сохраняем изображение во временный файл
-            tmp_path = f"/tmp/nota_ocr_{req_id}.jpg"
-            with open(tmp_path, "wb") as f:
-                f.write(image_bytes)
-            image_bytes = prepare_for_ocr(tmp_path, use_preprocessing=True)
-            ocr_logger.info(f"[{req_id}] Изображение оптимизировано для Vision API, размер: {len(image_bytes)} байт")
-        except Exception as prep_err:
-            ocr_logger.warning(f"[{req_id}] Ошибка оптимизации изображения: {prep_err}. Использую оригинал.")
+    # if IMG_PREP_AVAILABLE:
+    #     try:
+    #         # Сохраняем изображение во временный файл
+    #         tmp_path = f"/tmp/nota_ocr_{req_id}.jpg"
+    #         with open(tmp_path, "wb") as f:
+    #             f.write(image_bytes)
+    #         image_bytes = prepare_for_ocr(tmp_path, use_preprocessing=True)
+    #         ocr_logger.info(f"[{req_id}] Изображение оптимизировано для Vision API, размер: {len(image_bytes)} байт")
+    #     except Exception as prep_err:
+    #         ocr_logger.warning(f"[{req_id}] Ошибка оптимизации изображения: {prep_err}. Использую оригинал.")
+
+    # Просто используем image_bytes как есть, без изменений
 
     # Формируем base64 изображение
     b64_image = base64.b64encode(image_bytes).decode("utf-8")
@@ -148,10 +150,10 @@ def call_openai_ocr(image_bytes: bytes, _req_id=None) -> ParsedData:
     ]
 
     try:
-        ocr_logger.info(f"[{req_id}] Отправляю запрос в gpt-4o с использованием function calling")
+        ocr_logger.info(f"[{req_id}] Отправляю запрос в gpt-4.5 с использованием function calling")
         with PerformanceTimer(req_id, "openai_vision_api_call"):
             response = client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4.5",
                 messages=messages,
                 max_tokens=2048,
                 temperature=0.0,

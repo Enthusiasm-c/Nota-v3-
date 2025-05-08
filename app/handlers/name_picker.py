@@ -81,11 +81,6 @@ async def handle_pick_name(call: CallbackQuery, state: FSMContext):
             match_results = match_positions(invoice["positions"], products)
             text, has_errors = report.build_report(invoice, match_results)
             
-            # Add alias if the row is successfully recognized
-            if original_name and product_id:
-                add_alias(original_name, product_id)
-                logger.info(f"[handle_pick_name] Added alias: {original_name} -> {product_id}")
-            
             # Count remaining issues
             issues_count = sum(1 for item in match_results if item.get("status", "") != "ok")
             

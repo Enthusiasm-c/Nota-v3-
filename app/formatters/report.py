@@ -43,7 +43,7 @@ def build_table(rows):
     from html import escape as html_escape
     from app.utils.formatters import format_price, format_quantity
 
-    status_map = {"ok": "✓", "unit_mismatch": "❗", "unknown": "❗", "ignored": "❗", "error": "❗", "manual": "✓"}
+    status_map = {"ok": "✓", "unknown": "❗"}
     def pad(text, width):
         s = str(text)
         return s[:width].ljust(width)
@@ -107,12 +107,8 @@ def build_summary(match_results):
             
         name = item.get("name", "")
         problems = []
-        if status == "unit_mismatch":
-            problems.append(t("report.unit_mismatch"))
         if status == "unknown":
-            problems.append(t("report.name_error"))
-        if status == "error":
-            problems.append(t("report.processing_error"))
+            problems.append(t("report.unknown"))
         qty = item.get("qty", None)
         price = item.get("price", None)
         if price in (None, "", "—"):
@@ -128,10 +124,10 @@ def build_summary(match_results):
             errors.append(error_line)
     
     # Считаем позиции со статусом "ok" или "manual" как правильные
-    correct = sum(1 for item in match_results if item.get("status", "") in ["ok", "manual"])
+    correct = sum(1 for item in match_results if item.get("status", "") == "ok")
     
     # Считаем позиции с проблемами (исключая ручное редактирование)
-    issues = sum(1 for item in match_results if item.get("status", "") not in ["ok", "manual"])
+    issues = sum(1 for item in match_results if item.get("status", "") != "ok")
     
     if not errors:
         return f"{t('report.no_errors')}\nCorrect: {correct}\nIssues: {issues}"
@@ -151,7 +147,7 @@ def count_issues(match_results):
     Returns:
         int: Количество проблемных позиций
     """
-    return sum(1 for item in match_results if item.get("status", "") not in ["ok", "manual"])
+    return sum(1 for item in match_results if item.get("status", "") != "ok")
 
 def build_report(parsed_data, match_results, escape_html=True, page=1, page_size=40):
     """
@@ -201,12 +197,10 @@ def build_report(parsed_data, match_results, escape_html=True, page=1, page_size
     has_unparsed = False
     for item in match_results:
         status = item.get("status", "")
-        if status in ["ok", "manual"]:  # Считаем ручное редактирование как ОК
+        if status == "ok":
             ok_count += 1
-        elif status in ("unit_mismatch", "unknown", "ignored", "error"):
+        elif status == "unknown":
             issues_count += 1
-        if status == "unit_mismatch":
-            unit_mismatch_count += 1
         # Проверяем наличие нераспознанных цен или количеств
         qty = item.get("qty", None)
         price = item.get("unit_price", None)

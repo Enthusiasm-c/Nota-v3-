@@ -2,7 +2,6 @@ import logging
 import asyncio
 from typing import Tuple, Optional
 from pathlib import Path
-from app.imgprep import prepare_for_ocr, prepare_without_preprocessing
 from app.ocr import call_openai_ocr
 from app.models import ParsedData
 from app.utils.enhanced_logger import PerformanceTimer
@@ -21,38 +20,26 @@ async def process_image_step(step_func, *args, **kwargs):
 async def process_invoice_pipeline(
     img_bytes: bytes,
     img_path: Path,
-    use_preprocessing: bool,
     req_id: str
 ) -> Tuple[bytes, Optional[ParsedData]]:
     """
     Асинхронный пайплайн для обработки фотографии накладной.
-    Разделяет процесс на шаги для предотвращения блокировки event loop.
+    Теперь не содержит этапа предобработки, работает только с оригинальным изображением.
     """
     processed_bytes = None
     parsed_data = None
-    # Шаг 1: Предобработка изображения
+    # Шаг 1: Используем оригинальное изображение
     try:
-        with PerformanceTimer(req_id, "image_preprocessing"):
-            if use_preprocessing:
-                logger.info(f"[{req_id}] Starting image preprocessing")
-                processed_bytes = await process_image_step(
-                    prepare_for_ocr, img_path, use_preprocessing=True
-                )
-            else:
-                logger.info(f"[{req_id}] Preprocessing disabled, using original image")
-                processed_bytes = await process_image_step(
-                    prepare_without_preprocessing, img_path
-                )
-    except asyncio.TimeoutError:
-        logger.warning(f"[{req_id}] Image preprocessing timeout, using original image")
-        processed_bytes = img_bytes
+        with PerformanceTimer(req_id, "image_loading"):
+            logger.info(f"[{req_id}] Используется оригинальное изображение без предобработки")
+            processed_bytes = img_bytes
     except Exception as e:
-        logger.error(f"[{req_id}] Error during image preprocessing: {e}")
+        logger.error(f"[{req_id}] Ошибка при загрузке изображения: {e}")
         processed_bytes = img_bytes
     # Шаг 2: OCR через OpenAI
     try:
         with PerformanceTimer(req_id, "ocr_processing"):
-            logger.info(f"[{req_id}] Starting OCR processing")
+            logger.info(f"[{req_id}] Запуск OCR")
             parsed_data = await process_image_step(
                 call_openai_ocr, processed_bytes, _req_id=req_id
             )
@@ -62,4 +49,4 @@ async def process_invoice_pipeline(
     except Exception as e:
         logger.error(f"[{req_id}] Error during OCR processing: {e}")
         raise
-    return processed_bytes, parsed_data 
+    return processed_bytes, parsed_data

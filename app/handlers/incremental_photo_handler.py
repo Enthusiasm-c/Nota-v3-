@@ -24,7 +24,6 @@ from app import ocr, matcher, data_loader
 from app.formatters.report import build_report
 from app.keyboards import build_main_kb
 from app.utils.md import clean_html
-from app.imgprep import prepare_for_ocr, prepare_without_preprocessing
 from app.i18n import t
 from app.config import settings
 
@@ -140,17 +139,16 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
                 await ui.update(t("status.image_received", lang=lang) or "✅ Image received")
                 logger.info(f"[{req_id}] Downloaded photo, size {len(img_bytes)} bytes")
         
-        # Step 2: Preprocess image
-        await ui.append(t("status.preprocessing_image", lang=lang) or "🖼️ Preprocessing image...")
+        # Step 2: OCR изображения
+        await ui.append(t("status.analyzing_image", lang=lang) or "🖼️ Analyzing image...")
         await ui.start_spinner()
         with temp_file(f"ocr_{req_id}", ".jpg") as tmp_path:
             with open(tmp_path, "wb") as f:
                 f.write(img_bytes)
-            use_preprocessing = data.get("use_preprocessing", True)
             # Новый асинхронный пайплайн
             try:
                 processed_bytes, ocr_result = await process_invoice_pipeline(
-                    img_bytes, tmp_path, use_preprocessing, req_id
+                    img_bytes, tmp_path, req_id
                 )
                 img_bytes = processed_bytes
                 ui.stop_spinner()
@@ -163,7 +161,6 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
                 logger.error(f"[{req_id}] OCR error: {ocr_err.__class__.__name__}: {str(ocr_err)}")
                 await ui.update(t("status.text_recognition_failed", lang=lang) or "❌ Text recognition failed")
                 raise
-        await ui.update(f"Статус предобработки: {'ВКЛЮЧЕНА' if use_preprocessing else 'ВЫКЛЮЧЕНА'}")
         
         # Step 3: Playground image (save_test_image)
         test_image_path = await asyncio.to_thread(save_test_image, img_bytes, req_id)
@@ -321,21 +318,3 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
     finally:
         await state.update_data(processing_photo=False)
         await state.update_data(current_ocr_task=None)
-
-@router.message(F.text.startswith("/obrabotka"))
-async def set_preprocessing_mode(message: Message, state: FSMContext):
-    """
-    Включает или выключает предобработку изображений по команде пользователя.
-    Используйте: /obrabotka on или /obrabotka off
-    """
-    text = message.text.strip().lower()
-    if "on" in text:
-        await state.update_data(use_preprocessing=True)
-        await message.answer("🟢 Предобработка изображений ВКЛЮЧЕНА.")
-    elif "off" in text:
-        await state.update_data(use_preprocessing=False)
-        await message.answer("🔴 Предобработка изображений ВЫКЛЮЧЕНА.")
-    else:
-        data = await state.get_data()
-        status = data.get("use_preprocessing", True)
-        await message.answer(f"Текущий статус предобработки: {'ВКЛЮЧЕНА' if status else 'ВЫКЛЮЧЕНА'}\nИспользуйте /obrabotka on или /obrabotka off")

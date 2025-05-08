@@ -52,25 +52,19 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Подробная диагностика OCR процесса")
     parser.add_argument("--image", "-i", type=str, required=True, help="Путь к изображению накладной")
     parser.add_argument("--timeout", "-t", type=int, default=120, help="Таймаут в секундах")
-    parser.add_argument("--skip-preprocessing", "-s", action="store_true", help="Пропустить этап предобработки")
     parser.add_argument("--debug-dir", "-d", type=str, help="Директория для отладочных файлов")
     return parser.parse_args()
 
-async def run_step_by_step_debug(image_path, debug_dir, skip_preprocessing=False, timeout=120):
+async def run_step_by_step_debug(image_path, debug_dir, timeout=120):
     """Пошаговая отладка процесса OCR с сохранением результатов"""
     try:
         logger.info("ЭТАП 1: Проверка входного изображения")
-        # Проверяем существование файла
         if not os.path.exists(image_path):
             logger.error(f"❌ ОШИБКА: Файл {image_path} не существует")
             return False
-        
-        # Копируем исходное изображение в директорию отладки
         orig_image_path = os.path.join(debug_dir, "1_original_image.jpg")
         shutil.copy(image_path, orig_image_path)
         logger.info(f"✅ Исходное изображение сохранено: {orig_image_path}")
-        
-        # Получаем информацию о размере и формате изображения
         try:
             with Image.open(image_path) as img:
                 width, height = img.size
@@ -79,67 +73,8 @@ async def run_step_by_step_debug(image_path, debug_dir, skip_preprocessing=False
                 logger.info(f"✅ Информация об изображении: {width}x{height}, формат: {format}, режим: {mode}")
         except Exception as img_err:
             logger.error(f"❌ ОШИБКА при анализе изображения: {str(img_err)}")
-        
-        logger.info("ЭТАП 2: Импорт необходимых модулей")
-        # Импортируем OCR модуль
-        try:
-            from app import ocr
-            logger.info("✅ Модуль OCR успешно импортирован")
-        except ImportError as imp_err:
-            logger.error(f"❌ ОШИБКА импорта OCR: {str(imp_err)}")
-            return False
-        
-        # Импортируем модуль конфигурации
-        try:
-            from app.config import get_ocr_client
-            client = get_ocr_client()
-            if client:
-                logger.info("✅ OpenAI клиент успешно получен")
-            else:
-                logger.error("❌ ОШИБКА: OpenAI клиент не получен")
-                return False
-        except Exception as conf_err:
-            logger.error(f"❌ ОШИБКА конфигурации: {str(conf_err)}")
-            return False
-        
-        logger.info("ЭТАП 3: Предобработка изображения")
-        # Предобработка (если включена)
-        if not skip_preprocessing and hasattr(ocr, 'prepare_for_ocr'):
-            logger.info("Запуск предобработки изображения...")
-            try:
-                # Создаем копию для предобработки
-                prep_input = os.path.join(debug_dir, "3_preprocessing_input.jpg")
-                shutil.copy(image_path, prep_input)
-                
-                # Запускаем предобработку
-                start_time = time.time()
-                processed_bytes = ocr.prepare_for_ocr(prep_input, use_preprocessing=True)
-                prep_time = time.time() - start_time
-                
-                # Сохраняем результат предобработки
-                prep_output = os.path.join(debug_dir, "3_preprocessed_output.webp")
-                with open(prep_output, 'wb') as f:
-                    f.write(processed_bytes)
-                
-                logger.info(f"✅ Предобработка завершена за {prep_time:.2f} сек")
-                logger.info(f"✅ Результат предобработки сохранен: {prep_output}")
-                
-                # Используем предобработанные данные
-                image_bytes = processed_bytes
-            except Exception as prep_err:
-                logger.error(f"❌ ОШИБКА предобработки: {str(prep_err)}")
-                logger.info("Используем оригинальное изображение")
-                with open(image_path, 'rb') as f:
-                    image_bytes = f.read()
-        else:
-            if skip_preprocessing:
-                logger.info("Предобработка пропущена по запросу")
-            else:
-                logger.info("Предобработка недоступна")
-            
-            # Используем оригинальное изображение
-            with open(image_path, 'rb') as f:
-                image_bytes = f.read()
+        with open(image_path, 'rb') as f:
+            image_bytes = f.read()
         
         logger.info("ЭТАП 4: Подготовка запроса к Vision API")
         # Кодируем изображение в base64
@@ -195,7 +130,7 @@ async def run_step_by_step_debug(image_path, debug_dir, skip_preprocessing=False
             logger.info("Отправка запроса в API...")
             
             response = client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4.5",
                 messages=messages,
                 max_tokens=4096,
                 temperature=0.0,
@@ -301,13 +236,11 @@ async def main():
     logger.info(f"Запуск подробной диагностики OCR...")
     logger.info(f"Тестовое изображение: {args.image}")
     logger.info(f"Директория для отладки: {debug_dir}")
-    logger.info(f"Предобработка: {'отключена' if args.skip_preprocessing else 'включена'}")
     
     # Запускаем пошаговую отладку
     success = await run_step_by_step_debug(
         args.image, 
         debug_dir, 
-        skip_preprocessing=args.skip_preprocessing,
         timeout=args.timeout
     )
     

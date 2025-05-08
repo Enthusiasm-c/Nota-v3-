@@ -197,7 +197,6 @@ def match_positions(
         threshold = settings.MATCH_THRESHOLD
 
     results = []
-    used_ids: set[Any] = set()
 
     for pos in positions:
         name = getattr(pos, "name", None)
@@ -214,34 +213,14 @@ def match_positions(
 
         best_match = None
         best_score: float = -1.0
-        matched_product = None
         status = "unknown"
         fuzzy_scores = []
 
         for product in products:
             if isinstance(product, dict):
-                pid = product.get("id")
-                if "alias" in product:
-                    alias = product["alias"]
-                    if not alias or str(alias).strip() == "":
-                        continue
-                    compare_val = alias
-                else:
-                    compare_val = product.get("name", "")
-                product_name = product.get("name", "")
+                compare_val = product.get("name", "")
             else:
-                pid = getattr(product, "id", None)
-                if hasattr(product, "alias"):
-                    alias = getattr(product, "alias", None)
-                    if not alias or str(alias).strip() == "":
-                        continue
-                    compare_val = alias
-                else:
-                    compare_val = getattr(product, "name", "")
-                product_name = getattr(product, "name", "")
-
-            if pid in used_ids:
-                continue
+                compare_val = getattr(product, "name", "")
 
             normalized_name = name.lower().strip()
             normalized_compare = compare_val.lower().strip()
@@ -255,91 +234,10 @@ def match_positions(
                 best_score = score
                 best_match = product
 
-        canonical_name = name
-        matched_product = None
-        status = "unknown"
-
-        if best_match is not None:
-            if isinstance(best_match, dict):
-                alias_val = best_match.get("alias", "")
-                product_name = best_match.get("name", "")
-            else:
-                alias_val = getattr(best_match, "alias", "")
-                product_name = getattr(best_match, "name", "")
-
-            name_l = name.strip().lower()
-            alias_l = alias_val.strip().lower() if alias_val else ""
-            product_name_l = product_name.strip().lower() if product_name else ""
-
-            threshold_value = settings.MATCH_THRESHOLD
-
-            if (
-                name_l
-                and alias_l
-                and name_l == alias_l
-            ):
-                matched_product = best_match
-                status = "ok"
-                canonical_name = product_name
-            elif (
-                name_l
-                and product_name_l
-                and name_l == product_name_l
-            ):
-                matched_product = best_match
-                status = "ok"
-                canonical_name = product_name
-            elif best_score >= threshold_value * 100:
-                matched_product = best_match
-                status = "ok"
-                canonical_name = product_name
-                
-                # Автоматическое создание алиаса при высокой уверенности (>=90%)
-                if best_score >= 90.0 and name:
-                    try:
-                        # Получаем product_id из matched_product
-                        if isinstance(matched_product, dict):
-                            product_id = matched_product.get("id")
-                        else:
-                            product_id = getattr(matched_product, "id", None)
-                            
-                        if product_id:
-                            from app.alias import add_alias
-                            added = add_alias(name, product_id)
-                            if added:
-                                logger.info(f"Auto-added alias for high confidence match: '{name}' -> {product_id} (score: {best_score:.1f})")
-                    except Exception as e:
-                        logger.warning(f"Failed to auto-add alias: {str(e)}")
-            else:
-                matched_product = None
-                status = "unknown"
-                canonical_name = name
-
-        if matched_product is not None:
-            if isinstance(matched_product, dict):
-                prod_unit_group = matched_product.get("unit_group")
-            else:
-                prod_unit_group = getattr(matched_product, "unit_group", None)
-
-            pos_unit = unit
-
-            if pos_unit == "pcs" and prod_unit_group in ("kg", "g"):
-                status = "unit_mismatch"
-            elif prod_unit_group and pos_unit and prod_unit_group != pos_unit:
-                status = "unit_mismatch"
-
-        logger.debug(
-            f"Match: {name}  {getattr(matched_product, 'alias', None) if matched_product is not None and not isinstance(matched_product, dict) else (matched_product.get('alias') if matched_product else None)}; "
-            f"status={status}"
-        )
-
-        if matched_product is not None:
-            if isinstance(matched_product, dict):
-                result_id = matched_product.get("id")
-            else:
-                result_id = getattr(matched_product, "id", None)
+        if best_score >= threshold:
+            status = "ok"
         else:
-            result_id = None
+            status = "unknown"
 
         total = None
         price = None
@@ -375,11 +273,10 @@ def match_positions(
             line_total_f = total_f
 
         result = {
-            "name": canonical_name,
+            "name": name,
             "qty": qty,
             "unit": unit,
             "status": status,
-            "product_id": result_id,
             "score": best_score if best_score else None,
             "price": price_f,
             "line_total": line_total_f,

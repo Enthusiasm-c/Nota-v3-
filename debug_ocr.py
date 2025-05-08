@@ -73,14 +73,13 @@ def parse_args():
     parser.add_argument("--image", "-i", type=str, help="Путь к тестовому изображению")
     parser.add_argument("--timeout", "-t", type=int, default=90, help="Таймаут OCR в секундах (по умолчанию 90)")
     parser.add_argument("--verbose", "-v", action="store_true", help="Включить подробное логирование")
-    parser.add_argument("--model", "-m", type=str, default="gpt-4o", help="Модель OpenAI (по умолчанию gpt-4o)")
+    parser.add_argument("--model", "-m", type=str, default="gpt-4.5", help="Модель OpenAI (по умолчанию gpt-4.5)")
     parser.add_argument("--save_intermediate", "-s", action="store_true", help="Сохранять промежуточные изображения")
-    parser.add_argument("--no_preprocessing", "-n", action="store_true", help="Отключить предобработку изображения")
     parser.add_argument("--raw_vision", "-r", action="store_true", help="Запустить распознавание сырого текста без структурирования")
     return parser.parse_args()
 
 # Функция для асинхронного запуска OCR
-async def test_ocr(image_path, timeout=90, verbose=False, save_intermediate=False, no_preprocessing=False):
+async def test_ocr(image_path, timeout=90, verbose=False, save_intermediate=False):
     try:
         logger.info(f"Загружаю тестовое изображение: {image_path}")
         
@@ -126,21 +125,6 @@ async def test_ocr(image_path, timeout=90, verbose=False, save_intermediate=Fals
         
         # Запускаем OCR
         start_time = time.time()
-        
-        # Предобработка изображения (если используется)
-        if hasattr(ocr, 'prepare_for_ocr') and not no_preprocessing:
-            tmp_path = f"/tmp/nota_ocr_debug_{int(time.time())}.jpg"
-            shutil.copy(image_path, tmp_path)
-            processed_bytes = ocr.prepare_for_ocr(tmp_path, use_preprocessing=True)
-            if save_intermediate:
-                with open(tmp_path + '.webp', 'wb') as f:
-                    f.write(processed_bytes)
-                logger.info(f"Промежуточное изображение после предобработки сохранено: {tmp_path + '.webp'}")
-            image_bytes = processed_bytes
-            logger.info("Изображение обработано с предобработкой")
-        else:
-            if no_preprocessing:
-                logger.info("Предобработка изображения отключена")
         
         # Запуск с перехватом всех возможных исключений
         try:
@@ -215,7 +199,7 @@ def get_test_image():
     
     return None
 
-async def test_raw_vision(image_path, timeout=90, use_preprocessing=True):
+async def test_raw_vision(image_path, timeout=90):
     """
     Отправляет изображение в Vision API для распознавания сырого текста без структурирования.
     Позволяет сравнить, что именно видит модель на изображении до интерпретации.
@@ -223,7 +207,6 @@ async def test_raw_vision(image_path, timeout=90, use_preprocessing=True):
     Args:
         image_path: Путь к файлу изображения
         timeout: Таймаут в секундах
-        use_preprocessing: Использовать ли предобработку изображения
         
     Returns:
         True если успешно, False если ошибка
@@ -235,16 +218,6 @@ async def test_raw_vision(image_path, timeout=90, use_preprocessing=True):
         if not os.path.exists(image_path):
             logger.error(f"Файл {image_path} не найден")
             return False
-        
-        # Импортируем модуль OCR, если нужна предобработка
-        ocr = None
-        if use_preprocessing:
-            try:
-                from app import ocr
-                logger.info("Модуль OCR успешно импортирован")
-            except ImportError as import_err:
-                logger.error(f"Ошибка импорта модуля OCR: {import_err}")
-                logger.info("Продолжаю без возможности предобработки...")
         
         # Получаем клиент OpenAI
         try:
@@ -258,24 +231,9 @@ async def test_raw_vision(image_path, timeout=90, use_preprocessing=True):
             return False
             
         # Загружаем и при необходимости обрабатываем изображение
-        if use_preprocessing and ocr and hasattr(ocr, 'prepare_for_ocr'):
-            logger.info("Применяю предобработку изображения")
-            try:
-                processed_bytes = ocr.prepare_for_ocr(image_path, use_preprocessing=True)
-                image_bytes = processed_bytes
-                logger.info(f"Изображение обработано, размер: {len(processed_bytes)} байт")
-            except Exception as e:
-                logger.error(f"Ошибка предобработки: {str(e)}")
-                with open(image_path, 'rb') as f:
-                    image_bytes = f.read()
-        else:
-            if use_preprocessing and ocr is None:
-                logger.info("Предобработка недоступна, использую оригинальное изображение")
-            else:
-                logger.info("Предобработка отключена, использую оригинальное изображение")
-            with open(image_path, 'rb') as f:
-                image_bytes = f.read()
-                logger.info(f"Изображение загружено, размер: {len(image_bytes)} байт")
+        with open(image_path, 'rb') as f:
+            image_bytes = f.read()
+            logger.info(f"Изображение загружено, размер: {len(image_bytes)} байт")
         
         # Кодируем изображение в base64
         b64_image = base64.b64encode(image_bytes).decode('utf-8')
@@ -308,7 +266,7 @@ async def test_raw_vision(image_path, timeout=90, use_preprocessing=True):
         try:
             # Устанавливаем таймаут и логируем HTTP-заголовки
             response = client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4.5",
                 messages=messages,
                 max_tokens=4096,
                 temperature=0.0,
@@ -410,7 +368,7 @@ async def main():
     # Если выбран режим сырого распознавания
     if args.raw_vision:
         logger.info("Запуск распознавания сырого текста...")
-        success = await test_raw_vision(test_image, timeout=args.timeout, use_preprocessing=not args.no_preprocessing)
+        success = await test_raw_vision(test_image, timeout=args.timeout)
         if success:
             logger.info("✅ Распознавание сырого текста успешно выполнено")
         else:
@@ -420,7 +378,7 @@ async def main():
     # Обычное тестирование OCR
     logger.info(f"Используемая модель: {args.model}")
     
-    success = await test_ocr(test_image, timeout=args.timeout, verbose=args.verbose, save_intermediate=args.save_intermediate, no_preprocessing=args.no_preprocessing)
+    success = await test_ocr(test_image, timeout=args.timeout, verbose=args.verbose, save_intermediate=args.save_intermediate)
     if success:
         logger.info("✅ Тест OCR успешно выполнен")
     else:

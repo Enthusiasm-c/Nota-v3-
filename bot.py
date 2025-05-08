@@ -1160,14 +1160,6 @@ async def confirm_fuzzy_name(callback: CallbackQuery, state: FSMContext):
     if updated_positions:
         entry["match_results"][fuzzy_line] = updated_positions[0]
     
-    # Добавляем алиас если строка успешно распознана
-    original_name = data.get("fuzzy_original")
-    if original_name and entry["match_results"][fuzzy_line].get("product_id"):
-        product_id = entry["match_results"][fuzzy_line]["product_id"]
-        from app.alias import add_alias
-        add_alias(original_name, product_id)
-        logger.info(f"Added alias: {original_name} -> {product_id}")
-    
     # Формируем новый отчет
     report, has_errors = build_report(entry["parsed_data"], entry["match_results"], escape_html=True)
     

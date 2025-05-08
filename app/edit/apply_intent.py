@@ -116,9 +116,6 @@ def set_unit(invoice: Dict[str, Any], line_index: int, value: str) -> Dict[str, 
     
     if 0 <= line_index < len(result.get("positions", [])):
         result["positions"][line_index]["unit"] = value
-        # Если статус был unit_mismatch, исправляем его
-        if result["positions"][line_index].get("status") == "unit_mismatch":
-            result["positions"][line_index]["status"] = "ok"
     else:
         logger.warning(f"Попытка установить единицу измерения для несуществующей строки: {line_index + 1}")
     

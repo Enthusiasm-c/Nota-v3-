@@ -484,7 +484,7 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
     match = matcher.match_positions(
         [invoice["positions"][idx]], products, return_suggestions=True
     )[0]
-    invoice["positions"][idx]["status"] = match["status"]
+    invoice["positions"][idx]["status"] = "ok"
     # Для совместимости: всегда показываем первую страницу, если не передан page
     match_results = matcher.match_positions(
         invoice["positions"], data_loader.load_products()

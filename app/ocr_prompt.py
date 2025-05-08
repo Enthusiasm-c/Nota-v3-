@@ -5,39 +5,25 @@ from typing import Iterable, Optional
 from app.models import Product
 
 
-def build_prompt(products: Optional[Iterable[Product]] = None) -> str:
+def build_prompt() -> str:
     """Формирует text-prefix для Vision-запроса под индонезийские накладные."""
-    if products is None:
-        products = load_products()
-    # Ограничиваем количество товаров в промпте
-    max_products = getattr(settings, "MAX_PRODUCTS_IN_PROMPT", 100)
-    sorted_products = sorted(products, key=lambda p: p.alias)[:max_products]
-    aliases = [p.alias for p in sorted_products]
-    units = load_units()
-
     lines = [
-        "# INSTRUCTION FOR INVOICE RECOGNITION (INDONESIA)",
+        "# INVOICE RECOGNITION INSTRUCTIONS (INDONESIA)",
         "",
         "## CONTEXT:",
-        "The image is a photo of an Indonesian invoice, often on pink colored paper, possibly handwritten or printed, sometimes at an angle. The invoice may be in Indonesian or English. Ignore background color, shadows, and noise. Focus on extracting all relevant data, even if the text is unclear.",
-        "You are an OCR system for Indonesian invoices. Your task is to extract all information in structured JSON, with all field names and values in English (translate if needed).",
-        "All prices are in Indonesian Rupiah (IDR).",
-        "",
-        "## ALLOWED PRODUCTS (CHOOSE ONLY FROM THIS LIST):",
-        *[f"- {name}" for name in sorted(set(aliases))],
-        "",
-        "## ALLOWED UNITS:",
-        *[f"- {u}" for u in units],
+        "The image is a photo of an Indonesian restaurant supply invoice (Bali), possibly on colored paper, handwritten or printed, sometimes at an angle.",
+        "You are an OCR system for restaurant supply invoices from Bali, Indonesia.",
+        "Your task is to extract ALL information in structured JSON, with field names in English.",
+        "All prices should be in Indonesian Rupiah (IDR).",
         "",
         "## RULES:",
-        "1. EXTRACT ONLY products that clearly appear on the invoice image - NEVER invent or hallucinate items.",
-        "2. ONLY include products from the ALLOWED PRODUCTS list that EXACTLY match what's visible on the invoice.",
-        "3. If you cannot find an exact match in the allowed list for a product on the invoice, DO NOT include it.",
-        "4. If you're uncertain about a product name, DO NOT guess - only include products you are confident about.",
-        "5. NEVER return random products from the allowed list - only return what is actually visible in the image.",
-        "6. Number format: prices are integers (no decimals), quantity may be fractional.",
-        "7. All prices must be in IDR (Indonesian Rupiah).",
-        "8. Return only pure JSON, no explanations or markdown formatting.",
+        "1. Extract EVERY product line that appears on the invoice, even if the text is unclear.",
+        "2. If you are unsure about one or two characters in a word, try to restore the word based on context: this is a restaurant supply invoice (ingredients, drinks, etc).",
+        "3. Preserve the original product name as written. If the name contains a mix of Latin and other symbols, add a Latin transliteration.",
+        "4. Normalize all units to standard abbreviations (kg, g, l, ml, pcs, btl, etc) and all prices to IDR.",
+        "5. For each product, extract: name (original), name_latin (if needed), qty, unit, price (per unit), total_price.",
+        "6. If you cannot determine a value, set it to null.",
+        "7. Return only pure JSON, no explanations or markdown formatting.",
         "",
         "## RESPONSE FORMAT:",
         "{",
@@ -45,9 +31,10 @@ def build_prompt(products: Optional[Iterable[Product]] = None) -> str:
         "  \"date\": string | null,      // Invoice date in YYYY-MM-DD or null",
         "  \"positions\": [              // List of items",
         "    {",
-        "      \"name\": string,         // Product name (STRICTLY from the allowed list and MUST be visible on invoice)",
+        "      \"name\": string,         // Product name as written on invoice",
+        "      \"name_latin\": string | null, // Latin transliteration if original is mixed or non-latin, else null",
         "      \"qty\": number,          // Quantity",
-        "      \"unit\": string,         // Unit",
+        "      \"unit\": string,         // Normalized unit",
         "      \"price\": number | null, // Price per unit in IDR or null",
         "      \"total_price\": number | null // Total price for the item in IDR or null",
         "    }",

@@ -294,18 +294,6 @@ async def confirm_fuzzy_name(call: CallbackQuery, state: FSMContext):
             match_results = match_positions(invoice["positions"], load_products())
             text, has_errors = report.build_report(invoice, match_results)
             
-            # Add alias if line was successfully recognized
-            product_id = None
-            for pos in match_results:
-                if pos.get("name") == fuzzy_match and pos.get("product_id"):
-                    product_id = pos.get("product_id")
-                    break
-                    
-            if product_id and fuzzy_original:
-                from app.alias import add_alias
-                add_alias(fuzzy_original, product_id)
-                logger.info(f"[confirm_fuzzy_name] Added alias: {fuzzy_original} -> {product_id}")
-            
             # Count remaining issues
             issues_count = sum(1 for item in match_results if item.get("status", "") != "ok")
             
