@@ -15,6 +15,7 @@ import signal
 import sys
 from json_trace_logger import setup_json_trace_logger
 from app.handlers.tracing_log_middleware import TracingLogMiddleware
+import argparse
 
 # Aiogram импорты
 from aiogram import Bot, Dispatcher, F
@@ -1415,8 +1416,40 @@ if __name__ == "__main__":
     signal.signal(signal.SIGINT, _graceful_shutdown)
 
     async def main():
-        global bot, dp
+        # Парсинг аргументов командной строки
+        parser = argparse.ArgumentParser(description='Nota Telegram Bot')
+        parser.add_argument('--test-mode', action='store_true', help='Запуск в тестовом режиме для проверки зависимостей')
+        args = parser.parse_args()
         
+        # Тестовый режим - просто проверяем зависимости и выходим
+        if args.test_mode:
+            logger.info("Запущен в тестовом режиме. Проверка зависимостей:")
+            logger.info("✅ Python modules loaded successfully")
+            try:
+                import numpy as np
+                logger.info("✅ numpy imported successfully")
+            except ImportError as e:
+                logger.error(f"❌ Error importing numpy: {e}")
+                return 1
+            
+            try:
+                import cv2
+                logger.info("✅ OpenCV imported successfully")
+            except ImportError as e:
+                logger.error(f"❌ Error importing OpenCV: {e}")
+                return 1
+            
+            try:
+                from PIL import Image
+                logger.info("✅ Pillow imported successfully")
+            except ImportError as e:
+                logger.error(f"❌ Error importing Pillow: {e}")
+                return 1
+            
+            logger.info("✅ All dependencies check passed!")
+            return 0
+        
+        # Стандартный запуск бота
         # Создаем бота и диспетчер
         bot, dp = create_bot_and_dispatcher()
         register_handlers(dp, bot)
