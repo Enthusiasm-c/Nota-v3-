@@ -27,6 +27,8 @@ async def handle_free_edit_text(message: Message, state: FSMContext):
     Обработчик свободного ввода пользователя для редактирования инвойса через ядро edit_core.
     Оставляет только UI-логику, бизнес-логика вынесена в edit_core.py.
     """
+    data = await state.get_data()
+    lang = data.get("lang", "en")
     logger.info(f"[edit_flow] Received update type: {type(message).__name__}")
     if not hasattr(message, 'text') or message.text is None:
         logger.warning("[edit_flow] Received message without text field")
@@ -37,8 +39,6 @@ async def handle_free_edit_text(message: Message, state: FSMContext):
         logger.debug("[edit_flow] Skipping empty message")
         return
     user_text = message.text.strip()
-    data = await state.get_data()
-    lang = data.get("lang", "en")
 
     from app.handlers.edit_core import process_user_edit
     processing_msg = None
