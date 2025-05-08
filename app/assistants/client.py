@@ -22,6 +22,9 @@ from functools import wraps
 
 logger = logging.getLogger(__name__)
 
+# Определение ID ассистента из настроек
+ASSISTANT_ID = settings.OPENAI_ASSISTANT_ID or os.environ.get("OPENAI_ASSISTANT_ID", "")
+
 class EditCommand(BaseModel):
     action: str
     row: Optional[int] = None
@@ -422,9 +425,6 @@ def optimize_logging():
         
 # Применяем настройки логирования при импорте модуля
 optimize_logging()
-
-# ID ассистента для обработки команд редактирования
-ASSISTANT_ID = os.getenv("OPENAI_ASSISTANT_ID", getattr(settings, "OPENAI_ASSISTANT_ID", ""))
 
 # Хелпер для запуска асинхронного кода в синхронной функции
 def run_async(func):

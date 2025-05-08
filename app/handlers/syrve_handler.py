@@ -18,6 +18,7 @@ from app.i18n import t
 from app.config import settings
 from app.utils.monitor import increment_counter
 from app.utils.redis_cache import cache_set
+from app.alias import learn_from_invoice
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,31 @@ async def handle_invoice_confirm(callback: CallbackQuery, state: FSMContext):
         
         # Get match results from state if available
         match_results = data.get("match_results", [])
+        
+        # Подготовка данных для автоматического обучения алиасов
+        positions = []
+        for pos in match_results:
+            if pos.get("status") == "partial":
+                # Добавляем информацию о сопоставленном продукте
+                matched_product = {
+                    "id": pos.get("product_id", ""),
+                    "name": pos.get("matched_name", "")
+                }
+                positions.append({
+                    "name": pos.get("name", ""),
+                    "status": pos.get("status", ""),
+                    "matched_product": matched_product,
+                    "match_reason": pos.get("match_reason", "")
+                })
+        
+        # Автоматическое обучение алиасов
+        if positions:
+            try:
+                added_count, added_aliases = learn_from_invoice(positions)
+                if added_count > 0:
+                    logger.info(f"Automatically added {added_count} aliases: {', '.join(added_aliases)}")
+            except Exception as e:
+                logger.error(f"Error learning aliases from invoice: {str(e)}", exc_info=True)
         
         # Prepare data for Syrve XML generation
         syrve_data = prepare_invoice_data(invoice, match_results, invoice_id)

@@ -241,6 +241,20 @@ def match_positions(
         status = "unknown"
         fuzzy_scores = []
         has_similar_words = False  # Флаг для отметки похожих слов
+        has_color_descriptor = False  # Флаг для цветовых модификаторов
+
+        # Проверка на цветовые модификаторы (green, red, yellow, etc.)
+        normalized_name = name.lower().strip()
+        color_prefixes = ["green", "red", "yellow", "black", "white", "blue", "purple", "brown"]
+        base_name = None
+        
+        # Проверяем, начинается ли название с цветового префикса
+        for color in color_prefixes:
+            if normalized_name.startswith(color + " "):
+                base_name = normalized_name[len(color) + 1:]
+                has_color_descriptor = True
+                logger.info(f"Обнаружен цветовой дескриптор '{color}' в названии '{normalized_name}', базовое название: '{base_name}'")
+                break
 
         for product in products:
             if isinstance(product, dict):
@@ -248,8 +262,14 @@ def match_positions(
             else:
                 compare_val = getattr(product, "name", "")
 
-            normalized_name = name.lower().strip()
             normalized_compare = compare_val.lower().strip()
+            
+            # Проверка для базового названия (без цвета) если применимо
+            base_similarity = 0.0
+            if has_color_descriptor and base_name:
+                base_similarity = calculate_string_similarity(base_name, normalized_compare)
+                if base_similarity > 0.9:  # Высокий порог для базового имени
+                    logger.info(f"Базовое название '{base_name}' очень похоже на '{normalized_compare}' (score: {base_similarity})")
             
             # Проверка на похожие слова
             words1 = normalized_name.split()
@@ -272,17 +292,25 @@ def match_positions(
             similarity = calculate_string_similarity(
                 normalized_name, normalized_compare
             )
+            
+            # Если есть цветовой дескриптор и нашлось высокое совпадение с базовым именем,
+            # используем его как запасной вариант
             score = similarity
+            if has_color_descriptor and base_similarity > 0.9 and base_similarity > similarity:
+                logger.info(f"Использую базовое сравнение для '{normalized_name}': {base_similarity}")
+                score = base_similarity * 0.95  # Чуть ниже порога для обозначения как partial
+                has_similar_words = True
+                
             fuzzy_scores.append((score, product))
 
             if score > best_score:
                 best_score = score
                 best_match = product
 
-        # Определяем статус с учетом похожих слов
+        # Определяем статус с учетом похожих слов и цветовых дескрипторов
         if best_score >= threshold:
-            if has_similar_words:
-                status = "partial"  # Если похожие слова, то частичное совпадение
+            if has_similar_words or has_color_descriptor:
+                status = "partial"  # Если похожие слова или цвета, то частичное совпадение
             else:
                 status = "ok"       # Иначе полное совпадение
         else:

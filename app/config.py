@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     USE_OPENAI_OCR: bool = False
     OPENAI_OCR_KEY: str = os.getenv("OPENAI_OCR_KEY", "")
     OPENAI_CHAT_KEY: str = os.getenv("OPENAI_CHAT_KEY", "")
+    OPENAI_ASSISTANT_ID: str = os.getenv("OPENAI_ASSISTANT_ID", "asst_zkAj2P6JswgpT0Nc2bcsjeIU")
+    OPENAI_VISION_ASSISTANT_ID: str = os.getenv("OPENAI_VISION_ASSISTANT_ID", "")
     
     # Image preprocessing configuration
     USE_IMAGE_PREPROCESSING: bool = False  # True=enable, False=disable image preprocessing
