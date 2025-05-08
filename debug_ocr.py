@@ -214,6 +214,16 @@ async def test_raw_vision(image_path, timeout=90, use_preprocessing=True):
             logger.error(f"Файл {image_path} не найден")
             return False
         
+        # Импортируем модуль OCR, если нужна предобработка
+        ocr = None
+        if use_preprocessing:
+            try:
+                from app import ocr
+                logger.info("Модуль OCR успешно импортирован")
+            except ImportError as import_err:
+                logger.error(f"Ошибка импорта модуля OCR: {import_err}")
+                logger.info("Продолжаю без возможности предобработки...")
+        
         # Получаем клиент OpenAI
         try:
             from app.config import get_ocr_client
@@ -226,7 +236,7 @@ async def test_raw_vision(image_path, timeout=90, use_preprocessing=True):
             return False
             
         # Загружаем и при необходимости обрабатываем изображение
-        if use_preprocessing and hasattr(ocr, 'prepare_for_ocr'):
+        if use_preprocessing and ocr and hasattr(ocr, 'prepare_for_ocr'):
             logger.info("Применяю предобработку изображения")
             try:
                 processed_bytes = ocr.prepare_for_ocr(image_path, use_preprocessing=True)
@@ -237,7 +247,10 @@ async def test_raw_vision(image_path, timeout=90, use_preprocessing=True):
                 with open(image_path, 'rb') as f:
                     image_bytes = f.read()
         else:
-            logger.info("Предобработка отключена, использую оригинальное изображение")
+            if use_preprocessing and ocr is None:
+                logger.info("Предобработка недоступна, использую оригинальное изображение")
+            else:
+                logger.info("Предобработка отключена, использую оригинальное изображение")
             with open(image_path, 'rb') as f:
                 image_bytes = f.read()
                 logger.info(f"Изображение загружено, размер: {len(image_bytes)} байт")
