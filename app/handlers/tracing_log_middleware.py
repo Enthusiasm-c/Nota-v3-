@@ -4,11 +4,16 @@ from aiogram.types import Update
 from app.trace_context import set_trace_id
 import logging
 import json
+from datetime import date, datetime
 
 # Универсальный сериализатор для Pydantic и сложных объектов
 def _default(o):
+    if isinstance(o, (date, datetime)):
+        return o.isoformat()
+    
     if hasattr(o, 'model_dump'):
         return o.model_dump()
+    
     return str(o)
 
 class TracingLogMiddleware(BaseMiddleware):
