@@ -109,31 +109,46 @@ def log_ocr_performance(start_time=None, label=None, request_id=None):
     return current_time
 
 
-def create_memory_monitor(interval=1.0):
+def create_memory_monitor(interval=10.0):
     """
     Создает отдельный поток, который будет мониторить использование памяти
     во время выполнения OCR-запросов.
     """
-    import threading
-    import psutil
-    import os
-    
-    def monitor_memory(request_id):
-        process = psutil.Process(os.getpid())
+    try:
+        import threading
+        import psutil
+        import os
         
-        try:
-            while True:
-                mem_info = process.memory_info()
-                mem_mb = mem_info.rss / (1024 * 1024)
-                ocr_logger.debug(f"[{request_id}] MEMORY: {mem_mb:.2f} MB используется")
-                time.sleep(interval)
-        except:
-            # Просто завершаем поток
-            pass
+        def monitor_memory(request_id):
+            process = psutil.Process(os.getpid())
+            
+            try:
+                while True:
+                    mem_info = process.memory_info()
+                    mem_mb = mem_info.rss / (1024 * 1024)
+                    ocr_logger.debug(f"[{request_id}] MEMORY: {mem_mb:.2f} MB используется")
+                    time.sleep(interval)
+            except Exception as e:
+                # Просто завершаем поток с логированием ошибки
+                ocr_logger.debug(f"[{request_id}] Ошибка мониторинга памяти: {str(e)}")
+                pass
+        
+        def create_thread(request_id):
+            thread = threading.Thread(target=monitor_memory, args=(request_id,))
+            thread.daemon = True  # Завершится автоматически с основным потоком
+            return thread
+        
+        return create_thread
     
-    def create_thread(request_id):
-        thread = threading.Thread(target=monitor_memory, args=(request_id,))
-        thread.daemon = True  # Завершится автоматически с основным потоком
-        return thread
-    
-    return create_thread 
+    except (ImportError, AttributeError) as e:
+        # Если psutil не установлен или не работает корректно, возвращаем заглушку
+        ocr_logger.warning(f"Модуль psutil недоступен: {str(e)}, мониторинг памяти отключен")
+        
+        def create_dummy_thread(request_id):
+            class DummyThread:
+                def start(self):
+                    ocr_logger.debug(f"[{request_id}] MEMORY: мониторинг отключен (нет psutil)")
+                    pass
+            return DummyThread()
+        
+        return create_dummy_thread 

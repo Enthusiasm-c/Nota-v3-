@@ -87,7 +87,6 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         token = getattr(message.bot, 'token', os.environ.get('BOT_TOKEN', 'UNKNOWN_TOKEN'))
         file_url = f"https://api.telegram.org/file/bot{token}/{file.file_path}"
         logger.info(f"[{req_id}] TELEGRAM IMAGE URL: {file_url}")
-        print(f"\n\nTELEGRAM IMAGE URL: {file_url}\n\n")  # Печатаем в консоль для удобства
         
         # Сохраняем в файл для последующего тестирования в OpenAI Playground
         try:
@@ -103,7 +102,6 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
             with open(img_path, 'wb') as f:
                 f.write(img_bytes)
             logger.info(f"[{req_id}] Saved test image to {img_path}")
-            print(f"Saved test image to {img_path}")
             
             # Stop spinner and update UI
             ui.stop_spinner()
@@ -164,17 +162,24 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         await ui.start_spinner()
         
         # Сохраняем изображение в PNG для тестирования в playground
-        test_image_id = str(uuid.uuid4())[:8]
-        test_image_path = f"tmp/ocr_test_{test_image_id}.png"
         try:
+            # Создаем директорию tmp, если она не существует
+            os.makedirs("tmp", exist_ok=True)
+            
+            test_image_id = str(uuid.uuid4())[:8]
+            test_image_path = f"tmp/ocr_test_{test_image_id}.png"
+            
             # Сохраняем копию изображения в PNG для тестирования
             with open(test_image_path, "wb") as f:
                 f.write(img_bytes)
             logger.info(f"[{req_id}] Сохранено тестовое изображение: {test_image_path}")
-            # Отправляем пользователю сообщение со ссылкой
-            base_url = settings.BASE_URL or "http://yourserver.com"
-            playground_msg = f"🔍 Для тестирования в playground: {base_url}/{test_image_path}"
-            await message.answer(playground_msg)
+            
+            # Отправляем пользователю сообщение со ссылкой, только если BASE_URL задан
+            base_url = getattr(settings, "BASE_URL", "")
+            if base_url:
+                playground_msg = f"🔍 Для тестирования в playground: {base_url}/{test_image_path}"
+                await message.answer(playground_msg)
+                logger.info(f"[{req_id}] Отправлена ссылка на тестовое изображение")
         except Exception as img_save_err:
             logger.warning(f"[{req_id}] Не удалось сохранить тестовое изображение: {str(img_save_err)}")
         
