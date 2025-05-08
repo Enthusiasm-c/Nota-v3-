@@ -18,6 +18,7 @@ from datetime import date, datetime
 import shutil
 import base64
 import traceback
+import httpx
 
 # Настройка логирования
 logging.basicConfig(
@@ -34,6 +35,27 @@ logging.getLogger("openai").setLevel(logging.DEBUG)
 logging.getLogger("httpx").setLevel(logging.DEBUG)
 logging.getLogger("app.ocr").setLevel(logging.DEBUG)
 logging.getLogger("app.utils.api_decorators").setLevel(logging.DEBUG)
+
+# Настраиваем подробное логирование HTTP-запросов (добавляем httpx логгер)
+httpx_logger = logging.getLogger("httpx")
+httpx_logger.setLevel(logging.DEBUG)
+httpx_logger.propagate = True
+
+# Настраиваем подробное логирование HTTP
+def configure_http_debug_logging():
+    try:
+        import http.client as http_client
+        http_client.HTTPConnection.debuglevel = 1
+        
+        requests_log = logging.getLogger("requests.packages.urllib3")
+        requests_log.setLevel(logging.DEBUG)
+        requests_log.propagate = True
+        
+        logger.info("Включено подробное логирование HTTP-трафика")
+    except ImportError:
+        logger.warning("Не удалось настроить подробное логирование HTTP")
+
+configure_http_debug_logging()
 
 # Функция сериализации для даты
 def json_serialize(obj):
@@ -271,28 +293,72 @@ async def test_raw_vision(image_path, timeout=90, use_preprocessing=True):
         
         # Отправляем запрос
         logger.info("Отправляю запрос в OpenAI Vision API...")
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=messages,
-            max_tokens=4096,
-            temperature=0.0,
-            timeout=timeout
-        )
         
-        # Выводим сырой текстовый ответ
-        raw_text = response.choices[0].message.content
-        logger.info("Получен ответ от Vision API:")
-        logger.info("-" * 80)
-        print(raw_text)
-        logger.info("-" * 80)
+        # Логируем запрос в более читаемом виде
+        logger.info("Запрос к API:")
+        for msg in messages:
+            if msg["role"] == "user":
+                content = msg["content"]
+                for item in content:
+                    if item["type"] == "text":
+                        logger.info(f"Текст запроса: {item['text']}")
+                    elif item["type"] == "image_url":
+                        logger.info("Изображение: [данные изображения опущены]")
         
-        # Сохраняем результат в файл для дальнейшего анализа
-        output_file = f"raw_vision_result_{int(time.time())}.txt"
-        with open(output_file, "w", encoding="utf-8") as f:
-            f.write(raw_text)
-        logger.info(f"Результат сохранен в файл: {output_file}")
-        
-        return True
+        try:
+            # Устанавливаем таймаут и логируем HTTP-заголовки
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=messages,
+                max_tokens=4096,
+                temperature=0.0,
+                timeout=timeout
+            )
+            
+            # Логируем успешный ответ
+            logger.info(f"Получен ответ от API: {response.model}")
+            logger.info(f"ID запроса: {response.id}")
+            logger.info(f"Использовано токенов: {response.usage.total_tokens}")
+            
+            # Выводим сырой текстовый ответ
+            raw_text = response.choices[0].message.content
+            logger.info("Получен ответ от Vision API:")
+            logger.info("-" * 80)
+            print(raw_text)
+            logger.info("-" * 80)
+            
+            # Сохраняем результат в файл для дальнейшего анализа
+            output_file = f"raw_vision_result_{int(time.time())}.txt"
+            with open(output_file, "w", encoding="utf-8") as f:
+                f.write(raw_text)
+            logger.info(f"Результат сохранен в файл: {output_file}")
+            
+            # Сохраняем полный ответ API в JSON для диагностики
+            if hasattr(response, "model_dump"):
+                full_response_file = f"raw_vision_full_response_{int(time.time())}.json"
+                with open(full_response_file, "w", encoding="utf-8") as f:
+                    json.dump(response.model_dump(), f, indent=2, ensure_ascii=False, default=json_serialize)
+                logger.info(f"Полный ответ API сохранен в: {full_response_file}")
+            
+            return True
+        except Exception as api_error:
+            logger.error(f"Ошибка при вызове API: {str(api_error)}")
+            logger.error(f"Тип ошибки: {type(api_error).__name__}")
+            
+            # Пытаемся извлечь больше информации об ошибке
+            error_details = {}
+            if hasattr(api_error, "response"):
+                try:
+                    error_details["status_code"] = api_error.response.status_code
+                    error_details["headers"] = dict(api_error.response.headers)
+                    error_details["text"] = api_error.response.text
+                except:
+                    pass
+            
+            if error_details:
+                logger.error(f"Детали ошибки API: {json.dumps(error_details, indent=2)}")
+            
+            raise
     except Exception as e:
         logger.error(f"❌ Распознавание сырого текста завершилось с ошибкой: {str(e)}")
         traceback.print_exc()
