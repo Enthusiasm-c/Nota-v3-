@@ -394,6 +394,33 @@ async def photo_handler(message, state: FSMContext, **kwargs):
             update_stage("ocr", kwargs, update_progress_message)
             logger.info(f"[{req_id}] OCR successful for user {user_id}, found {len(ocr_result.positions)} positions")
             ocr_logger.info(f"[{req_id}] BOT: OCR успешно завершен с {len(ocr_result.positions)} позициями")
+            
+            # Сверяем поставщика с базой данных
+            try:
+                # Загружаем базу поставщиков
+                suppliers = data_loader.load_suppliers("data/base_suppliers.csv")
+                
+                # Если в результатах OCR есть поставщик, пытаемся его сверить с базой
+                if hasattr(ocr_result, 'supplier') and ocr_result.supplier and ocr_result.supplier.strip():
+                    supplier_match = matcher.match_supplier(ocr_result.supplier, suppliers, threshold=0.9)
+                    
+                    if supplier_match and supplier_match.get("status") == "ok":
+                        # Заменяем имя поставщика на имя из базы данных если совпадение хорошее
+                        original_supplier = ocr_result.supplier
+                        ocr_result.supplier = supplier_match.get("name")
+                        
+                        # Логируем результат сопоставления поставщика
+                        logger.info(f"[{req_id}] Matched supplier '{original_supplier}' to '{ocr_result.supplier}' with score {supplier_match.get('score', 0):.2f}")
+                        
+                        # Не выводим в UI, так как это не основной путь обработки
+                    else:
+                        # Логируем неудачную попытку сопоставления
+                        logger.info(f"[{req_id}] Could not match supplier '{ocr_result.supplier}' to any known supplier")
+                else:
+                    logger.info(f"[{req_id}] No supplier information available in OCR result")
+            except Exception as supplier_err:
+                # Не прерываем основной процесс, если сверка поставщика не удалась
+                logger.error(f"[{req_id}] Supplier matching error: {supplier_err}")
         except asyncio.TimeoutError:
             logger.error(f"[{req_id}] OCR timeout for user {user_id}")
             ocr_logger.error(f"[{req_id}] BOT: Таймаут OCR для пользователя {user_id}")
@@ -434,16 +461,20 @@ async def handle_nlu_text(message, state: FSMContext):
     2. Обычный диалог с ассистентом
     """
     # Skip empty messages
-    if not message.text or not message.text.strip():
-        logger.debug(f"Skipping empty message from user {message.from_user.id}")
+    if not message or not message.text or not message.text.strip():
+        logger.debug(f"Skipping empty message from user {getattr(message, 'from_user', {}).get('id', 'unknown')}")
         return
         
-    text = message.text
+    text = message.text.strip()
     chat_id = message.chat.id
     user_id = message.from_user.id
 
     # Получаем данные состояния пользователя для определения режима
-    user_data = await state.get_data()
+    try:
+        user_data = await state.get_data()
+    except Exception as state_err:
+        logger.error(f"Error getting state data: {str(state_err)}")
+        user_data = {}
     
     # Получаем язык пользователя
     lang = user_data.get("lang", "en")
@@ -463,11 +494,20 @@ async def handle_nlu_text(message, state: FSMContext):
     if user_data.get("editing_mode") == "field_edit":
         logger.debug(f"BUGFIX: Handling message as field edit for user {user_id}")
         # Вызываем обработчик редактирования поля напрямую
-        await handle_field_edit(message, state)
+        try:
+            await handle_field_edit(message, state)
+        except Exception as field_edit_err:
+            logger.error(f"Error during field edit: {str(field_edit_err)}")
+            await message.answer(
+                t("error.edit_failed", lang=lang) or "Error processing edit. Please try again.",
+                parse_mode=None
+            )
         return
     
     # Проверяем, не обрабатывается ли уже фото
-    if user_data.get("processing_photo"):
+    # Добавляем дополнительную проверку на тип данных
+    processing_photo = user_data.get("processing_photo")
+    if processing_photo and isinstance(processing_photo, bool) and processing_photo:
         logger.warning(f"Already processing a photo for user {user_id}, ignoring text message")
         await message.answer(
             t("status.wait_for_processing", lang=lang) or "Please wait while I finish processing your photo.", 
@@ -477,9 +517,13 @@ async def handle_nlu_text(message, state: FSMContext):
 
     # Если не в режиме редактирования, считаем запрос обычным диалогом с ассистентом
     # Отправляем индикатор обработки (используем t для мультиязычности)
-    processing_msg = await message.answer(
-        t("status.processing_request", lang=lang) or "🤔 Processing your request..."
-    )
+    try:
+        processing_msg = await message.answer(
+            t("status.processing_request", lang=lang) or "🤔 Processing your request..."
+        )
+    except Exception as msg_err:
+        logger.error(f"Error sending processing message: {str(msg_err)}")
+        processing_msg = None
 
     try:
         logger.debug(
@@ -714,8 +758,24 @@ async def cb_cancel_row(callback: CallbackQuery, state: FSMContext):
 
 async def cb_field(callback: CallbackQuery, state: FSMContext):
     # Разбираем данные из callback
-    _, field, idx = callback.data.split(":")
-    idx = int(idx)
+    try:
+        parts = callback.data.split(":")
+        if len(parts) < 3:
+            logger.error(f"Invalid callback data format: {callback.data}")
+            await callback.answer("Error processing request")
+            return
+            
+        _, field, idx = parts
+        try:
+            idx = int(idx)
+        except ValueError:
+            logger.error(f"Invalid index in callback data: {callback.data}")
+            await callback.answer("Error processing request")
+            return
+    except Exception as parse_err:
+        logger.error(f"Error parsing callback data: {str(parse_err)}")
+        await callback.answer("Error processing request")
+        return
 
     # Логируем для диагностики
     logger.debug(
@@ -728,25 +788,34 @@ async def cb_field(callback: CallbackQuery, state: FSMContext):
     
     # Запрашиваем новое значение с force_reply, используя i18n
     from app.i18n import t
-    reply_msg = await callback.message.bot.send_message(
-        callback.from_user.id,
-        t("example.enter_field_value", {"field": field, "line": idx+1}, lang=lang),
-        reply_markup={"force_reply": True},
-        parse_mode=ParseMode.HTML
-    )
+    try:
+        field_prompt = t("example.enter_field_value", {"field": field, "line": idx+1}, lang=lang)
+        if not field_prompt:
+            field_prompt = f"Enter new value for {field} (line {idx+1}):"
+            
+        reply_msg = await callback.message.bot.send_message(
+            callback.from_user.id,
+            field_prompt,
+            reply_markup={"force_reply": True},
+            parse_mode=ParseMode.HTML
+        )
 
-    # Логируем ID созданного сообщения
-    logger.debug(f"BUGFIX: Force reply message created with ID {reply_msg.message_id}")
+        # Логируем ID созданного сообщения
+        logger.debug(f"BUGFIX: Force reply message created with ID {reply_msg.message_id}")
 
-    # Сохраняем контекст в FSM для последующей обработки
-    await state.update_data(
-        edit_idx=idx,
-        edit_field=field,
-        msg_id=callback.message.message_id,
-        # Важно: отмечаем, что мы находимся в процессе редактирования поля
-        # Это поможет правильно маршрутизировать ответ пользователя
-        editing_mode="field_edit",
-    )
+        # Сохраняем контекст в FSM для последующей обработки
+        await state.update_data(
+            edit_idx=idx,
+            edit_field=field,
+            msg_id=callback.message.message_id,
+            # Важно: отмечаем, что мы находимся в процессе редактирования поля
+            # Это поможет правильно маршрутизировать ответ пользователя
+            editing_mode="field_edit",
+        )
+    except Exception as msg_err:
+        logger.error(f"Error creating prompt message: {str(msg_err)}")
+        # Уведомляем пользователя о проблеме
+        await callback.answer("Error creating edit prompt")
 
     # Отвечаем на callback чтобы убрать индикатор загрузки
     await callback.answer()
@@ -832,13 +901,24 @@ async def handle_field_edit(message, state: FSMContext):
         try:
             # Проверяем наличие потенциально опасных HTML-тегов
             from app.utils.md import clean_html
+            from app.keyboards import build_edit_keyboard
+            
+            # Убедимся, что функция build_edit_keyboard существует
+            try:
+                keyboard = build_edit_keyboard(True)
+            except (NameError, AttributeError) as kb_err:
+                logger.error(f"Error getting keyboard: {kb_err}")
+                # Фаллбек на пустую клавиатуру
+                from aiogram.types import InlineKeyboardMarkup
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[])
+            
             if '<' in formatted_report and '>' in formatted_report:
                 logger.debug("Detecting potential HTML formatting issues, trying to send without formatting")
                 try:
                     # Пробуем сначала с HTML-форматированием 
                     result = await message.answer(
                         formatted_report,
-                        reply_markup=build_edit_keyboard(True),
+                        reply_markup=keyboard,
                         parse_mode=ParseMode.HTML,  # Используем константу из aiogram
                     )
                     logger.debug("Successfully sent message with HTML formatting")
@@ -848,7 +928,7 @@ async def handle_field_edit(message, state: FSMContext):
                         # Пробуем без форматирования
                         result = await message.answer(
                             formatted_report,
-                            reply_markup=build_edit_keyboard(True),
+                            reply_markup=keyboard,
                             parse_mode=None,  # Без форматирования для безопасности
                         )
                         logger.debug("Successfully sent message without HTML parsing")
@@ -858,7 +938,7 @@ async def handle_field_edit(message, state: FSMContext):
                         clean_formatted_report = clean_html(formatted_report)
                         result = await message.answer(
                             clean_formatted_report,
-                            reply_markup=build_edit_keyboard(True),
+                            reply_markup=keyboard,
                             parse_mode=None,
                         )
                         logger.debug("Sent message with cleaned HTML")
@@ -866,7 +946,7 @@ async def handle_field_edit(message, state: FSMContext):
                 # Стандартный случай - пробуем с HTML
                 result = await message.answer(
                     formatted_report,
-                    reply_markup=build_edit_keyboard(True),
+                    reply_markup=keyboard,
                     parse_mode=ParseMode.HTML,  # Используем константу из aiogram
                 )
         except Exception as e:
@@ -877,13 +957,20 @@ async def handle_field_edit(message, state: FSMContext):
                 from app.i18n import t
                 data = await state.get_data()
                 lang = data.get("lang", "en")
-                simple_msg = t("example.edit_field_success", {"field": field, "value": text, "line": idx+1}, lang=lang)
+                simple_msg = t("example.edit_field_success", {"field": field, "value": text, "line": idx+1}, lang=lang) or f"Field '{field}' updated to '{text}' for line {idx+1}"
                 result = await message.answer(simple_msg, parse_mode=None)
                 logger.info("Sent fallback simple message")
                 return  # Выходим досрочно
             except Exception as final_e:
                 logger.error(f"Final fallback message failed: {final_e}")
-                raise
+                try:
+                    # Крайний случай - простое сообщение без i18n
+                    result = await message.answer(f"Field updated successfully.", parse_mode=None)
+                    logger.info("Sent basic fallback message")
+                    return  # Выходим досрочно
+                except Exception as absolutely_final_e:
+                    logger.error(f"Absolutely final fallback failed: {absolutely_final_e}")
+                    raise
 
         # Обновляем ссылки в user_matches с новым ID сообщения
         new_msg_id = result.message_id
@@ -1116,7 +1203,7 @@ async def handle_edit_reply(message):
 
 
 from app.keyboards import build_main_kb
-from app import data_loader, matcher
+from app.assistants.client import client
 
 async def confirm_fuzzy_name(callback: CallbackQuery, state: FSMContext):
     """

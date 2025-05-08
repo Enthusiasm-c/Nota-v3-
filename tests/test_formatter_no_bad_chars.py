@@ -69,7 +69,7 @@ async def test_formatter_with_telegram_exception():
             self.attempts += 1
             if self.attempts == 1 and parse_mode == "HTML":
                 # Симулируем ошибку парсинга HTML
-                raise TelegramBadRequest("Bad Request: can't parse entities")
+                raise TelegramBadRequest(method="sendMessage", message="Bad Request: can't parse entities")
             
             # Если сюда дошли, значит это вторая попытка или без форматирования
             self.sent.append((chat_id, text, parse_mode))

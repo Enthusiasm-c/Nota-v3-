@@ -194,6 +194,59 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
                        f"✅ Matching completed: {ok_count} ✓, {unknown_count} ❌, {partial_count} ⚠️")
         logger.info(f"[{req_id}] Matching completed: {ok_count} OK, {unknown_count} unknown, {partial_count} partial")
         
+        # Match supplier with supplier database
+        await ui.append(t("status.matching_supplier", lang=lang) or "🏢 Matching supplier...")
+        await ui.start_spinner()
+        
+        try:
+            # Load suppliers database with caching
+            from app.utils.cached_loader import cached_load_products
+            suppliers = cached_load_products("data/base_suppliers.csv", data_loader.load_suppliers)
+            
+            # Match supplier with database using fuzzy matching (90% threshold)
+            if ocr_result and hasattr(ocr_result, 'supplier') and ocr_result.supplier and ocr_result.supplier.strip():
+                supplier_match = matcher.match_supplier(ocr_result.supplier, suppliers, threshold=0.9)
+                
+                if supplier_match and supplier_match.get("status") == "ok":
+                    # Replace supplier name with the one from database if it's a good match
+                    original_supplier = ocr_result.supplier
+                    ocr_result.supplier = supplier_match.get("name")
+                    
+                    # Log the supplier matching
+                    logger.info(f"[{req_id}] Matched supplier '{original_supplier}' to '{ocr_result.supplier}' with score {supplier_match.get('score', 0):.2f}")
+                    
+                    # Update UI with matched supplier
+                    try:
+                        await ui.update(t("status.supplier_matched", 
+                                        {"supplier": ocr_result.supplier}, 
+                                        lang=lang) or f"✅ Supplier matched: {ocr_result.supplier}")
+                    except Exception as ui_err:
+                        logger.error(f"[{req_id}] Error updating UI after supplier match: {ui_err}")
+                else:
+                    # Log the failure to match supplier
+                    logger.info(f"[{req_id}] Could not match supplier '{ocr_result.supplier}' to any known supplier")
+                    
+                    # Informational message only, doesn't stop processing
+                    try:
+                        await ui.update(t("status.supplier_unknown", lang=lang) or "ℹ️ Supplier could not be matched")
+                    except Exception as ui_err:
+                        logger.error(f"[{req_id}] Error updating UI for unknown supplier: {ui_err}")
+            else:
+                logger.info(f"[{req_id}] No supplier information available in OCR result")
+                try:
+                    await ui.update(t("status.no_supplier_info", lang=lang) or "ℹ️ No supplier information available")
+                except Exception as ui_err:
+                    logger.error(f"[{req_id}] Error updating UI for missing supplier: {ui_err}")
+        except Exception as supplier_err:
+            # Don't fail the entire process if supplier matching fails
+            logger.error(f"[{req_id}] Supplier matching error: {supplier_err}")
+            try:
+                await ui.update(t("status.supplier_matching_error", lang=lang) or "⚠️ Supplier matching error")
+            except Exception as ui_err:
+                logger.error(f"[{req_id}] Error updating UI for supplier error: {ui_err}")
+        
+        ui.stop_spinner()
+        
         # Save data for access in other handlers
         from bot import user_matches
         user_matches[(user_id, 0)] = {  # 0 - temporary ID, will be updated below

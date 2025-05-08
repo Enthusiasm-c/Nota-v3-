@@ -5,7 +5,7 @@ from functools import lru_cache
 from app.models import Product
 
 
-def load_suppliers(path: str = "data/suppliers.csv") -> List[Dict]:
+def load_suppliers(path: str = "data/base_suppliers.csv") -> List[Dict]:
     with open(path, encoding="utf-8") as f:
         return list(csv.DictReader(f))
 

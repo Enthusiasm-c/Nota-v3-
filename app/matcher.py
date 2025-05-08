@@ -212,6 +212,73 @@ def fuzzy_find(query: str, products: List[Dict], thresh: float = 0.75) -> List[D
     return matches
 
 
+def match_supplier(supplier_name: str, suppliers: List[Dict], threshold: float = 0.9) -> Dict:
+    """
+    Match supplier name with supplier database using fuzzy matching.
+    
+    Args:
+        supplier_name: Supplier name from the invoice
+        suppliers: List of supplier dictionaries from the database
+        threshold: Similarity threshold (default 0.9 = 90%)
+        
+    Returns:
+        Dictionary with matched supplier data or original name if no match found
+    """
+    if not supplier_name or not suppliers:
+        return {"name": supplier_name, "id": None, "status": "unknown"}
+    
+    normalized_name = supplier_name.lower().strip()
+    best_match = None
+    best_score = -1.0
+    
+    for supplier in suppliers:
+        if isinstance(supplier, dict):
+            name = supplier.get("name", "")
+            supplier_id = supplier.get("id", "")
+            code = supplier.get("code", "")
+        else:
+            name = getattr(supplier, "name", "")
+            supplier_id = getattr(supplier, "id", "")
+            code = getattr(supplier, "code", "")
+            
+        if not name:
+            continue
+            
+        # Check for exact match first (case insensitive)
+        if normalized_name == name.lower().strip():
+            return {
+                "name": name,  # Use the name from the database
+                "id": supplier_id,
+                "code": code,
+                "status": "ok",
+                "score": 1.0
+            }
+            
+        # Calculate similarity for fuzzy matching
+        similarity = calculate_string_similarity(normalized_name, name.lower().strip())
+        if similarity > best_score:
+            best_score = similarity
+            best_match = supplier
+    
+    # Check if best match passes the threshold
+    if best_match and best_score >= threshold:
+        return {
+            "name": best_match.get("name", best_match["name"] if isinstance(best_match, dict) else getattr(best_match, "name")),
+            "id": best_match.get("id", best_match["id"] if isinstance(best_match, dict) else getattr(best_match, "id")),
+            "code": best_match.get("code", best_match["code"] if isinstance(best_match, dict) else getattr(best_match, "code", "")),
+            "status": "ok",
+            "score": best_score
+        }
+    
+    # No match found above threshold
+    return {
+        "name": supplier_name,  # Keep the original name
+        "id": None,
+        "status": "unknown",
+        "score": best_score if best_score > -1 else None
+    }
+
+
 def match_positions(
     positions: List[Dict],
     products: List[Dict],
