@@ -261,6 +261,13 @@ def register_handlers(dp, bot=None):
     if 'incremental_photo_router' not in dp._registered_routers:
         dp.include_router(incremental_photo_router)
         dp._registered_routers.add('incremental_photo_router')
+    
+    # Явная регистрация обработчика фото в случае проблем с роутером
+    from app.handlers.incremental_photo_handler import photo_handler_incremental
+    dp.message.register(photo_handler_incremental, F.photo)
+    
+    # Регистрация обработчика фото для состояния ожидания файла
+    dp.message.register(photo_handler_incremental, NotaStates.awaiting_file, F.photo)
         
     # Подключаем роутер для административных команд
     from app.handlers import admin_router
