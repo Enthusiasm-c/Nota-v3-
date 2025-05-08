@@ -34,6 +34,7 @@ from app.fsm.states import EditFree, NotaStates
 from app import ocr, matcher, data_loader
 from app.utils.md import escape_html, clean_html
 from app.config import settings
+from app.i18n import t
 
 # Импортируем обработчики для свободного редактирования
 from app.handlers.edit_flow import router as edit_flow_router
@@ -217,7 +218,6 @@ async def cb_select_language(callback: CallbackQuery, state: FSMContext):
     await state.set_state(NotaStates.main_menu)
     
     # Отправляем приветствие на выбранном языке
-    from app.i18n import t
     await callback.message.edit_text(
         t("status.welcome", lang=lang),
         reply_markup=kb_main(lang)
@@ -446,7 +446,6 @@ async def handle_nlu_text(message, state: FSMContext):
         logger.info(f"Detected command to start new invoice process: '{text}'")
         # Переключаем состояние на ожидание файла для загрузки нового инвойса
         await state.set_state(NotaStates.awaiting_file)
-        from app.i18n import t
         await message.answer(
             t("status.send_photo", lang=lang) or "Please send a photo of your invoice.",
             parse_mode=None
@@ -463,7 +462,6 @@ async def handle_nlu_text(message, state: FSMContext):
     # Проверяем, не обрабатывается ли уже фото
     if user_data.get("processing_photo"):
         logger.warning(f"Already processing a photo for user {user_id}, ignoring text message")
-        from app.i18n import t
         await message.answer(
             t("status.wait_for_processing", lang=lang) or "Please wait while I finish processing your photo.", 
             parse_mode=None
@@ -472,7 +470,6 @@ async def handle_nlu_text(message, state: FSMContext):
 
     # Если не в режиме редактирования, считаем запрос обычным диалогом с ассистентом
     # Отправляем индикатор обработки (используем t для мультиязычности)
-    from app.i18n import t
     processing_msg = await message.answer(
         t("status.processing_request", lang=lang) or "🤔 Processing your request..."
     )
@@ -609,6 +606,9 @@ async def cb_cancel(callback: CallbackQuery, state: FSMContext):
     # Получаем данные пользователя для проверки наличия активной задачи
     user_data = await state.get_data()
     
+    # Получаем язык пользователя
+    lang = user_data.get("lang", "en")
+    
     # Отменяем активную задачу OCR, если она существует
     task_id = user_data.get("current_ocr_task")
     if task_id:
@@ -622,13 +622,16 @@ async def cb_cancel(callback: CallbackQuery, state: FSMContext):
     # Возвращаемся в главное меню
     await state.set_state(NotaStates.main_menu)
 
+    # Импортируем клавиатуру главного меню
+    from app.keyboards import kb_main
+    
     # Обновляем сообщение, удаляя клавиатуру и показывая сообщение о готовности к работе
     await safe_edit(
         bot,
         callback.message.chat.id,
         callback.message.message_id,
         t("main.ready_to_work", lang=lang),
-        kb=kb_main(),
+        kb=kb_main(lang),
     )
     
     await callback.answer("Operation cancelled")
