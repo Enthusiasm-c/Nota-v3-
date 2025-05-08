@@ -163,7 +163,8 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         # Run OCR in a separate thread for non-blocking operation
         try:
             logger.info(f"[{req_id}] Начинаю OCR-обработку изображения")
-            ocr_result = await ocr.call_openai_ocr(img_bytes)
+            # Используем asyncio.to_thread для запуска синхронной функции в отдельном потоке
+            ocr_result = await asyncio.to_thread(ocr.call_openai_ocr, img_bytes)
             ui.stop_spinner()
             positions_count = len(ocr_result.positions) if ocr_result.positions else 0
             await ui.update(t("status.text_recognized", {"count": positions_count}, lang=lang) or 
