@@ -2,12 +2,13 @@ from html import escape  # For escaping data only, not HTML tags
 import logging
 logging.getLogger("nota.report").debug("escape func = %s", escape)
 from decimal import Decimal
+from app.utils.formatters import format_price, format_quantity
 
 def format_idr(val):
     """Format number with narrow space and no currency for table."""
     try:
-        val = Decimal(val)
-        return f"{val:,.0f}".replace(",", "\u202f")
+        # Используем унифицированную функцию из общего модуля
+        return format_price(val, currency="", decimal_places=0)
     except Exception:
         return "—"
 
@@ -40,6 +41,7 @@ def build_table(rows):
     Столбцы QTY, UNIT, PRICE выровнены по левому краю, TOTAL заменён на PRICE.
     """
     from html import escape as html_escape
+    from app.utils.formatters import format_price, format_quantity
 
     status_map = {"ok": "✓", "unit_mismatch": "❗", "unknown": "❗", "ignored": "❗", "error": "❗", "manual": "✓"}
     def pad(text, width):
@@ -71,23 +73,15 @@ def build_table(rows):
         if (price in (None, "", "—")) and (total not in (None, "", "—")) and (qty not in (None, "", "—")):
             try:
                 computed_price = float(total) / float(qty)
-                price_str = format_idr(computed_price)
+                price_str = format_price(computed_price, decimal_places=0)
             except Exception:
                 price_str = "—"
         else:
-            price_str = format_idr(price) if price not in (None, "", "—") else "—"
-        # Форматирование QTY: если целое — без .0, иначе с дробью
-        if qty in (None, ""):
-            qty_str = "—"
-        else:
-            try:
-                qty_f = float(qty)
-                if qty_f.is_integer():
-                    qty_str = str(int(qty_f))
-                else:
-                    qty_str = str(qty)
-            except Exception:
-                qty_str = str(qty)
+            price_str = format_price(price, decimal_places=0) if price not in (None, "", "—") else "—"
+        
+        # Используем унифицированный форматтер для количества
+        qty_str = format_quantity(qty) if qty not in (None, "") else "—"
+        
         # Столбец с флажком для нераспознанных позиций
         # Для ручного редактирования (manual) флажок не показываем
         flag = "" if status in ["ok", "manual"] else "❗"

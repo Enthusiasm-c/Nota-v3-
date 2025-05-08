@@ -19,8 +19,6 @@ class Settings(BaseSettings):
     USE_OPENAI_OCR: bool = False
     OPENAI_OCR_KEY: str = os.getenv("OPENAI_OCR_KEY", "")
     OPENAI_CHAT_KEY: str = os.getenv("OPENAI_CHAT_KEY", "")
-    OPENAI_ASSISTANT_ID: str = os.getenv("OPENAI_ASSISTANT_ID", "")
-    OPENAI_VISION_ASSISTANT_ID: str = os.getenv("OPENAI_VISION_ASSISTANT_ID", "")
     
     # Image preprocessing configuration
     USE_IMAGE_PREPROCESSING: bool = False  # True=enable, False=disable image preprocessing
@@ -29,7 +27,9 @@ class Settings(BaseSettings):
     OWN_COMPANY_ALIASES: list[str] = ["Bali Veg Ltd", "Nota AI Cafe"]
 
     # Base URL for server (used for image links)
-    BASE_URL = os.environ.get("BASE_URL", "")
+    BASE_URL: str = os.environ.get("BASE_URL", "")
+
+    MAX_PRODUCTS_IN_PROMPT: int = 100
 
     model_config = SettingsConfigDict(
         extra="allow", env_file=os.getenv("ENV_FILE", ".env"), env_file_encoding="utf-8"

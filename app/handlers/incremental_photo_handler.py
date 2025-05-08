@@ -26,9 +26,13 @@ from app.keyboards import build_main_kb
 from app.utils.md import clean_html
 from app.imgprep import prepare_for_ocr, prepare_without_preprocessing
 from app.i18n import t
+from app.config import settings
 
 # Import NotaStates from states module
 from app.fsm.states import NotaStates
+from app.utils.task_manager import register_task, cancel_task
+from app.utils.file_manager import temp_file, save_test_image, cleanup_temp_files
+from app.utils.processing_pipeline import process_invoice_pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +64,12 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
     photo_id = message.photo[-1].file_id if message.photo else None
     req_id = uuid.uuid4().hex[:8]  # Unique request ID for logging
     
+    # --- ОТМЕНА ПРЕДЫДУЩЕЙ ЗАДАЧИ ---
+    prev_task_id = data.get("current_ocr_task")
+    if prev_task_id:
+        cancel_task(prev_task_id)
+    # ---
+    
     # Check if already processing a photo
     if data.get("processing_photo"):
         logger.warning(f"Already processing a photo for user {user_id}, ignoring new photo")
@@ -72,6 +82,17 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
     # Set processing flag
     await state.update_data(processing_photo=True)
     
+    # --- РЕГИСТРАЦИЯ НОВОЙ ЗАДАЧИ ---
+    task_id = f"ocr_{user_id}_{req_id}"
+    current_task = asyncio.current_task()
+    register_task(task_id, current_task)
+    await state.update_data(current_ocr_task=task_id)
+    
+    # Очистка старых временных файлов
+    cleanup_count = await asyncio.to_thread(cleanup_temp_files, False)
+    if cleanup_count > 0:
+        logger.info(f"Cleaned up {cleanup_count} old temporary files")
+
     logger.info(f"[{req_id}] Received new photo from user {user_id}")
     
     # Initialize IncrementalUI
@@ -122,94 +143,36 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         # Step 2: Preprocess image
         await ui.append(t("status.preprocessing_image", lang=lang) or "🖼️ Preprocessing image...")
         await ui.start_spinner()
-        
-        # Create a temporary file to save the original image
-        tmp_dir = Path(tempfile.gettempdir()) / "nota"
-        os.makedirs(tmp_dir, exist_ok=True)
-        tmp_path = tmp_dir / f"{req_id}.jpg"
-        
-        with open(tmp_path, "wb") as f:
-            f.write(img_bytes)
-        
-        # Import settings to check if preprocessing is enabled
-        from app.config import settings
-        
-        # Preprocess the image (if enabled)
-        if settings.USE_IMAGE_PREPROCESSING:
-            try:
-                processed_bytes = await asyncio.to_thread(prepare_for_ocr, tmp_path, use_preprocessing=True)
-                logger.info(f"[{req_id}] Image preprocessed: original={len(img_bytes)}b, processed={len(processed_bytes)}b")
-                img_bytes = processed_bytes  # Use the processed image for OCR
-            except Exception as prep_err:
-                logger.warning(f"[{req_id}] Image preprocessing failed: {str(prep_err)}. Using original image.")
-                # Continue with original image if preprocessing fails
-        else:
-            # Skip preprocessing and use original image
-            try:
-                # Just convert to proper format without any preprocessing
-                processed_bytes = await asyncio.to_thread(prepare_without_preprocessing, tmp_path)
-                logger.info(f"[{req_id}] Image preprocessing DISABLED. Using original image.")
-                img_bytes = processed_bytes
-            except Exception as read_err:
-                logger.warning(f"[{req_id}] Error reading original image: {str(read_err)}. Using raw bytes.")
-                # Continue with completely raw bytes if even format conversion fails
-        
-        ui.stop_spinner()
-        await ui.update(t("status.image_processed", lang=lang) or "✅ Image optimized for OCR")
-        
-        # Step 3: OCR image
-        await ui.append(t("status.recognizing_text", lang=lang) or "🔍 Recognizing text (OCR)...")
-        await ui.start_spinner()
-        
-        # Сохраняем изображение в PNG для тестирования в playground
-        try:
-            # Создаем директорию tmp, если она не существует
-            os.makedirs("tmp", exist_ok=True)
-            
-            test_image_id = str(uuid.uuid4())[:8]
-            test_image_path = f"tmp/ocr_test_{test_image_id}.png"
-            
-            # Сохраняем копию изображения в PNG для тестирования
-            with open(test_image_path, "wb") as f:
+        with temp_file(f"ocr_{req_id}", ".jpg") as tmp_path:
+            with open(tmp_path, "wb") as f:
                 f.write(img_bytes)
-            logger.info(f"[{req_id}] Сохранено тестовое изображение: {test_image_path}")
-            
-            # Отправляем пользователю сообщение со ссылкой, только если BASE_URL задан
-            base_url = getattr(settings, "BASE_URL", "")
+            use_preprocessing = data.get("use_preprocessing", True)
+            # Новый асинхронный пайплайн
+            try:
+                processed_bytes, ocr_result = await process_invoice_pipeline(
+                    img_bytes, tmp_path, use_preprocessing, req_id
+                )
+                img_bytes = processed_bytes
+                ui.stop_spinner()
+                positions_count = len(ocr_result.positions) if ocr_result and ocr_result.positions else 0
+                await ui.update(t("status.text_recognized", {"count": positions_count}, lang=lang) or 
+                               f"✅ Text recognized: found {positions_count} items")
+                logger.info(f"[{req_id}] OCR completed successfully, found {positions_count} items")
+            except Exception as ocr_err:
+                ui.stop_spinner()
+                logger.error(f"[{req_id}] OCR error: {ocr_err.__class__.__name__}: {str(ocr_err)}")
+                await ui.update(t("status.text_recognition_failed", lang=lang) or "❌ Text recognition failed")
+                raise
+        await ui.update(f"Статус предобработки: {'ВКЛЮЧЕНА' if use_preprocessing else 'ВЫКЛЮЧЕНА'}")
+        
+        # Step 3: Playground image (save_test_image)
+        test_image_path = await asyncio.to_thread(save_test_image, img_bytes, req_id)
+        if test_image_path:
+            base_url = data.get("base_url", getattr(settings, "BASE_URL", ""))
             if base_url:
                 playground_msg = f"🔍 Для тестирования в playground: {base_url}/{test_image_path}"
                 await message.answer(playground_msg)
                 logger.info(f"[{req_id}] Отправлена ссылка на тестовое изображение")
-        except Exception as img_save_err:
-            logger.warning(f"[{req_id}] Не удалось сохранить тестовое изображение: {str(img_save_err)}")
-        
-        # Run OCR in a separate thread for non-blocking operation
-        try:
-            logger.info(f"[{req_id}] Начинаю OCR-обработку изображения")
-            # Используем asyncio.to_thread для запуска синхронной функции в отдельном потоке
-            ocr_result = await asyncio.to_thread(ocr.call_openai_ocr, img_bytes)
-            ui.stop_spinner()
-            positions_count = len(ocr_result.positions) if ocr_result.positions else 0
-            await ui.update(t("status.text_recognized", {"count": positions_count}, lang=lang) or 
-                           f"✅ Text recognized: found {positions_count} items")
-            logger.info(f"[{req_id}] OCR completed successfully, found {positions_count} items")
-        except Exception as ocr_err:
-            ui.stop_spinner()
-            # Подробная информация об ошибке
-            logger.error(f"[{req_id}] OCR error: {ocr_err.__class__.__name__}: {str(ocr_err)}")
-            
-            # Попытка получить изначальную причину ошибки
-            if hasattr(ocr_err, '__cause__') and ocr_err.__cause__:
-                cause = ocr_err.__cause__
-                logger.error(f"[{req_id}] OCR error cause: {cause.__class__.__name__}: {str(cause)}")
-                
-                # Если у первопричины тоже есть причина
-                if hasattr(cause, '__cause__') and cause.__cause__:
-                    root_cause = cause.__cause__
-                    logger.error(f"[{req_id}] OCR root cause: {root_cause.__class__.__name__}: {str(root_cause)}")
-            
-            await ui.update(t("status.text_recognition_failed", lang=lang) or "❌ Text recognition failed")
-            raise  # Re-raise для общего обработчика ошибок
         
         # Step 4: Match with products
         await ui.append(t("status.matching_items", lang=lang) or "🔄 Matching items...")
@@ -355,3 +318,24 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         
         # Return to initial state
         await state.set_state(NotaStates.main_menu)
+    finally:
+        await state.update_data(processing_photo=False)
+        await state.update_data(current_ocr_task=None)
+
+@router.message(F.text.startswith("/obrabotka"))
+async def set_preprocessing_mode(message: Message, state: FSMContext):
+    """
+    Включает или выключает предобработку изображений по команде пользователя.
+    Используйте: /obrabotka on или /obrabotka off
+    """
+    text = message.text.strip().lower()
+    if "on" in text:
+        await state.update_data(use_preprocessing=True)
+        await message.answer("🟢 Предобработка изображений ВКЛЮЧЕНА.")
+    elif "off" in text:
+        await state.update_data(use_preprocessing=False)
+        await message.answer("🔴 Предобработка изображений ВЫКЛЮЧЕНА.")
+    else:
+        data = await state.get_data()
+        status = data.get("use_preprocessing", True)
+        await message.answer(f"Текущий статус предобработки: {'ВКЛЮЧЕНА' if status else 'ВЫКЛЮЧЕНА'}\nИспользуйте /obrabotka on или /obrabotka off")

@@ -9,6 +9,16 @@ import traceback
 from datetime import datetime, date
 from functools import wraps
 
+# Импортируем ParsedData для типизации
+from app.models import ParsedData
+
+# --- Опциональный импорт psutil ---
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
+
 # Создаем директорию для логов, если её нет
 LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'logs')
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -63,9 +73,9 @@ def log_ocr_call(func):
             ocr_logger.info(f"[{request_id}] OCR запрос успешно завершен за {elapsed:.2f} сек")
             
             # Логируем результат
-            if hasattr(result, 'dict'):
-                # Для Pydantic моделей
-                result_dict = result.dict()
+            if hasattr(result, 'model_dump'):
+                # Для Pydantic моделей v2
+                result_dict = result.model_dump()
                 positions_count = len(result_dict.get('positions', []))
                 ocr_logger.debug(f"[{request_id}] Найдено позиций: {positions_count}")
                 
@@ -80,6 +90,16 @@ def log_ocr_call(func):
                 ocr_logger.debug(f"[{request_id}] Результат OCR: {json.dumps(log_result, default=json_serialize)}")
             else:
                 ocr_logger.debug(f"[{request_id}] Результат OCR: {result}")
+            
+            # Журналируем успешный результат
+            if log_file and isinstance(result, ParsedData):
+                try:
+                    # Используем model_dump() вместо устаревшего dict()
+                    result_dict = result.model_dump()
+                    with open(log_file, "w", encoding="utf-8") as f:
+                        json.dump(result_dict, f, indent=2, ensure_ascii=False, default=json_serialize)
+                except Exception as e:
+                    logging.error(f"Failed to save OCR result to file: {e}")
             
             return result
             
@@ -114,6 +134,13 @@ def create_memory_monitor(interval=10.0):
     Создает отдельный поток, который будет мониторить использование памяти
     во время выполнения OCR-запросов.
     """
+    if not PSUTIL_AVAILABLE:
+        def create_dummy_thread(request_id):
+            class DummyThread:
+                def start(self):
+                    ocr_logger.debug(f"[{request_id}] MEMORY: мониторинг отключен (нет psutil)")
+            return DummyThread()
+        return create_dummy_thread
     try:
         import threading
         import psutil
@@ -148,7 +175,6 @@ def create_memory_monitor(interval=10.0):
             class DummyThread:
                 def start(self):
                     ocr_logger.debug(f"[{request_id}] MEMORY: мониторинг отключен (нет psutil)")
-                    pass
             return DummyThread()
         
         return create_dummy_thread 

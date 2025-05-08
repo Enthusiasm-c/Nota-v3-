@@ -112,16 +112,22 @@ def prepare_with_pil(path: str) -> bytes:
         
         # Step 1: Resize if needed (max dimension 1200px)
         width, height = image.size
-        max_dim = 2048
-        if max(width, height) > max_dim:
-            if width > height:
-                new_width = max_dim
-                new_height = int(height * (max_dim / width))
-            else:
-                new_height = max_dim
-                new_width = int(width * (max_dim / height))
-            image = image.resize((new_width, new_height), Image.LANCZOS)
-            logger.info(f"Resized image from {width}x{height} to {new_width}x{new_height}")
+        # Не ресайзим, если обе стороны не превышают лимиты
+        if width > 2000 or height > 1600:
+            # Минимальные размеры
+            min_long, min_short = 1680, 1000
+            # Определяем, какая сторона длиннее
+            is_landscape = width > height
+            min_w = min_long if is_landscape else min_short
+            min_h = min_short if is_landscape else min_long
+            # Сохраняем пропорции
+            scale_w = width / 2000 if width > 2000 else 1.0
+            scale_h = height / 1600 if height > 1600 else 1.0
+            scale = max(scale_w, scale_h)
+            new_w = max(int(width / scale), min_w)
+            new_h = max(int(height / scale), min_h)
+            image = image.resize((new_w, new_h), Image.LANCZOS)
+            logger.info(f"Resized image from {width}x{height} to {new_w}x{new_h}")
         
         # Step 2: Convert to grayscale
         if image.mode != 'L':
@@ -289,7 +295,7 @@ def prepare_with_opencv(path: str) -> bytes:
         img_size = f"{orig_w}x{orig_h}"
             
         # 1. Resize if too large but preserve quality for OCR
-        img = resize_if_needed(img, max_size=2800)  # Increased to maintain quality
+        img = resize_if_needed(img)  # Используем обновленную функцию без параметров
         
         # 2. Detect invoice properties to customize preprocessing
         props = detect_invoice_properties(img)
@@ -345,35 +351,29 @@ def prepare_with_opencv(path: str) -> bytes:
 
 # The remaining OpenCV functions are only used when OpenCV is available
 
-def resize_if_needed(img: np.ndarray, max_size: int = 2048) -> np.ndarray:
+def resize_if_needed(img: np.ndarray) -> np.ndarray:
     """
-    Resize image if it's larger than max_size in either dimension.
-    
-    Args:
-        img: Input image
-        max_size: Maximum dimension size
-        
-    Returns:
-        Resized image or original if no resize needed
+    Ресайз изображения только если хотя бы одна сторона превышает 2000x1600.
+    Минимальный размер после ресайза — 1680 по длинной и 1000 по короткой стороне.
     """
     h, w = img.shape[:2]
-    
-    # Check if resizing is needed
-    if max(h, w) <= max_size:
+    # Не ресайзим, если обе стороны не превышают лимиты
+    if w <= 2000 and h <= 1600:
         return img
-        
-    # Calculate new dimensions
-    if h > w:
-        new_h = max_size
-        new_w = int(w * (max_size / h))
-    else:
-        new_w = max_size
-        new_h = int(h * (max_size / w))
-        
-    # Resize
+    # Минимальные размеры
+    min_long, min_short = 1680, 1000
+    # Определяем, какая сторона длиннее
+    is_landscape = w > h
+    min_w = min_long if is_landscape else min_short
+    min_h = min_short if is_landscape else min_long
+    # Сохраняем пропорции, но не даём уменьшить меньше указанных минимумов
+    scale_w = w / 2000 if w > 2000 else 1.0
+    scale_h = h / 1600 if h > 1600 else 1.0
+    scale = max(scale_w, scale_h)
+    new_w = max(int(w / scale), min_w)
+    new_h = max(int(h / scale), min_h)
     logger.info(f"Resizing image from {w}x{h} to {new_w}x{new_h}")
     resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
-    
     return resized
 
 

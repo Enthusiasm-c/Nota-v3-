@@ -16,6 +16,7 @@ import sys
 from json_trace_logger import setup_json_trace_logger
 from app.handlers.tracing_log_middleware import TracingLogMiddleware
 import argparse
+from app.utils.file_manager import cleanup_temp_files, ensure_temp_dirs
 
 # Aiogram импорты
 from aiogram import Bot, Dispatcher, F
@@ -50,6 +51,19 @@ logger = get_buffered_logger(__name__)
 TMP_DIR = Path("tmp")
 TMP_DIR.mkdir(exist_ok=True)
 
+# Создаем все временные директории при запуске
+ensure_temp_dirs()
+
+async def periodic_cleanup():
+    """Периодически очищает старые временные файлы."""
+    while True:
+        try:
+            cleanup_count = await asyncio.to_thread(cleanup_temp_files)
+            if cleanup_count > 0:
+                print(f"Periodic cleanup: removed {cleanup_count} old temp files")
+        except Exception as e:
+            print(f"Error during periodic cleanup: {e}")
+        await asyncio.sleep(3600)  # 1 час
 
 def cleanup_tmp():
     try:
@@ -1487,4 +1501,5 @@ if __name__ == "__main__":
         # Ожидаем завершения поллинга (не должно произойти до остановки бота)
         await polling_task
 
+    asyncio.create_task(periodic_cleanup())
     asyncio.run(main())

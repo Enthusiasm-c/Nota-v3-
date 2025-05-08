@@ -1,103 +1,179 @@
 import pytest
+pytest_plugins = ["pytest_asyncio"]
 import json
 import os
-from app.ocr import call_openai_ocr, ParsedData
-from unittest.mock import AsyncMock
+import re
+from datetime import date
+from app.ocr import call_openai_ocr, ParsedData, INVOICE_FUNCTION_SCHEMA
+from unittest.mock import AsyncMock, MagicMock
 
 
-class DummyMsg:
-    tool_calls = [
-        type(
-            "F",
-            (),
+class DummyMessage:
+    def __init__(self, content=None, tool_calls=None):
+        self.content = content
+        self.tool_calls = tool_calls
+
+
+class DummyChoice:
+    def __init__(self, message):
+        self.message = message
+
+
+class DummyResponse:
+    def __init__(self, choices):
+        self.choices = choices
+
+
+class DummyFunctionCall:
+    def __init__(self, name, arguments):
+        self.name = name
+        self.arguments = arguments
+
+
+class DummyToolCall:
+    def __init__(self, function):
+        self.function = function
+        self.id = "call_123"
+        self.type = "function"
+
+
+def test_direct_vision_api(monkeypatch):
+    # Мокаем ответ от Vision API с правильным JSON
+    json_data = {
+        "supplier": "Test Supplier",
+        "date": "2025-01-01",
+        "positions": [
             {
-                "function": type(
-                    "A", (), {"arguments": '[{"name":"Kacang","qty":1,"unit":"gr"}]'}
-                )()
-            },
-        )()
-    ]
+                "name": "Kacang",
+                "qty": 1,
+                "unit": "gr",
+                "price": 10000,
+                "total_price": 10000
+            }
+        ],
+        "total_price": 10000
+    }
+    
+    # Создаем моки для OpenAI клиента
+    function_call = DummyFunctionCall(name="get_parsed_invoice", arguments=json.dumps(json_data))
+    tool_call = DummyToolCall(function=function_call)
+    dummy_message = DummyMessage(tool_calls=[tool_call])
+    dummy_choice = DummyChoice(dummy_message)
+    dummy_response = DummyResponse([dummy_choice])
+    
+    completions_create = MagicMock(return_value=dummy_response)
+    chat = MagicMock()
+    chat.completions.create = completions_create
 
-
-class DummyRsp:
-    def __init__(self):
-        self.choices = [type("msg", (), {"message": DummyMsg()})()]
-
-
-@pytest.mark.asyncio
-async def test_top_level_list(monkeypatch):
-    # Patch app.config.ocr_client to a dummy so get_ocr_client() returns not None
-    import app.config
-
-    class DummyComp:
-        def create(self, **kw):
-            return DummyRsp()
-
-    class DummyChat:
-        completions = DummyComp()
-
-    class DummyOpenAI:
-        def __init__(self, api_key=None):
-            self.chat = DummyChat()
-
-    app.config.ocr_client = DummyOpenAI()
-
-    # Patch openai and settings
-    monkeypatch.setattr(
-        "app.ocr.settings",
-        type("S", (), {
-            "OPENAI_API_KEY": "k",
-            "OPENAI_MODEL": "m",
-            "OPENAI_VISION_ASSISTANT_ID": "test-assistant-id"
-        })(),
-    )
-
-    # Мокаем структуру клиента OpenAI Vision Assistant
-    thread = AsyncMock()
-    thread.id = "thread-id"
-    threads = AsyncMock()
-    threads.create = AsyncMock(return_value=thread)
-    message_create = AsyncMock()
-    threads.messages = AsyncMock()
-    threads.messages.create = message_create
-    run = AsyncMock()
-    run.id = "run-id"
-    runs = AsyncMock()
-    runs.create = AsyncMock(return_value=run)
-    runs.retrieve = AsyncMock(return_value=AsyncMock(status='completed'))
-    threads.runs = runs
-    threads.runs.create = runs.create
-    threads.runs.retrieve = runs.retrieve
-    threads.runs.cancel = AsyncMock()
-    message = AsyncMock()
-    message.role = "assistant"
-    message.content = [type("C", (), {"type": "text", "text": '{"positions": [{"name": "Kacang", "qty": 1, "unit": "gr"}]}'})()]
-    messages = AsyncMock()
-    messages.data = [message]
-    threads.messages.list = AsyncMock(return_value=messages)
-    beta = AsyncMock()
-    beta.threads = threads
-    client = AsyncMock()
-    client.beta = beta
+    # Создаем мок клиента OpenAI
+    client = MagicMock()
+    client.chat = chat
+    
+    # Подменяем функцию получения клиента
     monkeypatch.setattr("app.ocr.get_ocr_client", lambda: client)
-
-    class DummyUuid4:
-        hex = "abc12345"
-
-    class DummyUuid:
-        @staticmethod
-        def uuid4():
-            return DummyUuid4()
-
+    
+    # Мокаем остальные зависимости
     monkeypatch.setattr("app.ocr.time", type("T", (), {"time": lambda *a, **kw: 0})())
     monkeypatch.setattr(
-        "app.ocr.base64", type("B", (), {"b64encode": lambda *a, **kw: b"xx"})()
+        "app.ocr.base64", type("B", (), {"b64encode": lambda *a, **kw: b"xx", "decode": lambda *a, **kw: "xx"})()
     )
-
-    # Run
-    res = await call_openai_ocr(b"123")
+    
+    # Запускаем тестируемую функцию
+    res = call_openai_ocr(b"123")
+    
+    # Проверяем, что chat.completions.create вызван с правильными параметрами
+    completions_create.assert_called_once()
+    call_args = completions_create.call_args[1]
+    assert call_args["model"] == "gpt-4o"
+    assert call_args["max_tokens"] == 2048
+    assert call_args["temperature"] == 0.0
+    assert call_args["tools"][0]["type"] == "function"
+    assert call_args["tools"][0]["function"] == INVOICE_FUNCTION_SCHEMA
+    assert call_args["tool_choice"]["type"] == "function"
+    assert call_args["tool_choice"]["function"]["name"] == "get_parsed_invoice"
+    
+    # Проверяем результат
     assert isinstance(res, ParsedData)
+    assert res.supplier == "Test Supplier"
+    assert res.date == date(2025, 1, 1)
     assert len(res.positions) == 1
     assert res.positions[0].name == "Kacang"
     assert res.positions[0].qty == 1
     assert res.positions[0].unit == "gr"
+    assert res.positions[0].price == 10000
+    assert res.positions[0].total_price == 10000
+    assert res.total_price == 10000
+
+
+def test_json_extraction_with_nested_data(monkeypatch):
+    # Тест для проверки извлечения данных с вложенной структурой
+    json_data = {
+        "supplier": "Test Supplier",
+        "date": "2025-01-01",
+        "positions": [
+            {
+                "name": "Product",
+                "qty": 2,
+                "unit": "kg",
+                "price": 15000,
+                "total_price": 30000
+            }
+        ],
+        "total_price": 30000
+    }
+
+    # Создаем моки
+    function_call = DummyFunctionCall(name="get_parsed_invoice", arguments=json.dumps(json_data))
+    tool_call = DummyToolCall(function=function_call)
+    dummy_message = DummyMessage(tool_calls=[tool_call])
+    dummy_choice = DummyChoice(dummy_message)
+    dummy_response = DummyResponse([dummy_choice])
+    
+    client = MagicMock()
+    client.chat.completions.create = MagicMock(return_value=dummy_response)
+    
+    monkeypatch.setattr("app.ocr.get_ocr_client", lambda: client)
+    monkeypatch.setattr("app.ocr.time", type("T", (), {"time": lambda *a, **kw: 0})())
+    monkeypatch.setattr(
+        "app.ocr.base64", type("B", (), {"b64encode": lambda *a, **kw: b"xx", "decode": lambda *a, **kw: "xx"})()
+    )
+    
+    # Запускаем тестируемую функцию
+    res = call_openai_ocr(b"123")
+    
+    # Проверяем результат
+    assert isinstance(res, ParsedData)
+    assert res.supplier == "Test Supplier"
+    assert res.date == date(2025, 1, 1)
+    assert len(res.positions) == 1
+    assert res.positions[0].name == "Product"
+    assert res.positions[0].qty == 2
+    assert res.positions[0].unit == "kg"
+    assert res.positions[0].price == 15000
+    assert res.positions[0].total_price == 30000
+    assert res.total_price == 30000
+
+
+def test_postprocessing_clean_num():
+    from app.postprocessing import clean_num
+    assert clean_num("10,000") == 10000
+    assert clean_num("10.000") == 10000
+    assert clean_num("10k") == 10000
+    assert clean_num("10к") == 10000
+    assert clean_num("12 345,67") == 12345.67
+    assert clean_num("12 345.67") == 12345.67
+    assert clean_num("12,345.67") == 12345.67
+    assert clean_num("12.345,67") == 12345.67 or clean_num("12.345,67") == 12345.67  # зависит от локали
+    assert clean_num(None) is None
+    assert clean_num("") is None
+    assert clean_num("null") is None
+
+
+def test_postprocessing_autocorrect_name():
+    from app.postprocessing import autocorrect_name
+    allowed = ["Тунец", "Лосось", "Креветка"]
+    assert autocorrect_name("Тунец", allowed) == "Тунец"
+    assert autocorrect_name("Тунецц", allowed) == "Тунец"
+    assert autocorrect_name("Кревета", allowed) == "Креветка"
+    assert autocorrect_name("Лосось", allowed) == "Лосось"
+    assert autocorrect_name("Краб", allowed) == "Краб"  # нет похожих, не меняет

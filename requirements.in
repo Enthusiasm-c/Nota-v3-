@@ -2,7 +2,8 @@ aiogram>=3.0.0
 pydantic-settings
 httpx
 python-Levenshtein
-rapidfuzz>=3.0.0  # for fuzzy name matching
+rapidfuzz==3.13.0
+psutil==7.0.0
 python-dotenv # dev only
 pytest # for testing
 pytest-vcr

@@ -18,13 +18,13 @@ from datetime import date, datetime
 
 # Настройка логирования
 logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(sys.stdout)
     ]
 )
-logger = logging.getLogger("ocr-debug")
+logger = logging.getLogger(__name__)
 
 # Включаем отладочные логи для всех модулей OpenAI и HTTP
 logging.getLogger("openai").setLevel(logging.DEBUG)
@@ -45,13 +45,14 @@ def json_serialize(obj):
 # Создаем парсер аргументов командной строки
 def parse_args():
     parser = argparse.ArgumentParser(description="Диагностика OCR модуля")
-    parser.add_argument("--image", "-i", help="Путь к тестовому изображению")
-    parser.add_argument("--timeout", "-t", type=int, default=60, help="Таймаут ожидания ответа от OpenAI (сек)")
-    parser.add_argument("--verbose", "-v", action="store_true", help="Вывод отладочной информации API")
+    parser.add_argument("--image", "-i", type=str, help="Путь к тестовому изображению")
+    parser.add_argument("--timeout", "-t", type=int, default=90, help="Таймаут OCR в секундах (по умолчанию 90)")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Включить подробное логирование")
+    parser.add_argument("--model", "-m", type=str, default="gpt-4o", help="Модель OpenAI (по умолчанию gpt-4o)")
     return parser.parse_args()
 
 # Функция для асинхронного запуска OCR
-async def test_ocr(image_path, timeout=60, verbose=False):
+async def test_ocr(image_path, timeout=90, verbose=False):
     try:
         logger.info(f"Загружаю тестовое изображение: {image_path}")
         
@@ -68,7 +69,7 @@ async def test_ocr(image_path, timeout=60, verbose=False):
         # Импорт OCR модуля
         logger.info("Импортирую модуль OCR...")
         try:
-            from app.ocr import call_openai_ocr
+            from app import ocr
             logger.info("Модуль OCR успешно импортирован")
         except ImportError as import_err:
             logger.error(f"Ошибка импорта модуля OCR: {import_err}")
@@ -79,13 +80,6 @@ async def test_ocr(image_path, timeout=60, verbose=False):
         logger.info("Проверяю конфигурацию...")
         from app.config import settings
         
-        # Установка таймаута из аргументов
-        if timeout:
-            # Патчим настройки OCR для текущего запуска
-            from app import ocr
-            ocr.VISION_ASSISTANT_TIMEOUT_SECONDS = timeout
-            logger.info(f"Установлен таймаут OCR: {timeout} сек")
-        
         # Если включен verbose режим, включаем отладочные логи API
         if verbose:
             import logging
@@ -93,23 +87,21 @@ async def test_ocr(image_path, timeout=60, verbose=False):
             logging.getLogger("httpx").setLevel(logging.DEBUG)
         
         missing_vars = []
-        for var in ["OPENAI_OCR_KEY", "OPENAI_VISION_ASSISTANT_ID"]:
-            if not getattr(settings, var, None):
-                missing_vars.append(var)
+        if not getattr(settings, "OPENAI_OCR_KEY", None):
+            missing_vars.append("OPENAI_OCR_KEY")
         
         if missing_vars:
             logger.error(f"Отсутствуют обязательные переменные: {', '.join(missing_vars)}")
             return False
         
-        logger.info(f"Используем ассистента: {settings.OPENAI_VISION_ASSISTANT_ID}")
+        logger.info("Запускаю OCR с использованием прямого вызова Vision API...")
         
         # Запускаем OCR
-        logger.info("Запускаю OCR...")
         start_time = time.time()
         
         # Запуск с перехватом всех возможных исключений
         try:
-            result = await asyncio.to_thread(call_openai_ocr, image_bytes)
+            result = await asyncio.to_thread(ocr.call_openai_ocr, image_bytes)
             duration = time.time() - start_time
             logger.info(f"OCR успешно завершен за {duration:.2f} сек")
             logger.info(f"Результат: {len(result.positions)} позиций найдено")
@@ -126,34 +118,26 @@ async def test_ocr(image_path, timeout=60, verbose=False):
             print("\nРезультат OCR (JSON):")
             print(json.dumps(result.model_dump(), indent=2, ensure_ascii=False, default=json_serialize))
             return True
-        except Exception as ocr_err:
-            duration = time.time() - start_time
-            logger.error(f"OCR завершился с ошибкой через {duration:.2f} сек")
-            logger.error(f"Тип ошибки: {ocr_err.__class__.__name__}")
-            logger.error(f"Сообщение ошибки: {str(ocr_err)}")
             
-            # Получаем доступ к исходной ошибке через __cause__
-            if hasattr(ocr_err, '__cause__') and ocr_err.__cause__:
+        except Exception as ocr_err:
+            elapsed = time.time() - start_time
+            logger.error(f"Ошибка OCR после {elapsed:.2f} сек: {str(ocr_err)}")
+            logger.error(f"Тип ошибки: {ocr_err.__class__.__name__}")
+            
+            # Попытка получить корень ошибки
+            if hasattr(ocr_err, "__cause__") and ocr_err.__cause__ is not None:
                 cause = ocr_err.__cause__
-                logger.error(f"Исходная ошибка: {cause.__class__.__name__}: {str(cause)}")
+                logger.error(f"Причина ошибки: {cause.__class__.__name__}: {str(cause)}")
                 
-                # Если у исходной ошибки тоже есть причина, показываем и её
-                if hasattr(cause, '__cause__') and cause.__cause__:
+                # Проверка на наличие вложенной причины
+                if hasattr(cause, "__cause__") and cause.__cause__ is not None:
                     root_cause = cause.__cause__
                     logger.error(f"Корневая причина: {root_cause.__class__.__name__}: {str(root_cause)}")
-            
-            # Подробная диагностика
-            import traceback
-            logger.error("Полный стек вызовов:")
-            traceback.print_exc()
             
             return False
     
     except Exception as e:
-        logger.error(f"Необработанная ошибка: {e}")
-        import traceback
-        logger.error("Полный стек вызовов:")
-        traceback.print_exc()
+        logger.error(f"Неожиданная ошибка: {str(e)}")
         return False
 
 # Получение тестового изображения
@@ -227,13 +211,16 @@ async def main():
             return
     
     # Запуск тестирования OCR
-    logger.info(f"Использую тестовое изображение: {test_image}")
-    success = await test_ocr(test_image, timeout=args.timeout, verbose=args.verbose)
+    logger.info(f"Запуск тестирования OCR на {test_image}")
+    logger.info(f"Таймаут: {args.timeout} сек")
+    logger.info(f"Режим подробного логирования: {'Включен' if args.verbose else 'Выключен'}")
+    logger.info(f"Используемая модель: {args.model}")
     
+    success = await test_ocr(test_image, timeout=args.timeout, verbose=args.verbose)
     if success:
-        logger.info("Тест OCR успешно завершен!")
+        logger.info("✅ Тест OCR успешно выполнен")
     else:
-        logger.error("Тест OCR завершился с ошибками!")
+        logger.error("❌ Тест OCR завершился с ошибкой")
 
 if __name__ == "__main__":
     asyncio.run(main()) 
