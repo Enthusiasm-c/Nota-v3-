@@ -12,6 +12,7 @@ import logging
 import time
 import json
 import asyncio
+import argparse
 from pathlib import Path
 from datetime import date, datetime
 
@@ -41,8 +42,16 @@ def json_serialize(obj):
         return obj.isoformat()
     raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
 
+# Создаем парсер аргументов командной строки
+def parse_args():
+    parser = argparse.ArgumentParser(description="Диагностика OCR модуля")
+    parser.add_argument("--image", "-i", help="Путь к тестовому изображению")
+    parser.add_argument("--timeout", "-t", type=int, default=60, help="Таймаут ожидания ответа от OpenAI (сек)")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Вывод отладочной информации API")
+    return parser.parse_args()
+
 # Функция для асинхронного запуска OCR
-async def test_ocr(image_path):
+async def test_ocr(image_path, timeout=60, verbose=False):
     try:
         logger.info(f"Загружаю тестовое изображение: {image_path}")
         
@@ -70,6 +79,19 @@ async def test_ocr(image_path):
         logger.info("Проверяю конфигурацию...")
         from app.config import settings
         
+        # Установка таймаута из аргументов
+        if timeout:
+            # Патчим настройки OCR для текущего запуска
+            from app import ocr
+            ocr.VISION_ASSISTANT_TIMEOUT_SECONDS = timeout
+            logger.info(f"Установлен таймаут OCR: {timeout} сек")
+        
+        # Если включен verbose режим, включаем отладочные логи API
+        if verbose:
+            import logging
+            logging.getLogger("openai").setLevel(logging.DEBUG)
+            logging.getLogger("httpx").setLevel(logging.DEBUG)
+        
         missing_vars = []
         for var in ["OPENAI_OCR_KEY", "OPENAI_VISION_ASSISTANT_ID"]:
             if not getattr(settings, var, None):
@@ -91,6 +113,14 @@ async def test_ocr(image_path):
             duration = time.time() - start_time
             logger.info(f"OCR успешно завершен за {duration:.2f} сек")
             logger.info(f"Результат: {len(result.positions)} позиций найдено")
+            
+            # Выводим производительность
+            print(f"\n{'='*50}")
+            print(f"СТАТИСТИКА ПРОИЗВОДИТЕЛЬНОСТИ OCR:")
+            print(f"Время обработки: {duration:.2f} сек")
+            print(f"Найдено позиций: {len(result.positions)}")
+            print(f"Размер изображения: {len(image_bytes)/1024:.1f} KB")
+            print(f"{'='*50}\n")
             
             # Выводим результат в JSON для проверки
             print("\nРезультат OCR (JSON):")
@@ -159,10 +189,11 @@ def get_test_image():
     return None
 
 async def main():
+    args = parse_args()
     logger.info("Запуск диагностики OCR...")
     
     # Получение тестового изображения
-    test_image = get_test_image()
+    test_image = args.image or get_test_image()
     if not test_image:
         logger.error("Тестовое изображение не найдено!")
         logger.info("Создаю простое тестовое изображение...")
@@ -197,7 +228,7 @@ async def main():
     
     # Запуск тестирования OCR
     logger.info(f"Использую тестовое изображение: {test_image}")
-    success = await test_ocr(test_image)
+    success = await test_ocr(test_image, timeout=args.timeout, verbose=args.verbose)
     
     if success:
         logger.info("Тест OCR успешно завершен!")
