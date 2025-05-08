@@ -1498,8 +1498,10 @@ if __name__ == "__main__":
         logger.info("✅ Fixed i18n formatting issues")
         logger.info("✅ Improved logging with duplication prevention")
         
+        # Запускаем задачу периодической очистки временных файлов
+        asyncio.create_task(periodic_cleanup())
+        
         # Ожидаем завершения поллинга (не должно произойти до остановки бота)
         await polling_task
 
-    asyncio.create_task(periodic_cleanup())
     asyncio.run(main())
