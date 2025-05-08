@@ -8,14 +8,69 @@ import time
 from typing import Any
 from pathlib import Path
 from uuid import uuid4
+import openai
 
 from app.models import ParsedData
 from app.config import settings, get_ocr_client
 from app.utils.monitor import increment_counter, ocr_monitor
 from app.utils.api_decorators import with_async_retry_backoff, with_retry_backoff, ErrorType
 from app.utils.debug_logger import log_ocr_call, log_ocr_performance, ocr_logger, create_memory_monitor
+from app.ocr_prompt import build_prompt
 
 VISION_ASSISTANT_TIMEOUT_SECONDS = int(getattr(settings, "VISION_ASSISTANT_TIMEOUT_SECONDS", 120))
+
+# Определение схемы инструмента для OpenAI API
+tool_schema = {
+    "type": "function",
+    "function": {
+        "name": "parse_invoice",
+        "description": "Parse invoice data from the image",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "supplier": {
+                    "type": "string",
+                    "description": "Supplier name from the invoice"
+                },
+                "date": {
+                    "type": "string",
+                    "description": "Invoice date in ISO format (YYYY-MM-DD)"
+                },
+                "positions": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                                "description": "Product name"
+                            },
+                            "qty": {
+                                "type": "number",
+                                "description": "Quantity"
+                            },
+                            "unit": {
+                                "type": "string",
+                                "description": "Unit of measurement"
+                            },
+                            "price": {
+                                "type": "number",
+                                "description": "Price per unit"
+                            },
+                            "total_price": {
+                                "type": "number",
+                                "description": "Total price for this position"
+                            }
+                        },
+                        "required": ["name"]
+                    },
+                    "description": "List of products/positions in the invoice"
+                }
+            },
+            "required": ["positions"]
+        }
+    }
+}
 
 @log_ocr_call
 @with_retry_backoff(max_retries=1, initial_backoff=0.5, backoff_factor=2.0)
