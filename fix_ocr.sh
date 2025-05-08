@@ -83,6 +83,11 @@ else
         exit 0
     fi
     
+    if grep -q "Expected file type to be a supported format" "$LOG_FILE"; then
+        echo -e "${YELLOW}[!] Обнаружена ошибка формата изображения.${NC}"
+        echo -e "${YELLOW}[*] Проблема исправлена в последней версии кода.${NC}"
+    fi
+    
     if grep -q "Отсутствуют обязательные переменные" "$LOG_FILE"; then
         echo -e "${RED}[-] Отсутствуют необходимые переменные окружения!${NC}"
         echo -e "${YELLOW}[*] Проверьте файл .env и наличие в нём OPENAI_OCR_KEY и OPENAI_VISION_ASSISTANT_ID${NC}"

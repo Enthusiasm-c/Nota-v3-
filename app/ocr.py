@@ -9,6 +9,7 @@ from typing import Any
 from pathlib import Path
 from uuid import uuid4
 import openai
+from io import BytesIO
 
 from app.models import ParsedData
 from app.config import settings, get_ocr_client
@@ -111,8 +112,13 @@ def call_openai_ocr(image_bytes: bytes, _req_id=None) -> ParsedData:
     # НОВЫЙ СПОСОБ: Загрузка файла в Files API
     try:
         ocr_logger.info(f"[{req_id}] Загружаю изображение в Files API")
+        
+        # Создаем файл в память с метаданными
+        file_buffer = BytesIO(image_bytes)
+        file_buffer.name = f"invoice_{req_id}.jpg"
+        
         file_obj = client.files.create(
-            file=image_bytes,
+            file=file_buffer,
             purpose="vision"
         )
         file_id = file_obj.id
