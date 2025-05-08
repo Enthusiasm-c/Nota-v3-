@@ -14,7 +14,7 @@ from pathlib import Path
 import uuid
 from datetime import datetime
 from aiogram import Router, F
-from aiogram.types import Message
+from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.enums import ParseMode
 from typing import Dict, List, Optional, Tuple
@@ -22,7 +22,7 @@ from typing import Dict, List, Optional, Tuple
 from app.utils.incremental_ui import IncrementalUI
 from app import ocr, matcher, data_loader
 from app.formatters.report import build_report
-from app.keyboards import build_main_kb
+from app.keyboards import build_main_kb, kb_main
 from app.utils.md import clean_html
 from app.i18n import t
 from app.config import settings
@@ -32,6 +32,7 @@ from app.fsm.states import NotaStates
 from app.utils.task_manager import register_task, cancel_task
 from app.utils.file_manager import temp_file, save_test_image, cleanup_temp_files
 from app.utils.processing_pipeline import process_invoice_pipeline
+from app.utils.incremental_ui_example import split_message
 
 logger = logging.getLogger(__name__)
 
@@ -67,16 +68,15 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
     prev_task_id = data.get("current_ocr_task")
     if prev_task_id:
         cancel_task(prev_task_id)
+        logger.info(f"[{req_id}] Cancelled previous task {prev_task_id} for user {user_id}")
     # ---
     
-    # Check if already processing a photo
-    if data.get("processing_photo"):
-        logger.warning(f"Already processing a photo for user {user_id}, ignoring new photo")
-        await message.answer(
-            t("status.wait_for_processing", lang=lang) or "Please wait while I finish processing your current photo.",
-            parse_mode=None
-        )
-        return
+    # Принудительно сбрасываем флаг обработки фото, даже если он был установлен
+    # Это позволит начать обработку нового фото, даже если предыдущее зависло
+    await state.update_data(processing_photo=False)
+    
+    # Проверяем снова, чтобы убедиться, что флаг сброшен
+    data = await state.get_data()
     
     # Set processing flag
     await state.update_data(processing_photo=True)
@@ -231,6 +231,9 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
                 report_text = report_text.replace("<pre>", "<pre>") + "</pre>"
                 
             logger.debug(f"Sending report with HTML formatting (valid HTML tags: {has_valid_html})")
+            for part in split_message(report_text):
+                report_msg = await message.answer(
+                    part,
             report_msg = await message.answer(
                 report_text,
                 reply_markup=inline_kb,
@@ -267,9 +270,7 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
                     
                     # Last resort - send a brief summary
                     try:
-                        simple_message = t("status.brief_summary", 
-                                          {"total": positions_count, "ok": ok_count, "issues": unknown_count + partial_count},
-                                          lang=lang) or (
+                        simple_message = t("status.brief_summary", {"total": positions_count, "ok": ok_count, "issues": unknown_count + partial_count}, lang=lang) or (
                             f"📋 Found {positions_count} items. "
                             f"✅ OK: {ok_count}. "
                             f"⚠️ Issues: {unknown_count + partial_count}."

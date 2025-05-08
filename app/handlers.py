@@ -11,6 +11,7 @@ from aiogram.types import ForceReply
 from app.formatters import report as invoice_report, alias, data_loader, keyboards
 from app import matcher
 from app.bot_utils import edit_message_text_safe
+from app.i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +53,7 @@ async def handle_choose_line(message: Message, state: FSMContext):
     logger.info(f"[DEBUG] State at handle_choose_line: {data}")
     text = message.text.strip()
     if not text.isdigit() or not (1 <= int(text) <= 40):
-        await message.answer("Пожалуйста, введите корректный номер строки (1-40):")
+        await message.answer(t("edit.enter_row_number", lang=lang))
         return
     idx = int(text) - 1
     await state.update_data(edit_pos=idx)
@@ -588,11 +589,9 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
             logging.warning(f"Failed to update edit fields keyboard: {e}")
             # Пробуем отправить новое сообщение с клавиатурой
             try:
-                await message.answer("Выберите поле для редактирования:",
-                                    reply_markup=keyboards.kb_edit_fields(idx))
+                await message.answer(t("edit.select_field", lang=lang), reply_markup=keyboards.kb_edit_fields(idx))
                 # Обновляем ID сообщения в состоянии
-                new_msg = await message.answer("Редактирование позиции...", 
-                                             reply_markup=keyboards.kb_edit_fields(idx))
+                new_msg = await message.answer(t("edit.editing_position", lang=lang), reply_markup=keyboards.kb_edit_fields(idx))
                 await state.update_data(msg_id=new_msg.message_id)
             except Exception as e2:
                 logging.error(f"Failed to send fallback message: {e2}")

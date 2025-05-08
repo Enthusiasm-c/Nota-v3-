@@ -2,6 +2,7 @@ from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
 from app import data_loader
+from app.i18n import t
 
 router = Router()
 
@@ -14,4 +15,4 @@ async def reload_data(message: Message):
         if hasattr(data_loader.load_products, "cache_clear")
         else None
     )
-    await message.answer("Data reloaded from CSV files.")
+    await message.answer(t("status.data_reloaded", lang=lang))

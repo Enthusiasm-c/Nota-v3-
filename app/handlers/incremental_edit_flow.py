@@ -21,6 +21,7 @@ from app.data_loader import load_products
 from app.keyboards import build_main_kb
 from app.converters import parsed_to_dict
 from app.utils.incremental_ui import IncrementalUI
+from app.utils.i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +54,7 @@ async def handle_free_edit_text(message: Message, state: FSMContext):
             ui = IncrementalUI(message.bot, message.chat.id)
         except Exception as ui_error:
             logger.error(f"[edit_flow] Не удалось создать IncrementalUI: {ui_error}")
-            await message.answer("Произошла ошибка при обработке команды. Пожалуйста, попробуйте позже.")
+            await message.answer(t("error.command_failed", lang=lang))
             return
             
         processing_started = False

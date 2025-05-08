@@ -30,7 +30,7 @@ async def handle_free_edit_text(message: Message, state: FSMContext):
     logger.info(f"[edit_flow] Received update type: {type(message).__name__}")
     if not hasattr(message, 'text') or message.text is None:
         logger.warning("[edit_flow] Received message without text field")
-        await message.answer("Пожалуйста, введите текст для редактирования.")
+        await message.answer(t("edit.enter_text", lang=lang))
         await state.set_state(EditFree.awaiting_input)
         return
     if not message.text.strip():

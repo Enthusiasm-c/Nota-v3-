@@ -309,10 +309,7 @@ async def cmd_start(message, state: FSMContext):
     ])
     
     await state.set_state(NotaStates.lang)
-    await message.answer(
-        "Hi! I'm Nota AI Bot. Choose interface language.\n\nПривет! Я Nota AI Бот. Выберите язык интерфейса.",
-        reply_markup=lang_keyboard
-    )
+    await message.answer(t("main.choose_language", lang=lang), reply_markup=lang_keyboard)
 
 
 async def cb_new_invoice(callback: CallbackQuery, state: FSMContext):
@@ -592,10 +589,7 @@ async def cb_help(callback: CallbackQuery, state: FSMContext):
         bot,
         callback.message.chat.id,
         callback.message.message_id,
-        (
-            "Nota AI helps you digitize invoices in one tap. "
-            "Upload a photo or PDF, edit any field, and confirm. All in one message!"
-        ),
+        t("main.bot_help", lang=lang),
         kb=kb_help_back(),
     )
     await callback.answer()
@@ -604,23 +598,40 @@ async def cb_help(callback: CallbackQuery, state: FSMContext):
 async def help_back(message, state: FSMContext):
     await state.set_state(NotaStates.main_menu)
 
-    await message.answer(
-        "Ready to work. What would you like to do?",
-        reply_markup=kb_main(),
-    )
+    await message.answer(t("main.ready_to_work", lang=lang), reply_markup=kb_main())
 
 
 async def cb_cancel(callback: CallbackQuery, state: FSMContext):
+    """
+    Обработчик кнопки отмены. Сбрасывает состояние и возвращает в главное меню.
+    Также отменяет текущую задачу обработки, если она есть.
+    """
+    # Получаем данные пользователя для проверки наличия активной задачи
+    user_data = await state.get_data()
+    
+    # Отменяем активную задачу OCR, если она существует
+    task_id = user_data.get("current_ocr_task")
+    if task_id:
+        from app.utils.task_manager import cancel_task
+        if cancel_task(task_id):
+            logger.info(f"Cancelled OCR task {task_id} via cancel button")
+    
+    # Сбрасываем флаги обработки
+    await state.update_data(processing_photo=False, current_ocr_task=None)
+    
+    # Возвращаемся в главное меню
     await state.set_state(NotaStates.main_menu)
 
+    # Обновляем сообщение, удаляя клавиатуру и показывая сообщение о готовности к работе
     await safe_edit(
         bot,
         callback.message.chat.id,
         callback.message.message_id,
-        "Ready to work. What would you like to do?",
+        t("main.ready_to_work", lang=lang),
         kb=kb_main(),
     )
-    await callback.answer()
+    
+    await callback.answer("Operation cancelled")
 
 
 async def cb_edit_line(callback: CallbackQuery, state: FSMContext):
@@ -756,7 +767,7 @@ async def handle_field_edit(message, state: FSMContext):
         logger.warning(
             f"Missing required field edit data in state: idx={idx}, field={field}, msg_id={msg_id}"
         )
-        await message.answer("Ошибка: данные редактирования не найдены.")
+        await message.answer(t("error.edit_data_not_found", lang=lang))
         return
 
     user_id = message.from_user.id
@@ -765,23 +776,14 @@ async def handle_field_edit(message, state: FSMContext):
     logger.debug(f"BUGFIX: Looking for invoice data with key {key}")
     if key not in user_matches:
         logger.warning(f"No matches found for user {user_id}, message {msg_id}")
-
-        # Проверяем, может быть есть данные с другими message_id для этого пользователя
-        alt_keys = [k for k in user_matches.keys() if k[0] == user_id]
-        if alt_keys:
-            logger.debug(f"BUGFIX: Found alternative keys for user: {alt_keys}")
-            # Используем самый свежий ключ (предполагаем, что с наибольшим message_id)
-            key = max(alt_keys, key=lambda k: k[1])
-            logger.debug(f"BUGFIX: Using alternative key {key}")
-        else:
-            await message.answer("Ошибка: данные инвойса не найдены.")
-            return
+        await message.answer(t("error.invoice_data_not_found", lang=lang))
+        return
 
     entry = user_matches[key]
     text = message.text.strip()
 
     # Показываем пользователю, что обрабатываем запрос
-    processing_msg = await message.answer("🔄 Обработка изменений...")
+    processing_msg = await message.answer(t("status.processing_changes", lang=lang))
 
     try:
         logger.debug(
@@ -923,10 +925,7 @@ async def cb_confirm(callback: CallbackQuery, state: FSMContext):
 async def help_command(message, state: FSMContext):
     await state.set_state(NotaStates.help)
     await message.answer(
-        (
-            "Nota AI helps you digitize invoices in one tap. "
-            "Upload a photo or PDF, edit any field, and confirm. All in one message!"
-        ),
+        t("main.bot_help", lang=lang),
         reply_markup=kb_help_back(),
     )
 
@@ -935,7 +934,7 @@ async def cancel_command(message, state: FSMContext):
     await state.set_state(NotaStates.main_menu)
 
     await message.answer(
-        "Ready to work. What would you like to do?",
+        t("main.ready_to_work", lang=lang),
         reply_markup=kb_main(),
     )
 
@@ -1124,7 +1123,7 @@ async def confirm_fuzzy_name(callback: CallbackQuery, state: FSMContext):
     fuzzy_msg_id = data.get("fuzzy_msg_id")
     
     if not all([fuzzy_match, fuzzy_line is not None, fuzzy_msg_id]):
-        await callback.message.answer("Ошибка: данные для подтверждения не найдены.")
+        await callback.message.answer(t("error.confirm_data_not_found", lang=lang))
         await state.set_state(NotaStates.editing)
         await callback.answer()
         return
@@ -1138,7 +1137,7 @@ async def confirm_fuzzy_name(callback: CallbackQuery, state: FSMContext):
         if alt_keys:
             key = max(alt_keys, key=lambda k: k[1])
         else:
-            await callback.message.answer("Ошибка: данные инвойса не найдены.")
+            await callback.message.answer(t("error.invoice_data_not_found", lang=lang))
             await state.set_state(NotaStates.editing)
             await callback.answer()
             return
@@ -1203,7 +1202,7 @@ async def reject_fuzzy_name(callback: CallbackQuery, state: FSMContext):
     fuzzy_msg_id = data.get("fuzzy_msg_id")
     
     if not all([fuzzy_original, fuzzy_line is not None, fuzzy_msg_id]):
-        await callback.message.answer("Ошибка: данные для отклонения не найдены.")
+        await callback.message.answer(t("error.reject_data_not_found", lang=lang))
         await state.set_state(NotaStates.editing)
         await callback.answer()
         return
@@ -1217,7 +1216,7 @@ async def reject_fuzzy_name(callback: CallbackQuery, state: FSMContext):
         if alt_keys:
             key = max(alt_keys, key=lambda k: k[1])
         else:
-            await callback.message.answer("Ошибка: данные инвойса не найдены.")
+            await callback.message.answer(t("error.invoice_data_not_found", lang=lang))
             await state.set_state(NotaStates.editing)
             await callback.answer()
             return

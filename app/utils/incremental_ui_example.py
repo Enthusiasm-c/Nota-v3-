@@ -13,9 +13,25 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 
 from app.utils.incremental_ui import IncrementalUI
+from app.utils.i18n import t
 
 logger = logging.getLogger(__name__)
 router = Router()
+
+def split_message(text, max_length=4096):
+    """
+    Разбивает длинный текст на части, не превышающие max_length символов.
+    """
+    parts = []
+    while len(text) > max_length:
+        split_at = text.rfind('\n', 0, max_length)
+        if split_at == -1:
+            split_at = max_length
+        parts.append(text[:split_at])
+        text = text[split_at:]
+    if text:
+        parts.append(text)
+    return parts
 
 # Пример 1: Базовое использование с простыми обновлениями
 @router.message(F.text == "test_incremental_ui")
@@ -150,7 +166,7 @@ async def handle_edit_with_ui(message: types.Message, state: FSMContext):
     invoice = data.get("invoice")
     
     if not invoice or not user_text:
-        await message.answer("Нечего редактировать или команда неверна")
+        await message.answer(t("edit.nothing_to_edit", lang=lang))
         return
     
     # Создаем UI
