@@ -17,6 +17,7 @@ from pathlib import Path
 from datetime import date, datetime
 import shutil
 import base64
+import traceback
 
 # Настройка логирования
 logging.basicConfig(
@@ -53,7 +54,7 @@ def parse_args():
     parser.add_argument("--model", "-m", type=str, default="gpt-4o", help="Модель OpenAI (по умолчанию gpt-4o)")
     parser.add_argument("--save_intermediate", "-s", action="store_true", help="Сохранять промежуточные изображения")
     parser.add_argument("--no_preprocessing", "-n", action="store_true", help="Отключить предобработку изображения")
-    parser.add_argument("--raw_vision", "-r", action="store_true", help="Выполнить только распознавание сырого текста без структурирования")
+    parser.add_argument("--raw_vision", "-r", action="store_true", help="Запустить распознавание сырого текста без структурирования")
     return parser.parse_args()
 
 # Функция для асинхронного запуска OCR
@@ -210,108 +211,78 @@ async def test_raw_vision(image_path, timeout=90, use_preprocessing=True):
         
         # Проверка существования файла
         if not os.path.exists(image_path):
-            logger.error(f"Файл не найден: {image_path}")
+            logger.error(f"Файл {image_path} не найден")
             return False
         
-        # Загрузка изображения
-        with open(image_path, "rb") as img_file:
-            image_bytes = img_file.read()
-            logger.info(f"Изображение загружено, размер: {len(image_bytes)} байт")
-        
-        # Импорт OpenAI
+        # Получаем клиент OpenAI
         try:
-            import openai
-            from app.config import settings
-            logger.info("OpenAI импортирован")
-        except ImportError as import_err:
-            logger.error(f"Ошибка импорта OpenAI: {import_err}")
-            return False
-        
-        # Импорт модуля для предобработки (если требуется)
-        if use_preprocessing:
-            try:
-                from app.imgprep import prepare_for_ocr
-                # Сохраняем изображение во временный файл
-                tmp_path = f"/tmp/nota_vision_raw_{int(time.time())}.jpg"
-                with open(tmp_path, "wb") as f:
-                    f.write(image_bytes)
-                image_bytes = prepare_for_ocr(tmp_path, use_preprocessing=True)
-                logger.info(f"Изображение предобработано, новый размер: {len(image_bytes)} байт")
-            except ImportError:
-                logger.warning("Модуль предобработки не найден, использую оригинальное изображение")
-            except Exception as prep_err:
-                logger.warning(f"Ошибка предобработки: {prep_err}. Использую оригинал.")
-        
-        # Проверка наличия API ключа
-        api_key = os.environ.get("OPENAI_OCR_KEY") or getattr(settings, "OPENAI_OCR_KEY", "")
-        if not api_key:
-            logger.error("OPENAI_OCR_KEY не установлен")
+            from app.config import get_ocr_client
+            client = get_ocr_client()
+            if not client:
+                logger.error("Не удалось получить OpenAI клиент")
+                return False
+        except Exception as e:
+            logger.error(f"Ошибка импорта OpenAI: {str(e)}")
             return False
             
-        # Создание клиента OpenAI
-        client = openai.OpenAI(api_key=api_key)
+        # Загружаем и при необходимости обрабатываем изображение
+        if use_preprocessing and hasattr(ocr, 'prepare_for_ocr'):
+            logger.info("Применяю предобработку изображения")
+            try:
+                processed_bytes = ocr.prepare_for_ocr(image_path, use_preprocessing=True)
+                image_bytes = processed_bytes
+                logger.info(f"Изображение обработано, размер: {len(processed_bytes)} байт")
+            except Exception as e:
+                logger.error(f"Ошибка предобработки: {str(e)}")
+                with open(image_path, 'rb') as f:
+                    image_bytes = f.read()
+        else:
+            logger.info("Предобработка отключена, использую оригинальное изображение")
+            with open(image_path, 'rb') as f:
+                image_bytes = f.read()
+                logger.info(f"Изображение загружено, размер: {len(image_bytes)} байт")
         
-        # Формирование base64 изображения
-        b64_image = base64.b64encode(image_bytes).decode("utf-8")
+        # Кодируем изображение в base64
+        b64_image = base64.b64encode(image_bytes).decode('utf-8')
         
-        # Простой запрос для получения сырого текста
-        system_prompt = """
-        You are an OCR system. Look at the provided invoice image and follow these instructions:
+        # Создаем простой запрос без функциональной схемы, только для получения текста
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Пожалуйста, опиши подробно всё, что ты видишь на этом изображении накладной. Прочитай все тексты, числа, таблицы. Не пропускай никакие детали."},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_image}", "detail": "high"}}
+                ]
+            }
+        ]
         
-        1. Extract ALL visible text from the image, line by line.
-        2. Keep the exact format as seen in the image (tables, layout, etc.)
-        3. Do NOT interpret or structure the data in any way
-        4. Maintain the original language if not English
-        5. Include all numbers, dates, and product names as seen on the invoice
-        6. DO NOT add any commentary or explanations
-        """
-        
-        logger.info("Отправляю запрос в Vision API для сырого распознавания текста...")
-        
-        start_time = time.time()
-        
-        # Отправка запроса без function calling - просто для распознавания текста
+        # Отправляем запрос
+        logger.info("Отправляю запрос в OpenAI Vision API...")
         response = client.chat.completions.create(
             model="gpt-4o",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": [
-                    {"type": "text", "text": "Extract all visible text from this invoice, preserving the original layout as much as possible."},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_image}", "detail": "high"}}
-                ]}
-            ],
-            max_tokens=2048,
+            messages=messages,
+            max_tokens=4096,
             temperature=0.0,
             timeout=timeout
         )
         
-        duration = time.time() - start_time
-        
-        # Получаем сырой текстовый ответ
+        # Выводим сырой текстовый ответ
         raw_text = response.choices[0].message.content
-        
-        # Выводим результат
-        print(f"\n{'='*50}")
-        print(f"РЕЗУЛЬТАТ РАСПОЗНАВАНИЯ СЫРОГО ТЕКСТА (Время: {duration:.2f} сек):")
-        print(f"{'='*50}\n")
+        logger.info("Получен ответ от Vision API:")
+        logger.info("-" * 80)
         print(raw_text)
-        print(f"\n{'='*50}")
+        logger.info("-" * 80)
         
-        # Сохраняем результат в файл
-        output_file = f"raw_vision_output_{int(time.time())}.txt"
+        # Сохраняем результат в файл для дальнейшего анализа
+        output_file = f"raw_vision_result_{int(time.time())}.txt"
         with open(output_file, "w", encoding="utf-8") as f:
-            f.write(f"# Сырой текст распознанный с изображения {image_path}\n")
-            f.write(f"# Предобработка: {'Включена' if use_preprocessing else 'Отключена'}\n")
-            f.write(f"# Время распознавания: {duration:.2f} сек\n\n")
             f.write(raw_text)
-        
         logger.info(f"Результат сохранен в файл: {output_file}")
+        
         return True
-    
     except Exception as e:
-        logger.error(f"Неожиданная ошибка при распознавании сырого текста: {str(e)}")
-        import traceback
-        logger.error(traceback.format_exc())
+        logger.error(f"❌ Распознавание сырого текста завершилось с ошибкой: {str(e)}")
+        traceback.print_exc()
         return False
 
 async def main():
