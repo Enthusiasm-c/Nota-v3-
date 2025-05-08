@@ -13,7 +13,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 
 from app.utils.incremental_ui import IncrementalUI
-from app.utils.i18n import t
+from app.i18n import t
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -164,6 +164,7 @@ async def handle_edit_with_ui(message: types.Message, state: FSMContext):
     # Получаем данные из состояния
     data = await state.get_data()
     invoice = data.get("invoice")
+    lang = data.get("lang", "ru")  # Используем русский по умолчанию
     
     if not invoice or not user_text:
         await message.answer(t("edit.nothing_to_edit", lang=lang))
