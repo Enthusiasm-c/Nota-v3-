@@ -44,57 +44,39 @@ fi
 # Загрузка переменных окружения
 source "$PROJECT_DIR/.env"
 
-# Функция обработки сигналов завершения
-_term() {
-    log "Received SIGTERM/SIGINT signal"
-    # Передаем сигнал боту для graceful shutdown
+# Корректная обработка сигналов
+shutdown() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Получен сигнал завершения, останавливаю бота (PID: $BOT_PID)..."
     if [ -n "$BOT_PID" ]; then
-        log "Sending SIGINT to bot process $BOT_PID"
-        kill -INT $BOT_PID
-        
-        # Ждем до 15 секунд (меньше чем таймаут systemd в 20-25 секунд)
-        for i in {1..15}; do
+        # Отправляем SIGINT вместо SIGTERM для корректного завершения
+        kill -SIGINT $BOT_PID
+        # Ждем до 8 секунд завершения процесса
+        for i in {1..8}; do
             if ! kill -0 $BOT_PID 2>/dev/null; then
-                log "Bot process terminated normally"
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] Бот корректно завершил работу"
                 exit 0
             fi
             sleep 1
         done
-        
-        # Если процесс все еще жив, шлем SIGTERM
-        if kill -0 $BOT_PID 2>/dev/null; then
-            log "Bot still running after 15s, sending SIGTERM"
-            kill -TERM $BOT_PID
-            sleep 3
-        fi
-        
-        # Принудительно завершаем, если все еще жив
-        if kill -0 $BOT_PID 2>/dev/null; then
-            log "WARNING: Bot still running, forcing exit"
-            kill -9 $BOT_PID
-        fi
+        # Если процесс не завершился, используем SIGKILL
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Бот не завершился вовремя, принудительное завершение..."
+        kill -SIGKILL $BOT_PID
     fi
     exit 0
 }
 
-# Установка обработчиков сигналов
-trap _term SIGTERM
-trap _term SIGINT
+# Регистрируем обработчики сигналов
+trap shutdown SIGINT SIGTERM
 
-# Запуск бота с перенаправлением вывода
-log "Executing python bot.py"
-python3 "$PROJECT_DIR/bot.py" > "$LOG_DIR/bot_stdout.log" 2> "$LOG_DIR/bot_stderr.log" &
+# Запускаем бота в фоне и запоминаем его PID
+python bot.py >> "$LOG_DIR/bot_output.log" 2>> "$LOG_DIR/bot_stderr.log" &
 BOT_PID=$!
-log "Bot started with PID: $BOT_PID"
-
-# Сохраняем PID для внешнего мониторинга
-echo $BOT_PID > "$PROJECT_DIR/bot.pid"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Bot started with PID: $BOT_PID"
 
 # Ждем завершения процесса
 wait $BOT_PID
 EXIT_CODE=$?
-log "Bot process exited with code $EXIT_CODE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Bot process exited with code $EXIT_CODE"
 
-# Очистка
-rm -f "$PROJECT_DIR/bot.pid"
+# Выходим с кодом завершения бота
 exit $EXIT_CODE 
