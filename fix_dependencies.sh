@@ -136,7 +136,25 @@ if [ -f "/etc/systemd/system/nota-bot.service" ]; then
     
     # Проверяем, что скрипт запуска существует
     SERVICE_EXEC=$(grep "ExecStart" /etc/systemd/system/nota-bot.service | sed -e 's/^.*ExecStart=//')
-    if [ -f "$SERVICE_EXEC" ]; then
+    if [ "$SERVICE_EXEC" = "/bin/bash /opt/nota-bot/run_bot.sh" ]; then
+        # Исправляем формат - проблема в том, что ExecStart должен указывать на один файл
+        echo -e "${YELLOW}[*] Неправильный формат ExecStart в service файле, исправляю...${NC}" | tee -a "$DEBUG_LOG"
+        SCRIPT_PATH="/opt/nota-bot/run_bot.sh"
+        if [ -f "$SCRIPT_PATH" ]; then
+            echo -e "${GREEN}[+] Скрипт запуска $SCRIPT_PATH существует${NC}" | tee -a "$DEBUG_LOG"
+        else
+            echo -e "${YELLOW}[*] Скрипт запуска $SCRIPT_PATH не найден, копирую...${NC}" | tee -a "$DEBUG_LOG"
+            sudo cp "$PROJECT_DIR/run_bot.sh" "$SCRIPT_PATH"
+            sudo chmod +x "$SCRIPT_PATH"
+            echo -e "${GREEN}[+] Скрипт запуска скопирован${NC}" | tee -a "$DEBUG_LOG"
+        fi
+        
+        # Исправляем systemd service файл
+        echo -e "${YELLOW}[*] Исправляю systemd service файл...${NC}" | tee -a "$DEBUG_LOG"
+        sudo sed -i 's|ExecStart=/bin/bash /opt/nota-bot/run_bot.sh|ExecStart=/opt/nota-bot/run_bot.sh|g' /etc/systemd/system/nota-bot.service
+        sudo systemctl daemon-reload
+        echo -e "${GREEN}[+] Systemd service файл исправлен${NC}" | tee -a "$DEBUG_LOG"
+    elif [ -f "$SERVICE_EXEC" ]; then
         echo -e "${GREEN}[+] Исполняемый файл $SERVICE_EXEC существует${NC}" | tee -a "$DEBUG_LOG"
     else
         echo -e "${RED}[-] Исполняемый файл $SERVICE_EXEC не существует!${NC}" | tee -a "$DEBUG_LOG"
