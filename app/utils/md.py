@@ -1,117 +1,95 @@
+import html
 import re
 import logging
 
-MDV2_SPECIALS = r'_\*\[\]\(\)~`>#+\-=|{}.!'
+logger = logging.getLogger(__name__)
 
-def escape_md(text: str, version=2) -> str:
-    r"""
-    Экранирует спецсимволы Telegram MarkdownV2. 
-    Аргумент version для совместимости.
+def escape_html(text: str) -> str:
     """
-    # Экранируем все спецсимволы из константы
-    return re.sub(r'([' + MDV2_SPECIALS + r'])', r'\\\1', text)
-
-
-def escape_v2(text: str) -> str:
-    r"""
-    Экранирует все спецсимволы Markdown V2, 
-    сохраняя блоки кода нетронутыми.
-    Для безопасной отправки в Telegram.
+    Экранирует спецсимволы для HTML 
+    (используется для Telegram HTML parse_mode).
+    
+    Args:
+        text: Исходный текст для экранирования
+        
+    Returns:
+        str: Экранированный текст, безопасный для HTML
     """
     if text is None:
         return ""
-    
-    logger = logging.getLogger("md")
-    
     try:
-        # Обработка блоков кода и обычного текста отдельно
-        result_parts = []
-        is_in_code_block = False
-        
-        # Разбиваем текст на строки для обработки блоков кода
-        lines = text.split('\n')
-        current_block = []
-        
-        for line in lines:
-            stripped_line = line.strip()
-            
-            # Обработка маркеров блоков кода
-            if stripped_line == '```':
-                # Обрабатываем накопленный блок текста
-                if current_block:
-                    block_text = '\n'.join(current_block)
-                    # Экранируем только текст вне блоков кода
-                    if not is_in_code_block:
-                        block_text = escape_md(block_text, version=2)
-                    result_parts.append(block_text)
-                    current_block = []
-                
-                # Добавляем маркер блока кода без экранирования
-                result_parts.append('```')
-                is_in_code_block = not is_in_code_block
-            else:
-                current_block.append(line)
-        
-        # Добавляем последний блок, если он есть
-        if current_block:
-            block_text = '\n'.join(current_block)
-            if not is_in_code_block:
-                block_text = escape_md(block_text, version=2)
-            result_parts.append(block_text)
-        
-        # Собираем текст обратно
-        result = '\n'.join(result_parts)
-        
-        # КРИТИЧНО: Проверяем и исправляем проблемные символы, которые часто вызывают ошибки
-        problematic_chars = {
-            '.': '\\.',
-            '#': '\\#',
-            '!': '\\!',
-            '+': '\\+',
-            '=': '\\=',
-            '|': '\\|',
-            '{': '\\{',
-            '}': '\\}',
-            '-': '\\-'
-        }
-        
-        # Ищем части вне блоков кода для проверки неэкранированных символов
-        parts = result.split('```')
-        for i in range(0, len(parts), 2):  # Чётные индексы - части вне блоков кода
-            if i < len(parts):
-                for char, escaped in problematic_chars.items():
-                    # Проверяем, есть ли символ, но нет его экранированной версии
-                    if char in parts[i] and escaped not in parts[i]:
-                        parts[i] = parts[i].replace(char, escaped)
-                
-                # Исправляем двойное экранирование
-                for char in MDV2_SPECIALS:
-                    double_escape = f'\\\\{char}'
-                    if double_escape in parts[i]:
-                        parts[i] = parts[i].replace(double_escape, f'\\{char}')
-        
-        # Собираем текст обратно с блоками кода
-        final_result = ''
-        for i, part in enumerate(parts):
-            final_result += part
-            if i < len(parts) - 1:
-                final_result += '```'  # Добавляем маркеры блоков кода между частями
-        
-        # Проверка на потенциальные ошибки и логирование для диагностики
-        if '```' in final_result:
-            code_block_count = final_result.count('```')
-            if code_block_count % 2 != 0:
-                logger.warning(f"Odd number of code block markers ({code_block_count}), formatting may be incorrect")
-        
-        return final_result
-    
+        return html.escape(text)
     except Exception as e:
-        # При ошибке возвращаем безопасный текст без форматирования
-        logger.error(f"Error in escape_v2: {e}")
+        logger.error(f"Error escaping HTML: {e}, text: {text[:100]}...")
+        return str(text)  # Возвращаем строковое представление на случай, если это не строка
+
+
+def clean_html(text: str) -> str:
+    """
+    Удаляет HTML-теги из текста, не меняя содержимое.
+    Полезно при ошибках форматирования в Telegram.
+    
+    Args:
+        text: Исходный текст с HTML-тегами
         
-        # Удаляем все специальные символы для безопасности
-        safe_text = re.sub(r'[^\w\s]', '', text)
-        if len(safe_text) < 10:
-            safe_text = "Error formatting message. Please try again."
+    Returns:
+        str: Текст без HTML-тегов
+    """
+    if text is None:
+        return ""
+    try:
+        # Сначала заменяем специальные HTML-сущности
+        text = text.replace("&nbsp;", " ")
+        text = text.replace("&lt;", "<")
+        text = text.replace("&gt;", ">")
+        text = text.replace("&amp;", "&")
+        text = text.replace("&quot;", "\"")
         
-        return safe_text
+        # Затем удаляем HTML-теги
+        text = re.sub(r'<[^>]+>', '', text)
+        
+        # Удаляем Markdown-код если он случайно попал в текст
+        text = text.replace("```diff", "")
+        text = text.replace("```", "")
+        
+        return text
+    except Exception as e:
+        logger.error(f"Error removing HTML tags: {e}, text: {text[:100]}...")
+        return text
+
+
+def escape_v2(text: str) -> str:
+    """
+    Экранирует спецсимволы для MarkdownV2 (Telegram parse_mode=MarkdownV2).
+    Не экранирует внутри блоков кода (```).
+    
+    Args:
+        text: Исходный текст с Markdown разметкой
+        
+    Returns:
+        str: Текст с экранированными специальными символами
+    """
+    if text is None:
+        return ""
+    try:
+        # Экранируемые символы MarkdownV2
+        md_chars = r"[_*\[\]()~`>#+\-=|{}.!]"
+        # Регулярка для блоков кода
+        code_block = re.compile(r"```.*?```", re.DOTALL)
+        parts = []
+        last_end = 0
+        for m in code_block.finditer(text):
+            # Экранируем вне блока кода
+            before = text[last_end:m.start()]
+            before = re.sub(md_chars, lambda m: '\\' + m.group(0), before)
+            parts.append(before)
+            parts.append(m.group(0))
+            last_end = m.end()
+        # Последний кусок
+        tail = text[last_end:]
+        tail = re.sub(md_chars, lambda m: '\\' + m.group(0), tail)
+        parts.append(tail)
+        return ''.join(parts)
+    except Exception as e:
+        logger.error(f"Error escaping MarkdownV2: {e}, text: {text[:100]}...")
+        return text  # Возвращаем исходный текст при ошибке

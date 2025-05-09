@@ -1,0 +1,11 @@
+# Nota AI crontab file
+
+# Set environment variables
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+MAILTO=""
+
+# Cleanup temporary files at 3 AM every day
+0 3 * * * /app/infra/cron/cleanup.sh > /proc/1/fd/1 2>/proc/1/fd/2
+
+# End of crontab

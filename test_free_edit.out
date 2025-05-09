@@ -1,0 +1,36 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.3, pytest-8.3.5, pluggy-1.5.0 -- /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1/venv/bin/python3
+cachedir: .pytest_cache
+rootdir: /Users/Denis/Documents/NOTA/Notav3/Nota-v3--1
+configfile: pytest.ini
+plugins: anyio-4.9.0, vcr-1.0.2
+collecting ... collected 6 items
+
+tests/test_free_edit.py::test_edit_date PASSED                           [ 16%]
+tests/test_free_edit.py::test_edit_line_field PASSED                     [ 33%]
+tests/test_free_edit.py::test_remove_line PASSED                         [ 50%]
+tests/test_free_edit.py::test_add_line FAILED                            [ 66%]
+tests/test_free_edit.py::test_finish_intent PASSED                       [ 83%]
+tests/test_free_edit.py::test_unknown_intent PASSED                      [100%]
+
+=================================== FAILURES ===================================
+________________________________ test_add_line _________________________________
+
+invoice_example = {'date': '', 'positions': [{'name': 'Milk', 'price': '100', 'qty': '2', 'unit': 'l'}, {'name': 'Bread', 'price': '50', 'qty': '1', 'unit': 'pc'}]}
+
+    def test_add_line(invoice_example):
+        intent = free_parser.detect_intent("добавь Cheese 5 kg 450")
+        new_invoice = free_parser.apply_edit(invoice_example, intent)
+        assert len(new_invoice["positions"]) == 3
+>       assert new_invoice["positions"][2]["name"] == "Cheese"
+E       AssertionError: assert 'cheese' == 'Cheese'
+E         
+E         - Cheese
+E         ? ^
+E         + cheese
+E         ? ^
+
+tests/test_free_edit.py:34: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_free_edit.py::test_add_line - AssertionError: assert 'chees...
+========================= 1 failed, 5 passed in 0.05s ==========================

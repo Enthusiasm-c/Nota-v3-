@@ -1,85 +1,200 @@
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import (
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    ReplyKeyboardMarkup,
+    KeyboardButton,
+)
+from app.i18n import t
 
-# Главное меню (inline)
+# Main menu (inline)
+
+
 def kb_main(lang: str = "en") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="➕ Upload new invoice", callback_data="action:new")],
-            [InlineKeyboardButton(text="ℹ️ Help", callback_data="action:help")],
+            [
+                InlineKeyboardButton(
+                    text=t("buttons.upload_new", {}, lang), callback_data="action:new"
+                )
+            ],
+            [InlineKeyboardButton(text=t("buttons.help", {}, lang), callback_data="action:help")],
         ]
     )
 
-# Клавиатура для загрузки файла (reply)
-def kb_upload() -> ReplyKeyboardMarkup:
+
+# Upload file keyboard (reply)
+
+
+def kb_upload(lang: str = "en") -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="/cancel")]],
         resize_keyboard=True,
-        one_time_keyboard=True
+        one_time_keyboard=True,
     )
 
-# Клавиатура помощи (reply)
-def kb_help_back() -> ReplyKeyboardMarkup:
+
+# Help back keyboard (reply)
+
+
+def kb_help_back(lang: str = "en") -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="Back")]],
+        keyboard=[[KeyboardButton(text=t("buttons.back", {}, lang))]],
         resize_keyboard=True,
-        one_time_keyboard=True
+        one_time_keyboard=True,
     )
+
+
+# Клавиатура редактирования (inline)
+
+
+
 
 # Клавиатура отчёта (inline)
-def kb_report(match_results: list) -> InlineKeyboardMarkup:
-    # Кнопки Edit только для проблемных строк
-    edit_buttons = [
-        [InlineKeyboardButton(text=f"✏️ Edit line {i+1}", callback_data=f"edit:{i}")]
-        for i, r in enumerate(match_results) if r.get("status") != "ok"
-    ]
-    # Confirm + Cancel всегда
-    base_buttons = [
-        [InlineKeyboardButton(text="✅ Confirm", callback_data="confirm:invoice")],
-        *edit_buttons,
-        [InlineKeyboardButton(text="🚫 Cancel", callback_data="cancel:all")],
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=base_buttons)
+
+
+
+# --- D-2: UX финального отчёта ---
+
+
+# Устаревшая функция, заменена на build_main_kb
+# def build_invoice_report(
+#     text: str,
+#     has_errors: bool,
+#     match_results: list,
+#     page: int = 1,
+#     total_pages: int = 1,
+#     page_size: int = 15,
+# ) -> InlineKeyboardMarkup:
+#     """
+#     Клавиатура финального отчёта:
+#     [✏️ Ред.n] ... (только строки текущей страницы)
+#     [➕ Add missing]
+#     [↩ Back] [✅ Submit] (Submit только если нет ошибок)
+#     Навигация: ◀ 1/3 ▶
+#     """
+#     # Определяем индексы строк текущей страницы
+#     start = (page - 1) * page_size
+#     end = start + page_size
+#     current_rows = match_results[start:end]
+#     # Кнопки редактирования только для строк с ошибками на текущей странице
+#     edit_buttons = [
+#         InlineKeyboardButton(text=f"✏️ Ред.{start + i + 1}", callback_data=f"edit:{start + i}")
+#         for i, r in enumerate(current_rows)
+#         if r.get("status") in ("unit_mismatch", "unknown")
+#     ]
+#     # Кнопка Add missing (только если есть нераспознанные)
+#     unknown_count = sum(1 for r in match_results if r.get("status") == "unknown")
+#     add_missing_btn = None
+#     if unknown_count > 0:
+#         add_missing_btn = InlineKeyboardButton(
+#             text="➕ Add missing", callback_data="inv_add_missing"
+#         )
+#     # Кнопка Back
+#     back_btn = InlineKeyboardButton(text="↩ Back", callback_data="inv_cancel_edit")
+#     # Кнопка Submit (только если нет ошибок)
+#     submit_btn = None
+#     if not has_errors:
+#         submit_btn = InlineKeyboardButton(text="✅ Submit", callback_data="inv_submit")
+#     # Если есть ошибки, submit_btn остается None и не добавляется в клавиатуру
+#     # Пагинация
+#     nav_buttons = []
+
 
 # Меню выбора поля для редактирования (inline)
-def kb_field_menu(idx: int = None) -> InlineKeyboardMarkup:
-    # Универсальный вариант: если idx=None, то просто field:name и т.д.
-    suffix = f":{idx}" if idx is not None else ""
+
+
+
+
+
+# Оставляем для совместимости (по одной строке)
+
+
+
+
+
+
+
+
+# Set supplier button (inline)
+
+
+def kb_set_supplier(lang: str = "en") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(text="Name", callback_data=f"field:name{suffix}"),
-                InlineKeyboardButton(text="Qty", callback_data=f"field:qty{suffix}"),
-                InlineKeyboardButton(text="Unit", callback_data=f"field:unit{suffix}"),
-                InlineKeyboardButton(text="Price", callback_data=f"field:price{suffix}")
-            ],
-            [InlineKeyboardButton(text="Cancel", callback_data=f"cancel{suffix}")]
+            [InlineKeyboardButton(text=t("buttons.set_supplier", {}, lang), callback_data="set_supplier")]
         ]
     )
 
-# Оставляем для совместимости (по одной строке)
-def kb_edit(idx: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="✏️ Edit", callback_data=f"edit:{idx}")]]
-    )
 
-def kb_edit_fields(idx: int) -> InlineKeyboardMarkup:
-    return kb_field_menu(idx)
+# Auto-unit buttons (inline)
 
-# Кнопка Set supplier (inline)
-def kb_set_supplier() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="✏️ Set supplier", callback_data="set_supplier")]]
-    )
 
-# Авто-кнопки unit (inline)
 def kb_unit_buttons() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=unit, callback_data=f"unit:{unit}") for unit in ["kg", "g", "l", "ml", "pcs"]]
+            [
+                InlineKeyboardButton(text=unit, callback_data=f"unit:{unit}")
+                for unit in ["kg", "g", "l", "ml", "pcs"]
+            ]
         ]
     )
 
-def kb_cancel_all() -> InlineKeyboardMarkup:
+
+def kb_cancel_all(lang: str = "en") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="🚫 Cancel", callback_data="cancel:all")]]
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✖ " + t("buttons.cancel", {}, lang), callback_data="cancel:all")]
+        ]
     )
+
+
+def build_main_kb(has_errors: bool = True, lang: str = "en") -> InlineKeyboardMarkup:
+    """
+    Creates a keyboard for editing a report with 2-3 main buttons.
+    
+    Args:
+        has_errors: Flag indicating if there are errors in the report
+        lang: Language code for localization
+        
+    Returns:
+        InlineKeyboardMarkup with buttons:
+        - "✏ Edit" - always present
+        - "↩ Cancel" - always present
+        - "✅ Confirm" - only if there are no errors (has_errors=False)
+    """
+    keyboard_rows = [
+        [
+            InlineKeyboardButton(
+                text="✏️ " + t("buttons.edit", {}, lang), callback_data="edit:free"
+            ),
+            InlineKeyboardButton(
+                text="✖ " + t("buttons.cancel", {}, lang), callback_data="cancel:all"
+            )
+        ]
+    ]
+    
+    # Add confirmation button only if there are no errors
+    if not has_errors:
+        keyboard_rows.append([
+            InlineKeyboardButton(
+                text="✅ " + t("buttons.confirm", {}, lang), callback_data="confirm:invoice"
+            )
+        ])
+    
+    return InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
+
+
+# Function for backward compatibility, replaced with build_main_kb
+def build_edit_keyboard(has_errors: bool = True, lang: str = "en") -> InlineKeyboardMarkup:
+    """
+    Deprecated function for backward compatibility.
+    Uses the new build_main_kb.
+    
+    Args:
+        has_errors: Flag indicating if there are errors in the report
+        lang: Language code for localization
+        
+    Returns:
+        InlineKeyboardMarkup with the new buttons
+    """
+    return build_main_kb(has_errors, lang)

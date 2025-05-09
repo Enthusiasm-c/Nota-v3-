@@ -1,38 +1,61 @@
-from app.formatter import build_report
-import re
+from app.formatters.report import build_report
+
 
 def test_report_layout_strict():
-    parsed_data = {
-        "supplier": "UD. WIDI WIGUNA",
-        "date": "2025-04-29"
-    }
+    parsed_data = {"supplier": "UD. WIDI WIGUNA", "date": "2025-04-29"}
     match_results = [
-        {"name": "olive oil orille 5liter", "qty": 2, "unit": "gh", "price": None, "status": "unknown"},
-        {"name": "lumajang", "qty": 30, "unit": "kg", "price": None, "status": "unknown"},
-        {"name": "verylongproductnamethatiswaytoolong", "qty": 1, "unit": "kg", "price": 1234.56, "status": "ok"},
+        {
+            "name": "olive oil orille 5liter",
+            "qty": 2,
+            "unit": "gh",
+            "price": None,
+            "status": "unknown",
+        },
+        {
+            "name": "lumajang",
+            "qty": 30,
+            "unit": "kg",
+            "price": None,
+            "status": "unknown",
+        },
+        {
+            "name": "verylongproductnamethatiswaytoolong",
+            "qty": 1,
+            "unit": "kg",
+            "price": 1234.56,
+            "status": "ok",
+        },
     ]
-    report = build_report(parsed_data, match_results)
-    # Проверяем шапку
-    assert re.search(r"📦 \*Supplier:\* UD\\\. WIDI WIGUNA", report)
-    assert "📆 *Invoice date:* 2025\\-04\\-29" in report
-    # Проверяем разделитель (строка из 10+ символов '─')
-    assert re.search(r"─{10,}", report)
-    # Проверяем, что ровно две строки-делителя (любая длина, но только строки)
-    divider_lines = [line for line in report.splitlines() if set(line) == {"─"}]
-    assert len(divider_lines) == 3, f"divider_lines: {divider_lines}"
-    # Проверяем code block для таблицы
+    report, _ = build_report(parsed_data, match_results)
+    # Проверяем шапку (левое выравнивание, PRICE вместо TOTAL)
     assert "#  NAME" in report
-    # Проверяем обрезку длинного имени
-    assert "verylongproductnameth…" in report
-    # Проверяем PRICE = '—' если None
-    assert "—" in report
-    # Проверяем итоговую строку
-    assert "ok" in report or "need check" in report
-    # Проверяем, что таблица внутри markdown code block (```)
-    assert report.count("```") == 2
-    table_block = report.split("```", 2)[1]
-    assert "#  NAME" in table_block
-    assert "verylongproductnameth…" in table_block
-    # Проверяем, что итоговая строка вне code block
-    summary_line = report.strip().split("\n")[-1]
-    assert "ok" in summary_line or "need check" in summary_line
+    assert "QTY" in report and "UNIT" in report and "PRICE" in report
+    # Supplier и дата
+    assert "Supplier:" in report
+    assert "UD. WIDI WIGUNA" in report
+    assert "Invoice date:" in report
+    assert "2025-04-29" in report
+    # Divider и <pre>
+    pad = lambda text, width: str(text)[:width].ljust(width)
+    header = f"#  {pad('NAME',14)}{pad('QTY',5)}{pad('UNIT',5)}{pad('PRICE',6)}! "
+    assert header in report
+    assert "<pre>" in report
+    # Проверяем, что имя товара обрезано по ширине столбца
+    assert "olive oil or…" in report
+    assert "verylongprod…" in report
+    # Проверяем, что для ошибочных позиций есть ❗
+    assert report.count('❗') >= 2  # две ошибочные строки
+    # Проверяем, что для корректной позиции (verylongproductnamethatiswaytoolong) нет ❗ в её строке
+    for line in report.splitlines():
+        if "verylongproductnamethatiswaytoolong" in line and '|' in line:
+            assert "❗" not in line
+    # Проверяем summary
+    assert "❗" in report or "<b>Нет ошибок. Все позиции распознаны корректно.</b>" in report
+    # Удалили символ 🚫 из отчёта
+    # Проверяем корректные данные
+    assert "lumajang" in report
+    # Проверяем summary
+    assert "Correct:" in report
+    assert "Issues:" in report
+    # Проверяем, что итоговая сумма не выводится (есть нераспознанные цены)
+    assert "Invoice total" not in report

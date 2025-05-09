@@ -1,6 +1,7 @@
 from app.ocr_cleaner import clean_ocr_response
 from app.models import ParsedData, Position
 
+
 def test_cleaner_positions_only():
     # Payload with only positions
     payload = '{"positions": [{"name": "Тунец", "qty": 2, "unit": "kg"}]}'

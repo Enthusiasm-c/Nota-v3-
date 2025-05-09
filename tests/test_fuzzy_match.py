@@ -1,6 +1,7 @@
 import pytest
 from app.matcher import fuzzy_best, match_positions
 
+
 def test_fuzzy_best():
     catalog = {"eggplant": "1", "egg": "2", "milk": "3"}
     best, score = fuzzy_best("egg", catalog)
@@ -9,6 +10,7 @@ def test_fuzzy_best():
     best, score = fuzzy_best("egplant", catalog)
     assert best == "eggplant"
     assert score >= 75  # Levenshtein similarity for a close typo
+
 
 def test_fuzzy_similar_length_products():
     products = [
@@ -28,6 +30,7 @@ def test_fuzzy_similar_length_products():
     assert all(s is not None for s in statuses)
     # All results should have unique statuses by position
 
+
 def test_fuzzy_substring_products():
     products = [
         {"id": "1", "name": "milk"},
@@ -45,6 +48,7 @@ def test_fuzzy_substring_products():
     assert len(statuses) == len(positions)
     assert all(s is not None for s in statuses)
 
+
 def test_fuzzy_multiple_typos_unique_assignment():
     products = [
         {"id": "1", "name": "apple"},
@@ -57,10 +61,11 @@ def test_fuzzy_multiple_typos_unique_assignment():
         {"name": "pineapl", "qty": 1, "unit": "pcs"},  # pineapple (typo)
     ]
     results = match_positions(positions, products, threshold=0.85)
-    # Only check that all results have a status 
+    # Only check that all results have a status
     statuses = [r.get("status") for r in results]
     assert len(statuses) == len(positions)
     assert all(s is not None for s in statuses)
+
 
 def test_fuzzy_no_match_below_threshold():
     products = [
@@ -72,6 +77,7 @@ def test_fuzzy_no_match_below_threshold():
     ]
     results = match_positions(positions, products, threshold=0.95)
     assert results[0]["status"] == "unknown"
+
 
 def test_fuzzy_rescue_in_match_positions():
     # Simulate a product catalog
