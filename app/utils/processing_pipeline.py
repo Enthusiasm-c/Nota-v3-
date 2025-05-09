@@ -10,7 +10,7 @@ import asyncio
 import time
 from typing import Tuple, Dict, List, Any, Optional
 from pathlib import Path
-from app.ocr import call_openai_ocr
+import app.ocr as ocr  # Импортируем весь модуль ocr вместо отдельной функции
 from app.models import ParsedData
 from app.utils.enhanced_logger import PerformanceTimer
 
@@ -50,29 +50,19 @@ async def process_invoice_pipeline(
     pipeline_start = time.time()
     
     # Шаг 1: Предобработка изображения
-    step_start = time.time()
-    try:
-        # Запускаем предобработку изображения в отдельном потоке
-        processed_bytes = await asyncio.to_thread(
-            ocr.preprocess_image_bytes, img_bytes, req_id
-        )
-        preprocess_time = time.time() - step_start
-        logger.info(f"[{req_id}] Image preprocessing completed in {preprocess_time:.2f} seconds")
-        
-        # Сохраняем предобработанное изображение во временный файл
-        with open(tmp_path, "wb") as f:
-            f.write(processed_bytes)
-            
-    except Exception as e:
-        logger.error(f"[{req_id}] Image preprocessing failed: {str(e)}")
-        # В случае ошибки предобработки, используем оригинальное изображение
-        processed_bytes = img_bytes
+    # Для простоты используем оригинальные байты изображения
+    processed_bytes = img_bytes
+    
+    # Сохраняем изображение во временный файл
+    with open(tmp_path, "wb") as f:
+        f.write(processed_bytes)
     
     # Шаг 2: OCR распознавание
     step_start = time.time()
     try:
         # Запускаем OCR в отдельном потоке для асинхронной работы
-        ocr_result = await asyncio.to_thread(ocr.process_image, tmp_path, req_id)
+        # Используем call_openai_ocr вместо process_image, так как это единственная доступная функция
+        ocr_result = await asyncio.to_thread(ocr.call_openai_ocr, processed_bytes, req_id)
         ocr_time = time.time() - step_start
         logger.info(f"[{req_id}] OCR processing completed in {ocr_time:.2f} seconds")
         

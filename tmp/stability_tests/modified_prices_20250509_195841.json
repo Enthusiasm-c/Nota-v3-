@@ -1,0 +1,998 @@
+{
+  "original": {
+    "supplier": "UD. WIDI WIGUNA",
+    "date": "2025-04-20",
+    "positions": [
+      {
+        "name": "mushroom",
+        "qty": 1,
+        "unit": "kg",
+        "price": 40000,
+        "total_price": 40000
+      },
+      {
+        "name": "romaine",
+        "qty": 1,
+        "unit": "kg",
+        "price": 55000,
+        "total_price": 55000
+      },
+      {
+        "name": "english spinach",
+        "qty": 0.5,
+        "unit": "kg",
+        "price": 80000,
+        "total_price": 40000
+      },
+      {
+        "name": "green bean",
+        "qty": 0.5,
+        "unit": "kg",
+        "price": 18000,
+        "total_price": 9000
+      },
+      {
+        "name": "tomato",
+        "qty": 2,
+        "unit": "kg",
+        "price": 20000,
+        "total_price": 40000
+      },
+      {
+        "name": "dill",
+        "qty": 0.05,
+        "unit": "kg",
+        "price": 90000,
+        "total_price": 4500
+      },
+      {
+        "name": "local spinach",
+        "qty": 2,
+        "unit": "kg",
+        "price": 15000,
+        "total_price": 30000
+      },
+      {
+        "name": "potato",
+        "qty": 15,
+        "unit": "kg",
+        "price": 25000,
+        "total_price": 375000
+      },
+      {
+        "name": "hazelnut",
+        "qty": 0.2,
+        "unit": "kg",
+        "price": 250000,
+        "total_price": 50000
+      },
+      {
+        "name": "baking paper",
+        "qty": 1,
+        "unit": "pack",
+        "price": 285000,
+        "total_price": 285000
+      },
+      {
+        "name": "egg",
+        "qty": 15,
+        "unit": "krat",
+        "price": 55000,
+        "total_price": 825000
+      },
+      {
+        "name": "flour terigu",
+        "qty": 4,
+        "unit": "kg",
+        "price": 16000,
+        "total_price": 64000
+      },
+      {
+        "name": "corn starch",
+        "qty": 2,
+        "unit": "pack",
+        "price": 23000,
+        "total_price": 46000
+      },
+      {
+        "name": "hand glove M black",
+        "qty": 1,
+        "unit": "box",
+        "price": 90000,
+        "total_price": 90000
+      },
+      {
+        "name": "chickpeas",
+        "qty": 12,
+        "unit": "can",
+        "price": 32000,
+        "total_price": 384000
+      },
+      {
+        "name": "sunkist",
+        "qty": 0.5,
+        "unit": "kg",
+        "price": 35000,
+        "total_price": 17500
+      },
+      {
+        "name": "pineapple",
+        "qty": 3,
+        "unit": "pcs",
+        "price": 8000,
+        "total_price": 24000
+      },
+      {
+        "name": "dragon fruit",
+        "qty": 4,
+        "unit": "kg",
+        "price": 25000,
+        "total_price": 100000
+      },
+      {
+        "name": "mango",
+        "qty": 2.5,
+        "unit": "kg",
+        "price": 70000,
+        "total_price": 175000
+      },
+      {
+        "name": "paprika merah",
+        "qty": 1,
+        "unit": "kg",
+        "price": 70000,
+        "total_price": 70000
+      },
+      {
+        "name": "zucchini",
+        "qty": 1.5,
+        "unit": "kg",
+        "price": 55000,
+        "total_price": 82500
+      },
+      {
+        "name": "cucumber",
+        "qty": 3,
+        "unit": "kg",
+        "price": 16000,
+        "total_price": 48000
+      },
+      {
+        "name": "chicken breast",
+        "qty": 5,
+        "unit": "kg",
+        "price": 57000,
+        "total_price": 285000
+      },
+      {
+        "name": "lumajang",
+        "qty": 20,
+        "unit": "kg",
+        "price": 22000,
+        "total_price": 440000
+      },
+      {
+        "name": "carrot",
+        "qty": 2,
+        "unit": "kg",
+        "price": 25000,
+        "total_price": 50000
+      },
+      {
+        "name": "lemon",
+        "qty": 4,
+        "unit": "kg",
+        "price": 35000,
+        "total_price": 140000
+      },
+      {
+        "name": "apple lokal",
+        "qty": 1,
+        "unit": "kg",
+        "price": 40000,
+        "total_price": 40000
+      },
+      {
+        "name": "watermelon",
+        "qty": 7,
+        "unit": "kg",
+        "price": 13000,
+        "total_price": 91000
+      },
+      {
+        "name": "lime",
+        "qty": 2,
+        "unit": "kg",
+        "price": 20000,
+        "total_price": 40000
+      },
+      {
+        "name": "caramel",
+        "qty": 5,
+        "unit": "btl",
+        "price": 35000,
+        "total_price": 175000
+      },
+      {
+        "name": "eggplant",
+        "qty": 1,
+        "unit": "kg",
+        "price": 15000,
+        "total_price": 15000
+      }
+    ],
+    "total_price": 4111500
+  },
+  "modified": {
+    "supplier": "UD. WIDI WIGUNA",
+    "date": "2025-04-20",
+    "positions": [
+      {
+        "name": "mushroom",
+        "qty": 1,
+        "unit": "kg",
+        "price": 40000,
+        "total_price": 40000
+      },
+      {
+        "name": "romaine",
+        "qty": 1,
+        "unit": "kg",
+        "price": 55000,
+        "total_price": 55000
+      },
+      {
+        "name": "english spinach",
+        "qty": 0.5,
+        "unit": "kg",
+        "price": 8000.0,
+        "total_price": 4000.0
+      },
+      {
+        "name": "green bean",
+        "qty": 0.5,
+        "unit": "kg",
+        "price": 180000,
+        "total_price": 90000
+      },
+      {
+        "name": "tomato",
+        "qty": 2,
+        "unit": "kg",
+        "price": 2000.0,
+        "total_price": 4000.0
+      },
+      {
+        "name": "dill",
+        "qty": 0.05,
+        "unit": "kg",
+        "price": 9000.0,
+        "total_price": 450.0
+      },
+      {
+        "name": "local spinach",
+        "qty": 2,
+        "unit": "kg",
+        "price": 1500.0,
+        "total_price": 3000.0
+      },
+      {
+        "name": "potato",
+        "qty": 15,
+        "unit": "kg",
+        "price": 25000,
+        "total_price": 375000
+      },
+      {
+        "name": "hazelnut",
+        "qty": 0.2,
+        "unit": "kg",
+        "price": 25000.0,
+        "total_price": 5000.0
+      },
+      {
+        "name": "baking paper",
+        "qty": 1,
+        "unit": "pack",
+        "price": 276193.0597454345,
+        "total_price": 276193.0597454345
+      },
+      {
+        "name": "egg",
+        "qty": 15,
+        "unit": "krat",
+        "price": 55000.0,
+        "total_price": 825000
+      },
+      {
+        "name": "flour terigu",
+        "qty": 4,
+        "unit": "kg",
+        "price": 15947.81180177139,
+        "total_price": 63791.24720708556
+      },
+      {
+        "name": "corn starch",
+        "qty": 2,
+        "unit": "pack",
+        "price": 22892.301444660454,
+        "total_price": 45784.60288932091
+      },
+      {
+        "name": "hand glove M black",
+        "qty": 1,
+        "unit": "box",
+        "price": 9000.0,
+        "total_price": 9000.0
+      },
+      {
+        "name": "chickpeas",
+        "qty": 12,
+        "unit": "can",
+        "price": 320000,
+        "total_price": 3840000
+      },
+      {
+        "name": "sunkist",
+        "qty": 0.5,
+        "unit": "kg",
+        "price": 35000,
+        "total_price": 17500
+      },
+      {
+        "name": "pineapple",
+        "qty": 3,
+        "unit": "pcs",
+        "price": 800.0,
+        "total_price": 2400.0
+      },
+      {
+        "name": "dragon fruit",
+        "qty": 4,
+        "unit": "kg",
+        "price": 2500.0,
+        "total_price": 10000.0
+      },
+      {
+        "name": "mango",
+        "qty": 2.5,
+        "unit": "kg",
+        "price": 70000.0,
+        "total_price": 175000
+      },
+      {
+        "name": "paprika merah",
+        "qty": 1,
+        "unit": "kg",
+        "price": 70000,
+        "total_price": 70000
+      },
+      {
+        "name": "zucchini",
+        "qty": 1.5,
+        "unit": "kg",
+        "price": 55000.0,
+        "total_price": 82500
+      },
+      {
+        "name": "cucumber",
+        "qty": 3,
+        "unit": "kg",
+        "price": 1600.0,
+        "total_price": 4800.0
+      },
+      {
+        "name": "chicken breast",
+        "qty": 5,
+        "unit": "kg",
+        "price": 570000,
+        "total_price": 2850000
+      },
+      {
+        "name": "lumajang",
+        "qty": 20,
+        "unit": "kg",
+        "price": 2200.0,
+        "total_price": 44000.0
+      },
+      {
+        "name": "carrot",
+        "qty": 2,
+        "unit": "kg",
+        "price": 250000,
+        "total_price": 500000
+      },
+      {
+        "name": "lemon",
+        "qty": 4,
+        "unit": "kg",
+        "price": 35000.0,
+        "total_price": 140000
+      },
+      {
+        "name": "apple lokal",
+        "qty": 1,
+        "unit": "kg",
+        "price": 41511.49084470621,
+        "total_price": 41511.49084470621
+      },
+      {
+        "name": "watermelon",
+        "qty": 7,
+        "unit": "kg",
+        "price": 130000,
+        "total_price": 910000
+      },
+      {
+        "name": "lime",
+        "qty": 2,
+        "unit": "kg",
+        "price": 2000.0,
+        "total_price": 4000.0
+      },
+      {
+        "name": "caramel",
+        "qty": 5,
+        "unit": "btl",
+        "price": 34865.9700094833,
+        "total_price": 174329.8500474165
+      },
+      {
+        "name": "eggplant",
+        "qty": 1,
+        "unit": "kg",
+        "price": 150000,
+        "total_price": 150000
+      }
+    ],
+    "total_price": 4111500
+  },
+  "processed": {
+    "supplier": "UD. WIDI WIGUNA",
+    "date": "2025-04-20",
+    "positions": [
+      {
+        "name": "mushroom",
+        "qty": 1.0,
+        "unit": "kg",
+        "price": 40000.0,
+        "price_per_unit": null,
+        "total_price": 40000.0
+      },
+      {
+        "name": "Romana",
+        "qty": 1.0,
+        "unit": "kg",
+        "price": 55000.0,
+        "price_per_unit": null,
+        "total_price": 55000.0
+      },
+      {
+        "name": "english spinach",
+        "qty": 0.5,
+        "unit": "kg",
+        "price": 8000.0,
+        "price_per_unit": null,
+        "total_price": 4000.0
+      },
+      {
+        "name": "green beans",
+        "qty": 0.5,
+        "unit": "kg",
+        "price": 180000.0,
+        "price_per_unit": null,
+        "total_price": 90000.0
+      },
+      {
+        "name": "Tomato",
+        "qty": 2.0,
+        "unit": "kg",
+        "price": 2000.0,
+        "price_per_unit": null,
+        "total_price": 4000.0
+      },
+      {
+        "name": "dill",
+        "qty": 0.05,
+        "unit": "kg",
+        "price": 9000.0,
+        "price_per_unit": null,
+        "total_price": 450.0
+      },
+      {
+        "name": "local spinach",
+        "qty": 2.0,
+        "unit": "kg",
+        "price": 1500.0,
+        "price_per_unit": null,
+        "total_price": 3000.0
+      },
+      {
+        "name": "potato",
+        "qty": 15.0,
+        "unit": "kg",
+        "price": 25000.0,
+        "price_per_unit": null,
+        "total_price": 375000.0
+      },
+      {
+        "name": "hazelnut",
+        "qty": 0.2,
+        "unit": "kg",
+        "price": 25000.0,
+        "price_per_unit": null,
+        "total_price": 5000.0
+      },
+      {
+        "name": "baking paper",
+        "qty": 1.0,
+        "unit": "pack",
+        "price": 276193.0597454345,
+        "price_per_unit": null,
+        "total_price": 276193.0597454345
+      },
+      {
+        "name": "egg",
+        "qty": 15.0,
+        "unit": "krat",
+        "price": 55000.0,
+        "price_per_unit": null,
+        "total_price": 825000.0
+      },
+      {
+        "name": "flour terigu",
+        "qty": 4.0,
+        "unit": "kg",
+        "price": 15947.81180177139,
+        "price_per_unit": null,
+        "total_price": 63791.24720708556
+      },
+      {
+        "name": "corn starch",
+        "qty": 2.0,
+        "unit": "pack",
+        "price": 22892.301444660454,
+        "price_per_unit": null,
+        "total_price": 45784.60288932091
+      },
+      {
+        "name": "hand glove M black",
+        "qty": 1.0,
+        "unit": "box",
+        "price": 9000.0,
+        "price_per_unit": null,
+        "total_price": 9000.0
+      },
+      {
+        "name": "chick peas",
+        "qty": 12.0,
+        "unit": "can",
+        "price": 320000.0,
+        "price_per_unit": null,
+        "total_price": 3840000.0
+      },
+      {
+        "name": "sunkist",
+        "qty": 0.5,
+        "unit": "kg",
+        "price": 35000.0,
+        "price_per_unit": null,
+        "total_price": 17500.0
+      },
+      {
+        "name": "pineapple",
+        "qty": 3.0,
+        "unit": "pcs",
+        "price": 800.0,
+        "price_per_unit": null,
+        "total_price": 2400.0
+      },
+      {
+        "name": "dragon fruit",
+        "qty": 4.0,
+        "unit": "kg",
+        "price": 2500.0,
+        "price_per_unit": null,
+        "total_price": 10000.0
+      },
+      {
+        "name": "Mango",
+        "qty": 2.5,
+        "unit": "kg",
+        "price": 70000.0,
+        "price_per_unit": null,
+        "total_price": 175000.0
+      },
+      {
+        "name": "paprika merah",
+        "qty": 1.0,
+        "unit": "kg",
+        "price": 70000.0,
+        "price_per_unit": null,
+        "total_price": 70000.0
+      },
+      {
+        "name": "zucchini",
+        "qty": 1.5,
+        "unit": "kg",
+        "price": 55000.0,
+        "price_per_unit": null,
+        "total_price": 82500.0
+      },
+      {
+        "name": "cucumber",
+        "qty": 3.0,
+        "unit": "kg",
+        "price": 1600.0,
+        "price_per_unit": null,
+        "total_price": 4800.0
+      },
+      {
+        "name": "chicken breast",
+        "qty": 5.0,
+        "unit": "kg",
+        "price": 570000.0,
+        "price_per_unit": null,
+        "total_price": 2850000.0
+      },
+      {
+        "name": "lumajang",
+        "qty": 20.0,
+        "unit": "kg",
+        "price": 2200.0,
+        "price_per_unit": null,
+        "total_price": 44000.0
+      },
+      {
+        "name": "carrot",
+        "qty": 2.0,
+        "unit": "kg",
+        "price": 250000.0,
+        "price_per_unit": null,
+        "total_price": 500000.0
+      },
+      {
+        "name": "lemon",
+        "qty": 4.0,
+        "unit": "kg",
+        "price": 35000.0,
+        "price_per_unit": null,
+        "total_price": 140000.0
+      },
+      {
+        "name": "apple lokal",
+        "qty": 1.0,
+        "unit": "kg",
+        "price": 41511.49084470621,
+        "price_per_unit": null,
+        "total_price": 41511.49084470621
+      },
+      {
+        "name": "watermelon",
+        "qty": 7.0,
+        "unit": "kg",
+        "price": 130000.0,
+        "price_per_unit": null,
+        "total_price": 910000.0
+      },
+      {
+        "name": "lime",
+        "qty": 2.0,
+        "unit": "kg",
+        "price": 2000.0,
+        "price_per_unit": null,
+        "total_price": 4000.0
+      },
+      {
+        "name": "caramel",
+        "qty": 5.0,
+        "unit": "btl",
+        "price": 34865.9700094833,
+        "price_per_unit": null,
+        "total_price": 174329.8500474165
+      },
+      {
+        "name": "eggplant",
+        "qty": 1.0,
+        "unit": "kg",
+        "price": 150000.0,
+        "price_per_unit": null,
+        "total_price": 150000.0
+      }
+    ],
+    "price": null,
+    "price_per_unit": null,
+    "total_price": 4111500.0,
+    "supplier_status": null
+  },
+  "matched": [
+    {
+      "name": "mushroom",
+      "qty": 1.0,
+      "unit": "kg",
+      "status": "ok",
+      "score": 54.52402597402597,
+      "price": 40000.0,
+      "line_total": 40000.0
+    },
+    {
+      "name": "Romana",
+      "qty": 1.0,
+      "unit": "kg",
+      "status": "ok",
+      "score": 62.48,
+      "price": 55000.0,
+      "line_total": 55000.0
+    },
+    {
+      "name": "english spinach",
+      "qty": 0.5,
+      "unit": "kg",
+      "status": "partial",
+      "score": 82.3424148606811,
+      "price": 8000.0,
+      "line_total": 4000.0
+    },
+    {
+      "name": "green beans",
+      "qty": 0.5,
+      "unit": "kg",
+      "status": "partial",
+      "score": 69.56105072463768,
+      "price": 180000.0,
+      "line_total": 90000.0
+    },
+    {
+      "name": "Tomato",
+      "qty": 2.0,
+      "unit": "kg",
+      "status": "ok",
+      "score": 72.7189393939394,
+      "price": 2000.0,
+      "line_total": 4000.0
+    },
+    {
+      "name": "dill",
+      "qty": 0.05,
+      "unit": "kg",
+      "status": "ok",
+      "score": 54.52402597402597,
+      "price": 9000.0,
+      "line_total": 450.0
+    },
+    {
+      "name": "local spinach",
+      "qty": 2.0,
+      "unit": "kg",
+      "status": "partial",
+      "score": 74.07050264550264,
+      "price": 1500.0,
+      "line_total": 3000.0
+    },
+    {
+      "name": "potato",
+      "qty": 15.0,
+      "unit": "kg",
+      "status": "ok",
+      "score": 66.66666666666667,
+      "price": 25000.0,
+      "line_total": 375000.0
+    },
+    {
+      "name": "hazelnut",
+      "qty": 0.2,
+      "unit": "kg",
+      "status": "ok",
+      "score": 71.41607142857143,
+      "price": 25000.0,
+      "line_total": 5000.0
+    },
+    {
+      "name": "baking paper",
+      "qty": 1.0,
+      "unit": "pack",
+      "status": "partial",
+      "score": 79.99615384615385,
+      "price": 276193.0597454345,
+      "line_total": 276193.0597454345
+    },
+    {
+      "name": "egg",
+      "qty": 15.0,
+      "unit": "krat",
+      "status": "ok",
+      "score": 44.419444444444444,
+      "price": 55000.0,
+      "line_total": 825000.0
+    },
+    {
+      "name": "flour terigu",
+      "qty": 4.0,
+      "unit": "kg",
+      "status": "ok",
+      "score": 47.996153846153845,
+      "price": 15947.81180177139,
+      "line_total": 63791.24720708556
+    },
+    {
+      "name": "corn starch",
+      "qty": 2.0,
+      "unit": "pack",
+      "status": "partial",
+      "score": 66.66212121212122,
+      "price": 22892.301444660454,
+      "line_total": 45784.60288932091
+    },
+    {
+      "name": "hand glove M black",
+      "qty": 1.0,
+      "unit": "box",
+      "status": "ok",
+      "score": 57.12063492063491,
+      "price": 9000.0,
+      "line_total": 9000.0
+    },
+    {
+      "name": "chick peas",
+      "qty": 12.0,
+      "unit": "can",
+      "status": "ok",
+      "score": 74.98571428571428,
+      "price": 320000.0,
+      "line_total": 3840000.0
+    },
+    {
+      "name": "sunkist",
+      "qty": 0.5,
+      "unit": "kg",
+      "status": "ok",
+      "score": 71.42857142857143,
+      "price": 35000.0,
+      "line_total": 17500.0
+    },
+    {
+      "name": "pineapple",
+      "qty": 3.0,
+      "unit": "pcs",
+      "status": "ok",
+      "score": 55.55555555555556,
+      "price": 800.0,
+      "line_total": 2400.0
+    },
+    {
+      "name": "dragon fruit",
+      "qty": 4.0,
+      "unit": "kg",
+      "status": "partial",
+      "score": 71.99615384615385,
+      "price": 2500.0,
+      "line_total": 10000.0
+    },
+    {
+      "name": "Mango",
+      "qty": 2.5,
+      "unit": "kg",
+      "status": "ok",
+      "score": 66.65666666666667,
+      "price": 70000.0,
+      "line_total": 175000.0
+    },
+    {
+      "name": "paprika merah",
+      "qty": 1.0,
+      "unit": "kg",
+      "status": "partial",
+      "score": 74.07050264550264,
+      "price": 70000.0,
+      "line_total": 70000.0
+    },
+    {
+      "name": "zucchini",
+      "qty": 1.5,
+      "unit": "kg",
+      "status": "ok",
+      "score": 61.51971153846154,
+      "price": 55000.0,
+      "line_total": 82500.0
+    },
+    {
+      "name": "cucumber",
+      "qty": 3.0,
+      "unit": "kg",
+      "status": "ok",
+      "score": 58.81797385620916,
+      "price": 1600.0,
+      "line_total": 4800.0
+    },
+    {
+      "name": "chicken breast",
+      "qty": 5.0,
+      "unit": "kg",
+      "status": "partial",
+      "score": 74.98571428571428,
+      "price": 570000.0,
+      "line_total": 2850000.0
+    },
+    {
+      "name": "lumajang",
+      "qty": 20.0,
+      "unit": "kg",
+      "status": "ok",
+      "score": 61.51971153846154,
+      "price": 2200.0,
+      "line_total": 44000.0
+    },
+    {
+      "name": "carrot",
+      "qty": 2.0,
+      "unit": "kg",
+      "status": "ok",
+      "score": 53.31666666666667,
+      "price": 250000.0,
+      "line_total": 500000.0
+    },
+    {
+      "name": "lemon",
+      "qty": 4.0,
+      "unit": "kg",
+      "status": "ok",
+      "score": 72.7189393939394,
+      "price": 35000.0,
+      "line_total": 140000.0
+    },
+    {
+      "name": "apple lokal",
+      "qty": 1.0,
+      "unit": "kg",
+      "status": "ok",
+      "score": 59.99090909090909,
+      "price": 41511.49084470621,
+      "line_total": 41511.49084470621
+    },
+    {
+      "name": "watermelon",
+      "qty": 7.0,
+      "unit": "kg",
+      "status": "ok",
+      "score": 70.0,
+      "price": 130000.0,
+      "line_total": 910000.0
+    },
+    {
+      "name": "lime",
+      "qty": 2.0,
+      "unit": "kg",
+      "status": "ok",
+      "score": 54.52402597402597,
+      "price": 2000.0,
+      "line_total": 4000.0
+    },
+    {
+      "name": "caramel",
+      "qty": 5.0,
+      "unit": "btl",
+      "status": "ok",
+      "score": 58.80852941176471,
+      "price": 34865.9700094833,
+      "line_total": 174329.85004741652
+    },
+    {
+      "name": "eggplant",
+      "qty": 1.0,
+      "unit": "kg",
+      "status": "ok",
+      "score": 55.54555555555556,
+      "price": 150000.0,
+      "line_total": 150000.0
+    }
+  ],
+  "report": {
+    "modification_type": "prices",
+    "total_positions": 31,
+    "ok_matches": 23,
+    "partial_matches": 8,
+    "unknown_matches": 0,
+    "success_rate": 1.0,
+    "error": null
+  }
+}

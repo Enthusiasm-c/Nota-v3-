@@ -12,11 +12,18 @@ import logging
 import asyncio
 from typing import Dict, List, Any, Optional, Tuple
 import base64
+import openai
 
 from app.detectors.table.factory import get_detector
 from app.validators.pipeline import ValidationPipeline
 from paddleocr import PaddleOCR
 from app.ocr import call_openai_ocr
+from app.models import ParsedData
+from app.postprocessing import postprocess_parsed_data
+from app.ocr import extract_text
+from app.ocr_prompt import generate_gpt_prompt, OCR_SYSTEM_PROMPT
+from app.utils.file_handler import save_to_json, read_image
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -251,3 +258,35 @@ class OCRPipeline:
         self._last_gpt4o_count = gpt4o_count
         self._last_total_cells = total_cells
         return lines 
+
+def send_to_gpt(text: str, req_id: str) -> dict:
+    """
+    Send OCR text to OpenAI API for processing.
+    
+    Args:
+        text: Extracted OCR text
+        req_id: Request ID for tracking
+        
+    Returns:
+        JSON response from OpenAI API
+    """
+    logger.info(f"[{req_id}] Sending to GPT: {len(text)} chars")
+    
+    try:
+        response = openai.chat.completions.create(
+            model=settings.OPENAI_GPT_MODEL,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": OCR_SYSTEM_PROMPT},
+                {"role": "user", "content": text}
+            ],
+            temperature=0.2,
+            seed=777,
+        )
+        logger.info(f"[{req_id}] Got GPT response, usage: {response.usage}")
+        result = json.loads(response.choices[0].message.content)
+        save_to_json(result, f"tmp/ocr_result_{req_id}.json")
+        return result
+    except Exception as e:
+        logger.error(f"[{req_id}] Error sending to GPT: {e}")
+        raise RuntimeError(f"Error calling OpenAI API: {e}") 

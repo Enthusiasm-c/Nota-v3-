@@ -1,0 +1,60 @@
+./run_forever.sh: line 34: /Users/Denis/notav3: No such file or directory
+./run_forever.sh: line 34: /Users/Denis/notav3: No such file or directory
+./run_forever.sh: line 34: /Users/Denis/notav3: No such file or directory
+./run_forever.sh: line 34: /Users/Denis/notav3: No such file or directory
+./run_forever.sh: line 34: /Users/Denis/notav3: No such file or directory
+./run_forever.sh: line 34: /Users/Denis/notav3: No such file or directory
+./run_forever.sh: line 34: /Users/Denis/notav3: No such file or directory
+./run_forever.sh: line 34: /Users/Denis/notav3: No such file or directory
+./run_forever.sh: line 34: /Users/Denis/notav3: No such file or directory
+./run_forever.sh: line 34: /Users/Denis/notav3: No such file or directory
+./run_forever.sh: line 34: /Users/Denis/notav3: No such file or directory
+./run_forever.sh: line 34: /Users/Denis/notav3: No such file or directory
+./run_forever.sh: line 34: /Users/Denis/notav3: No such file or directory
+./run_forever.sh: line 34: /Users/Denis/notav3: No such file or directory
+./run_forever.sh: line 34: /Users/Denis/notav3: No such file or directory
+./run_forever.sh: line 34: /Users/Denis/notav3: No such file or directory
+2025-05-09 18:24:52,808 - app - INFO - Logging configured for development environment with 3 handlers
+2025-05-09 18:24:52,808 - app.utils.file_manager - DEBUG - Temp directory ensured: /var/folders/xh/4zqpdg1n2xv134d3h8mb7gdm0000gp/T/nota
+2025-05-09 18:24:52,808 - app.utils.file_manager - DEBUG - Temp directory ensured: tmp
+2025-05-09 18:24:52,823 - aiogram.dispatcher - INFO - Start polling
+2025-05-09 18:24:52,824 - app.assistants.thread_pool - INFO - Инициализация пула потоков OpenAI, размер: 8
+2025-05-09 18:24:52,826 - redis_cache - WARNING - Redis недоступен (Error 61 connecting to localhost:6379. Connection refused.), используем локальный кэш
+2025-05-09 18:24:52,826 - app.assistants.thread_pool - DEBUG - Создание нового потока OpenAI
+2025-05-09 18:24:52,966 - openai._base_client - INFO - Retrying request to /threads in 0.383232 seconds
+2025-05-09 18:24:53,431 - openai._base_client - INFO - Retrying request to /threads in 0.822419 seconds
+2025-05-09 18:24:53,859 - aiogram.dispatcher - INFO - Run polling for bot @AI_akuntan_bot id=7869354531 - 'NotaAI'
+2025-05-09 18:24:54,338 - app.assistants.thread_pool - ERROR - Ошибка при создании потока 0: Connection error.
+2025-05-09 18:24:54,340 - app.assistants.thread_pool - DEBUG - Создание нового потока OpenAI
+2025-05-09 18:24:54,416 - openai._base_client - INFO - Retrying request to /threads in 0.438007 seconds
+2025-05-09 18:24:54,934 - openai._base_client - INFO - Retrying request to /threads in 0.804331 seconds
+2025-05-09 18:24:55,821 - app.assistants.thread_pool - ERROR - Ошибка при создании потока 1: Connection error.
+2025-05-09 18:24:55,822 - app.assistants.thread_pool - DEBUG - Создание нового потока OpenAI
+2025-05-09 18:24:55,896 - openai._base_client - INFO - Retrying request to /threads in 0.404967 seconds
+2025-05-09 18:24:56,376 - openai._base_client - INFO - Retrying request to /threads in 0.801659 seconds
+2025-05-09 18:24:57,268 - app.assistants.thread_pool - ERROR - Ошибка при создании потока 2: Connection error.
+2025-05-09 18:24:57,268 - app.assistants.thread_pool - DEBUG - Создание нового потока OpenAI
+2025-05-09 18:24:57,349 - openai._base_client - INFO - Retrying request to /threads in 0.471248 seconds
+2025-05-09 18:24:57,902 - openai._base_client - INFO - Retrying request to /threads in 0.751138 seconds
+2025-05-09 18:24:58,384 - aiogram.dispatcher - ERROR - Failed to fetch updates - TelegramConflictError: Telegram server says - Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2025-05-09 18:24:58,384 - aiogram.dispatcher - WARNING - Sleep for 1.000000 seconds and try again... (tryings = 0, bot id = 7869354531)
+2025-05-09 18:24:58,732 - app.assistants.thread_pool - ERROR - Ошибка при создании потока 3: Connection error.
+2025-05-09 18:24:58,732 - app.assistants.thread_pool - DEBUG - Создание нового потока OpenAI
+2025-05-09 18:24:58,805 - openai._base_client - INFO - Retrying request to /threads in 0.470027 seconds
+2025-05-09 18:24:59,362 - openai._base_client - INFO - Retrying request to /threads in 0.754768 seconds
+2025-05-09 18:25:00,203 - app.assistants.thread_pool - ERROR - Ошибка при создании потока 4: Connection error.
+2025-05-09 18:25:00,204 - app.assistants.thread_pool - DEBUG - Создание нового потока OpenAI
+2025-05-09 18:25:00,280 - openai._base_client - INFO - Retrying request to /threads in 0.497079 seconds
+2025-05-09 18:25:00,861 - openai._base_client - INFO - Retrying request to /threads in 0.968557 seconds
+2025-05-09 18:25:01,912 - app.assistants.thread_pool - ERROR - Ошибка при создании потока 5: Connection error.
+2025-05-09 18:25:01,913 - app.assistants.thread_pool - DEBUG - Создание нового потока OpenAI
+2025-05-09 18:25:01,990 - openai._base_client - INFO - Retrying request to /threads in 0.389507 seconds
+2025-05-09 18:25:02,464 - openai._base_client - INFO - Retrying request to /threads in 0.869198 seconds
+2025-05-09 18:25:03,408 - app.assistants.thread_pool - ERROR - Ошибка при создании потока 6: Connection error.
+2025-05-09 18:25:03,408 - app.assistants.thread_pool - DEBUG - Создание нового потока OpenAI
+2025-05-09 18:25:03,486 - openai._base_client - INFO - Retrying request to /threads in 0.499137 seconds
+2025-05-09 18:25:04,067 - openai._base_client - INFO - Retrying request to /threads in 0.821799 seconds
+2025-05-09 18:25:04,270 - aiogram.dispatcher - ERROR - Failed to fetch updates - TelegramConflictError: Telegram server says - Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2025-05-09 18:25:04,270 - aiogram.dispatcher - WARNING - Sleep for 1.477133 seconds and try again... (tryings = 1, bot id = 7869354531)
+2025-05-09 18:25:04,966 - app.assistants.thread_pool - ERROR - Ошибка при создании потока 7: Connection error.
+2025-05-09 18:25:04,966 - app.assistants.thread_pool - INFO - Пул потоков создан, размер: 0

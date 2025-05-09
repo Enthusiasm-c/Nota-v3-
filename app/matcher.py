@@ -86,6 +86,54 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Словарь синонимов и вариантов написания
+PRODUCT_VARIANTS = {
+    "romaine": ["romana", "romaine lettuce"],
+    "chickpeas": ["chick peas", "chickpea", "chick pea"],
+    "green bean": ["green beans"],
+    "english spinach": ["english spinach"],
+    "tomato": ["tomatoes"],
+    "eggplant": ["aubergine"],
+    "watermelon": ["water melon"],
+    "chili": ["chilli"],
+    "mango": ["mangoes"]
+}
+
+# Словарь для приведения форм единственного/множественного числа
+SINGULAR_PLURAL_FORMS = [
+    ("beans", "bean"),
+    ("peas", "pea"),
+    ("tomatoes", "tomato"),
+    ("potatoes", "potato"),
+    ("carrots", "carrot"),
+    ("apples", "apple"),
+    ("oranges", "orange"),
+    ("mangoes", "mango"),
+    ("lemons", "lemon"),
+    ("limes", "lime")
+]
+
+def normalize_product_name(name):
+    """
+    Нормализует название продукта, приводя множественные формы к единственным
+    и обрабатывая известные варианты написания.
+    """
+    if not name:
+        return ""
+    
+    name = name.lower().strip()
+    
+    # Проверяем в словаре синонимов
+    for base_name, variants in PRODUCT_VARIANTS.items():
+        if name in variants or name == base_name:
+            return base_name
+    
+    # Обрабатываем множественные/единственные формы
+    for plural, singular in SINGULAR_PLURAL_FORMS:
+        if name.endswith(plural):
+            return name[:-len(plural)] + singular
+        
+    return name
 
 def get_normalized_strings(s1: str, s2: str) -> Tuple[str, str]:
     if s1 is None:
@@ -111,6 +159,14 @@ def calculate_string_similarity(s1: str, s2: str) -> float:
     if s1 == s2:
         return 1.0
 
+    # Нормализуем названия продуктов
+    s1_norm = normalize_product_name(s1)
+    s2_norm = normalize_product_name(s2)
+    
+    # Если после нормализации названия совпали
+    if s1_norm == s2_norm:
+        return 0.95  # Даем высокий, но не идеальный вес, чтобы отличать от полных совпадений
+    
     # Проверка на совпадение отдельных слов
     words1 = s1.split()
     words2 = s2.split()
@@ -125,6 +181,12 @@ def calculate_string_similarity(s1: str, s2: str) -> float:
             word1 = words1[non_matching_idx]
             word2 = words2[non_matching_idx]
             
+            # Проверка на варианты единственного/множественного числа
+            for plural, singular in SINGULAR_PLURAL_FORMS:
+                if (word1 == plural and word2 == singular) or (word1 == singular and word2 == plural):
+                    logger.info(f"Обнаружены формы единственного/множественного числа: '{word1}' и '{word2}' в '{s1}' и '{s2}'")
+                    return 0.95  # Высокое сходство для форм единственного/множественного числа
+            
             # Проверка по списку известных похожих слов
             for sim_pair in getattr(settings, 'SIMILAR_WORD_PAIRS', []):
                 if (word1, word2) == sim_pair or (word2, word1) == sim_pair:
@@ -137,6 +199,14 @@ def calculate_string_similarity(s1: str, s2: str) -> float:
                 logger.warning(f"Обнаружены похожие, но разные слова: '{word1}' и '{word2}' в '{s1}' и '{s2}'")
     
     ratio = levenshtein_ratio(s1, s2)
+    
+    # Дополнительная проверка для продуктов
+    # Проверяем, являются ли строки вариантами одного и того же товара
+    for base_name, variants in PRODUCT_VARIANTS.items():
+        if (s1 in variants or s1 == base_name) and (s2 in variants or s2 == base_name):
+            logger.info(f"Найдены синонимы в словаре вариантов: '{s1}' и '{s2}'")
+            return 0.95  # Высокое сходство для известных вариантов
+    
     if s1 in s2 or s2 in s1:
         ratio = min(ratio + settings.MATCH_EXACT_BONUS, 1.0)
 
