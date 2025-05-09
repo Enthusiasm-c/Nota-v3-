@@ -4,7 +4,6 @@ aiohttp==3.11.18
 aiofiles==24.1.0
 Pillow==11.2.1
 numpy==2.0.2
-opencv-python==4.11.0.86 # важна версия!
 openai>=1.55.3
 pydantic>=2.11.0
 pydantic-settings>=2.9.0

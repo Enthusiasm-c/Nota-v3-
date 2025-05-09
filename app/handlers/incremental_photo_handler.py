@@ -205,13 +205,20 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
             if ocr_result and hasattr(ocr_result, 'supplier') and ocr_result.supplier and ocr_result.supplier.strip():
                 supplier_match = matcher.match_supplier(ocr_result.supplier, suppliers, threshold=0.9)
                 
-                if supplier_match and supplier_match.get("status") == "ok":
+                if supplier_match and (
+                    (isinstance(supplier_match, dict) and supplier_match.get("status") == "ok") or
+                    (hasattr(supplier_match, "status") and getattr(supplier_match, "status", None) == "ok")
+                ):
                     # Replace supplier name with the one from database if it's a good match
                     original_supplier = ocr_result.supplier
-                    ocr_result.supplier = supplier_match.get("name")
+                    # Универсальный способ получить имя
+                    if isinstance(supplier_match, dict):
+                        ocr_result.supplier = supplier_match.get("name")
+                    else:
+                        ocr_result.supplier = getattr(supplier_match, "name", original_supplier)
                     
                     # Log the supplier matching
-                    logger.info(f"[{req_id}] Matched supplier '{original_supplier}' to '{ocr_result.supplier}' with score {supplier_match.get('score', 0):.2f}")
+                    logger.info(f"[{req_id}] Matched supplier '{original_supplier}' to '{ocr_result.supplier}' with score {supplier_match.get('score', getattr(supplier_match, 'score', 0)):.2f}")
                     
                     # Update UI with matched supplier
                     try:
