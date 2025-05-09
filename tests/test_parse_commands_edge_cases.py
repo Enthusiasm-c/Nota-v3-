@@ -49,6 +49,20 @@ from app.assistants.client import parse_edit_command
         {"action": "set_price", "line": 0, "price": 10.5},
         {"action": "set_qty", "line": 1, "qty": 3.14}
     ]),
+    # Формат с двоеточием и множественными параметрами
+    ("line 3: name Cream Cheese; price 250; qty 15; unit krat", None, [
+        {"action": "set_name", "line": 2, "name": "Cream Cheese"},
+        {"action": "set_price", "line": 2, "price": 250.0},
+        {"action": "set_qty", "line": 2, "qty": 15.0},
+        {"action": "set_unit", "line": 2, "unit": "krat"}
+    ]),
+    # Формат с множественными параметрами в одной строке
+    ("line 3 name Cheese price 250 qty 5 unit kg", None, [
+        {"action": "set_name", "line": 2, "name": "Cheese"},
+        {"action": "set_price", "line": 2, "price": 250.0},
+        {"action": "set_qty", "line": 2, "qty": 5.0},
+        {"action": "set_unit", "line": 2, "unit": "kg"}
+    ]),
 ])
 def test_parse_commands_edge_cases(user_input, invoice_lines, expected):
     result = parse_edit_command(user_input, invoice_lines) if invoice_lines is not None else parse_edit_command(user_input)

@@ -1,165 +1,196 @@
 """
-Модуль для управления пулом потоков OpenAI.
-Обеспечивает предварительное создание thread для ускорения работы с OpenAI Assistant API.
+Модуль для управления пулом потоков OpenAI с оптимизациями скорости.
+Создает и поддерживает пул предварительно инициализированных потоков для ускорения обработки запросов.
 """
 
 import asyncio
 import logging
-from typing import List, Optional
+import os
 import time
+from typing import List, Optional, Set
+import random
+from app.utils.redis_cache import cache_get, cache_set
 
 logger = logging.getLogger(__name__)
 
-# Глобальный пул предсозданных threads
-_threads_pool = []
-_pool_lock = asyncio.Lock()
-_last_refill = 0
-POOL_SIZE = 5
-REFILL_INTERVAL = 60  # секунды между пополнениями пула
+# Максимальное количество потоков в пуле
+MAX_POOL_SIZE = 8  # 8 потоков в пуле
 
-async def initialize_pool(client, size: int = POOL_SIZE):
+# Ключ для хранения пула в Redis
+POOL_KEY = "openai:thread_pool"
+
+# Время жизни потока в пуле (в секундах)
+THREAD_TTL = 3600  # 1 час
+
+# Set для отслеживания потоков в процессе создания
+creating_threads: Set[str] = set()
+
+async def initialize_pool(client, size: int = MAX_POOL_SIZE) -> List[str]:
     """
-    Инициализировать пул потоков при запуске.
+    Предварительно создает пул потоков OpenAI для быстрого использования
     
     Args:
-        client: OpenAI API клиент
-        size: Размер пула потоков
-    """
-    global _threads_pool
-    
-    async with _pool_lock:
-        logger.info(f"Initializing OpenAI thread pool with {size} threads")
-        for _ in range(size):
-            try:
-                thread = client.beta.threads.create()
-                _threads_pool.append(thread.id)
-                logger.debug(f"Created thread: {thread.id}")
-                # Небольшая задержка чтобы не нагружать API
-                await asyncio.sleep(0.2)
-            except Exception as e:
-                logger.error(f"Error creating thread: {e}")
+        client: OpenAI клиент
+        size: Желаемый размер пула
         
-        logger.info(f"Thread pool initialized with {len(_threads_pool)} threads")
+    Returns:
+        List[str]: Список идентификаторов созданных потоков
+    """
+    logger.info(f"Инициализация пула потоков OpenAI, размер: {size}")
+    
+    # Проверяем, существует ли уже пул в Redis
+    pool = cache_get(POOL_KEY)
+    if pool:
+        try:
+            thread_ids = pool.split(",")
+            logger.info(f"Загружен существующий пул потоков: {len(thread_ids)} потоков")
+            
+            # Проверяем, нужны ли дополнительные потоки
+            if len(thread_ids) >= size:
+                return thread_ids[:size]
+                
+            # Создаем дополнительные потоки до требуемого размера
+            needed = size - len(thread_ids)
+            logger.info(f"Требуется создать еще {needed} потоков")
+            
+            new_threads = []
+            for _ in range(needed):
+                thread_id = await create_thread(client)
+                new_threads.append(thread_id)
+                
+            # Обновляем пул в Redis
+            updated_pool = thread_ids + new_threads
+            cache_set(POOL_KEY, ",".join(updated_pool), ex=THREAD_TTL)
+            
+            return updated_pool
+        except Exception as e:
+            logger.error(f"Ошибка при загрузке пула из Redis: {e}")
+    
+    # Создаем новый пул
+    thread_ids = []
+    for i in range(size):
+        try:
+            thread_id = await create_thread(client)
+            thread_ids.append(thread_id)
+        except Exception as e:
+            logger.error(f"Ошибка при создании потока {i}: {e}")
+    
+    # Сохраняем пул в Redis
+    if thread_ids:
+        cache_set(POOL_KEY, ",".join(thread_ids), ex=THREAD_TTL)
+    
+    logger.info(f"Пул потоков создан, размер: {len(thread_ids)}")
+    return thread_ids
+
+async def create_thread(client) -> str:
+    """
+    Создает новый поток OpenAI
+    
+    Args:
+        client: OpenAI клиент
+        
+    Returns:
+        str: Идентификатор созданного потока
+    """
+    logger.debug("Создание нового потока OpenAI")
+    # По возможности использовать асинхронный вызов для скорости
+    thread = await asyncio.to_thread(client.beta.threads.create)
+    thread_id = thread.id
+    logger.debug(f"Создан новый поток: {thread_id}")
+    return thread_id
 
 async def get_thread(client) -> str:
     """
-    Получить готовый thread из пула или создать новый.
+    Получает поток из пула или создает новый для использования
     
     Args:
-        client: OpenAI API клиент
+        client: OpenAI клиент
         
     Returns:
-        str: ID потока
+        str: Идентификатор потока для использования
     """
-    global _threads_pool, _last_refill
+    # Проверяем пул в Redis
+    pool = cache_get(POOL_KEY)
     
-    # Пробуем взять thread из пула
-    async with _pool_lock:
-        if _threads_pool:
-            thread_id = _threads_pool.pop()
-            logger.debug(f"Using thread from pool: {thread_id}")
+    if pool:
+        thread_ids = pool.split(",")
+        if thread_ids:
+            # Выбираем случайный поток из пула для равномерной нагрузки
+            thread_id = random.choice(thread_ids)
             
-            # Проверяем, нужно ли пополнить пул
-            now = time.time()
-            if len(_threads_pool) <= POOL_SIZE // 2 and now - _last_refill > REFILL_INTERVAL:
-                _last_refill = now
-                asyncio.create_task(_refill_pool(client))
+            # Удаляем выбранный поток из пула
+            thread_ids.remove(thread_id)
+            
+            # Обновляем пул в Redis
+            if thread_ids:
+                cache_set(POOL_KEY, ",".join(thread_ids), ex=THREAD_TTL)
+            else:
+                # Если пул пуст, удаляем ключ
+                cache_set(POOL_KEY, "", ex=1)
+                
+            # Асинхронно пополняем пул
+            asyncio.create_task(refill_pool(client))
                 
             return thread_id
     
-    # Если пул пуст, создаем новый thread
-    try:
-        thread = client.beta.threads.create()
-        logger.info(f"Created new thread outside pool: {thread.id}")
-        return thread.id
-    except Exception as e:
-        logger.error(f"Error creating thread: {e}")
-        raise
+    # Если пул пуст или не существует, создаем новый поток
+    return await create_thread(client)
 
-_refill_tasks = set()  # Keep track of running refill tasks
-_shutdown_flag = asyncio.Event()  # Event to signal shutdown
-
-async def _refill_pool(client, count: int = POOL_SIZE // 2):
+async def refill_pool(client, target_size: int = MAX_POOL_SIZE) -> None:
     """
-    Асинхронно пополнить пул в фоновом режиме.
+    Асинхронно пополняет пул потоков до целевого размера
     
     Args:
-        client: OpenAI API клиент
-        count: Количество потоков для добавления
+        client: OpenAI клиент
+        target_size: Целевой размер пула
     """
-    global _threads_pool, _refill_tasks
+    pool = cache_get(POOL_KEY)
+    current_size = 0
     
-    # Register this task in the set of running tasks
-    task_id = id(asyncio.current_task())
-    _refill_tasks.add(task_id)
+    if pool:
+        thread_ids = pool.split(",")
+        current_size = len(thread_ids)
     
-    try:
-        logger.info(f"Refilling thread pool with {count} threads")
-        new_threads = []
-        
-        for i in range(count):
-            # Check if shutdown was requested
-            if _shutdown_flag.is_set():
-                logger.info("Shutdown requested, stopping thread pool refill")
-                break
-                
-            try:
-                thread = client.beta.threads.create()
-                new_threads.append(thread.id)
-                logger.debug(f"Added thread to pool: {thread.id} ({i+1}/{count})")
-                # Небольшая задержка чтобы не нагружать API
-                await asyncio.sleep(0.2)
-            except Exception as e:
-                logger.error(f"Error refilling pool: {e}")
-        
-        # Only update the pool if we created any threads and shutdown wasn't requested
-        if new_threads and not _shutdown_flag.is_set():
-            async with _pool_lock:
-                _threads_pool.extend(new_threads)
-                logger.info(f"Pool refilled, current size: {len(_threads_pool)}")
-    finally:
-        # Remove this task from the set regardless of success/failure
-        _refill_tasks.discard(task_id)
-
-async def shutdown_thread_pool():
-    """
-    Gracefully shut down the thread pool and cancel any ongoing refill tasks.
-    """
-    logger.info("Shutting down OpenAI thread pool")
+    if current_size >= target_size:
+        return
     
-    # Signal all refill tasks to stop
-    _shutdown_flag.set()
+    # Создаем новые потоки асинхронно
+    needed = target_size - current_size
+    new_threads = []
     
-    # Wait a short time for tasks to notice the shutdown flag
-    await asyncio.sleep(0.5)
-    
-    # Cancel any remaining refill tasks
-    tasks_to_cancel = []
-    for task_id in _refill_tasks.copy():
-        for task in asyncio.all_tasks():
-            if id(task) == task_id:
-                tasks_to_cancel.append(task)
-                break
-    
-    if tasks_to_cancel:
-        logger.info(f"Cancelling {len(tasks_to_cancel)} ongoing thread pool refill tasks")
-        for task in tasks_to_cancel:
-            task.cancel()
-        
-        # Wait for tasks to complete cancellation
+    for _ in range(needed):
         try:
-            await asyncio.wait(tasks_to_cancel, timeout=2.0)
-            logger.info("All thread pool tasks cancelled")
-        except asyncio.TimeoutError:
-            logger.warning("Timeout waiting for thread pool tasks to cancel")
+            thread_id = await create_thread(client)
+            new_threads.append(thread_id)
+        except Exception as e:
+            logger.error(f"Ошибка при пополнении пула: {e}")
     
-    logger.info("Thread pool shutdown complete")
+    # Обновляем пул в Redis
+    if new_threads:
+        all_threads = (thread_ids if pool else []) + new_threads
+        cache_set(POOL_KEY, ",".join(all_threads), ex=THREAD_TTL)
+        
+    logger.debug(f"Пул пополнен: добавлено {len(new_threads)} потоков, всего {current_size + len(new_threads)}")
 
-def get_pool_size() -> int:
+def release_thread(thread_id: str) -> None:
     """
-    Получить текущий размер пула.
+    Возвращает поток обратно в пул для повторного использования
     
-    Returns:
-        int: Количество доступных потоков в пуле
+    Args:
+        thread_id: Идентификатор потока для возврата в пул
     """
-    return len(_threads_pool)
+    if not thread_id:
+        return
+        
+    # Проверяем пул в Redis
+    pool = cache_get(POOL_KEY)
+    thread_ids = []
+    
+    if pool:
+        thread_ids = pool.split(",")
+    
+    # Добавляем поток обратно в пул, если он еще не там
+    if thread_id not in thread_ids:
+        thread_ids.append(thread_id)
+        cache_set(POOL_KEY, ",".join(thread_ids), ex=THREAD_TTL)
+        logger.debug(f"Поток {thread_id} возвращен в пул, размер пула: {len(thread_ids)}")

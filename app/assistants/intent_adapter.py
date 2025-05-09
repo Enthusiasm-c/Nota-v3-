@@ -11,8 +11,15 @@ import re
 import logging
 from datetime import datetime
 from typing import Dict, Any, Optional, List, Union
+from app.utils.redis_cache import cache_get, cache_set
 
 logger = logging.getLogger(__name__)
+
+# Redis TTL для кешированных команд (12 часов)
+INTENT_CACHE_TTL = 3600 * 12
+
+# Ключ для самых распространенных паттернов команд
+COMMON_PATTERNS_KEY = "intent:common_patterns"
 
 class IntentAdapter:
     """
@@ -51,6 +58,33 @@ class IntentAdapter:
         "jun": 6, "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12
     }
     
+    # Паттерны регулярных выражений для быстрого распознавания команд
+    FAST_PATTERNS = {
+        # Цена: строка 1 цена 100
+        r'(?:строк[аи]?|line|row)\s+(\d+).*?(?:цен[аыу]|price)\s+(\d+)': 
+            lambda m: {"action": "set_price", "line_index": int(m.group(1))-1, "value": m.group(2)},
+        
+        # Количество: строка 2 количество 5
+        r'(?:строк[аи]?|line|row)\s+(\d+).*?(?:кол-во|количество|qty|quantity)\s+(\d+)': 
+            lambda m: {"action": "set_quantity", "line_index": int(m.group(1))-1, "value": m.group(2)},
+        
+        # Единица измерения: строка 3 ед изм кг
+        r'(?:строк[аи]?|line|row)\s+(\d+).*?(?:ед\.?\s*изм\.?|unit)\s+(\w+)': 
+            lambda m: {"action": "set_unit", "line_index": int(m.group(1))-1, "value": m.group(2)},
+        
+        # Название: строка 1 название Apple
+        r'(?:строк[аи]?|line|row)\s+(\d+).*?(?:имя|название|name)\s+(.+?)(?:$|\s+(?:цен|кол|ед))': 
+            lambda m: {"action": "set_name", "line_index": int(m.group(1))-1, "value": m.group(2).strip()},
+        
+        # Дата: дата 15 мая
+        r'дат[аы]?\s+(\d{1,2})\s+(января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)':
+            lambda m: {"action": "set_date", "value": f"{datetime.now().year}-{IntentAdapter.MONTHS.get(m.group(2), 1):02d}-{int(m.group(1)):02d}"},
+        
+        # Дата числовая: дата 15.05.2023
+        r'дат[аы]?\s+(\d{1,2})[./](\d{1,2})(?:[./](\d{4}))?':
+            lambda m: {"action": "set_date", "value": f"{m.group(3) or datetime.now().year}-{int(m.group(2)):02d}-{int(m.group(1)):02d}"}
+    }
+    
     @classmethod
     def adapt(cls, response: Union[str, Dict[str, Any]]) -> Dict[str, Any]:
         """
@@ -63,6 +97,25 @@ class IntentAdapter:
             Dict: Нормализованная команда в формате {"action": "...", ...}
         """
         try:
+            # ОПТИМИЗАЦИЯ: Быстрая обработка строковых команд через регулярные выражения
+            if isinstance(response, str):
+                fast_result = cls._fast_recognize(response)
+                if fast_result:
+                    logger.info(f"[IntentAdapter] Быстрое распознавание команды: {fast_result.get('action')}")
+                    return fast_result
+                
+                # Попытка кешировать и получить из кеша
+                cache_key = f"intent:normalized:{cls._normalize_for_cache(response)}"
+                cached_intent = cache_get(cache_key)
+                if cached_intent:
+                    try:
+                        intent = json.loads(cached_intent)
+                        logger.info(f"[IntentAdapter] Использую кешированную команду: {intent.get('action')}")
+                        return intent
+                    except Exception as cache_err:
+                        logger.warning(f"[IntentAdapter] Ошибка при разборе кешированной команды: {cache_err}")
+            
+            # Продолжаем с исходным алгоритмом
             # Если получили строку, пытаемся извлечь JSON
             if isinstance(response, str):
                 intent = cls._extract_json(response)
@@ -108,11 +161,65 @@ class IntentAdapter:
                 logger.error(f"Отсутствуют обязательные поля {missing_fields} для действия {action}")
                 return {"action": "unknown", "error": f"missing_fields: {', '.join(missing_fields)}"}
                 
+            # ОПТИМИЗАЦИЯ: Кешируем результат для будущих похожих запросов
+            if isinstance(response, str):
+                cache_key = f"intent:normalized:{cls._normalize_for_cache(response)}"
+                cache_set(cache_key, json.dumps(normalized), ex=INTENT_CACHE_TTL)
+                logger.debug(f"Команда кеширована по ключу: {cache_key}")
+                
             return normalized
             
         except Exception as e:
             logger.exception(f"Ошибка адаптации ответа: {e}")
             return {"action": "unknown", "error": str(e)}
+    
+    @classmethod
+    def _fast_recognize(cls, text: str) -> Optional[Dict[str, Any]]:
+        """
+        Быстрое распознавание команд с использованием регулярных выражений
+        
+        Args:
+            text: Текстовая команда
+            
+        Returns:
+            Dict или None: Распознанная команда или None
+        """
+        normalized_text = text.lower().strip()
+        
+        for pattern, handler in cls.FAST_PATTERNS.items():
+            match = re.search(pattern, normalized_text)
+            if match:
+                try:
+                    result = handler(match)
+                    logger.debug(f"Быстро распознана команда: {result}")
+                    return result
+                except Exception as e:
+                    logger.warning(f"Ошибка при быстром распознавании команды: {e}")
+        
+        return None
+    
+    @classmethod
+    def _normalize_for_cache(cls, text: str) -> str:
+        """
+        Нормализует текст для использования в качестве ключа кеша
+        
+        Args:
+            text: Исходный текст
+            
+        Returns:
+            str: Нормализованный ключ кеша
+        """
+        # Переводим в нижний регистр и удаляем лишние пробелы
+        normalized = text.lower().strip()
+        # Заменяем числа на плейсхолдеры
+        normalized = re.sub(r'\d+', 'X', normalized)
+        # Заменяем единицы измерения на плейсхолдеры
+        units = ['кг', 'г', 'л', 'мл', 'шт', 'kg', 'g', 'l', 'ml', 'pcs']
+        for unit in units:
+            normalized = normalized.replace(unit, 'UNIT')
+        # Удаляем лишние пробелы
+        normalized = re.sub(r'\s+', ' ', normalized)
+        return normalized
     
     @classmethod
     def _extract_json(cls, text: str) -> Dict[str, Any]:

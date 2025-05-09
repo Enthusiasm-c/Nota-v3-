@@ -6,7 +6,7 @@ from app.models import Product
 
 
 def build_prompt() -> str:
-    """Формирует text-prefix для Vision-запроса под индонезийские накладные."""
+    """Формирует улучшенный text-prefix для Vision-запроса с акцентом на распознавание всех строк."""
     lines = [
         "# INVOICE RECOGNITION INSTRUCTIONS (INDONESIA)",
         "",
@@ -16,6 +16,13 @@ def build_prompt() -> str:
         "Your task is to extract ALL information in structured JSON, with field names in English.",
         "All prices should be in Indonesian Rupiah (IDR).",
         "",
+        "## CRITICAL: EXTRACT ALL ROWS",
+        "EXTREMELY IMPORTANT: Your primary task is to identify and extract EVERY SINGLE PRODUCT LINE on the invoice.",
+        "- Examine the entire image carefully from top to bottom",
+        "- Count the number of rows in the product table",
+        "- Verify that you extracted the same number of products in your response",
+        "- Missing even a single row is considered a critical failure",
+        "",
         "## RULES:",
         "1. Extract EVERY product line that appears on the invoice, even if the text is unclear.",
         "2. If you are unsure about one or two characters in a word, try to restore the word based on context: this is a restaurant supply invoice (ingredients, drinks, etc).",
@@ -24,6 +31,12 @@ def build_prompt() -> str:
         "5. For each product, extract: name (original), name_latin (if needed), qty, unit, price (per unit), total_price.",
         "6. If you cannot determine a value, set it to null.",
         "7. Return only pure JSON, no explanations or markdown formatting.",
+        "",
+        "## VERIFICATION STEPS:",
+        "1. First, count all product rows in the table visually",
+        "2. Ensure your 'positions' array has the same number of items",
+        "3. Double-check the entire image for any rows you might have missed",
+        "4. If the image is partially cut off, include whatever partial information is visible",
         "",
         "## RESPONSE FORMAT:",
         "{",

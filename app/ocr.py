@@ -157,9 +157,10 @@ def call_openai_ocr(image_bytes: bytes, _req_id=None) -> ParsedData:
                 messages=messages,
                 max_tokens=4096,
                 temperature=0.0,
+                top_p=0.95,
                 tools=[{"type": "function", "function": INVOICE_FUNCTION_SCHEMA}],
                 tool_choice={"type": "function", "function": {"name": "get_parsed_invoice"}},
-                timeout=120
+                timeout=180
             )
         t_step = log_ocr_performance(t_step, "Vision API call", req_id)
         ocr_logger.info(f"[{req_id}] Получен ответ от Vision API")

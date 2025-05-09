@@ -85,7 +85,25 @@ async def process_user_edit(
     # Пересчёт совпадений
     products = load_products()
     match_results = match_positions(new_invoice["positions"], products)
+    
+    # Явно считаем ошибки для более надежного определения статуса
+    unknown_count = sum(1 for r in match_results if r.get("status") == "unknown")
+    partial_count = sum(1 for r in match_results if r.get("status") == "partial")
+    
+    # Логируем для отладки
+    logger.info(f"Результаты редактирования: unknown={unknown_count}, partial={partial_count}")
+    
+    # Обновляем состояние с явными счетчиками ошибок
+    await state.update_data(unknown_count=unknown_count, partial_count=partial_count)
+    
+    # Формируем отчет
     text, has_errors = report.build_report(new_invoice, match_results)
+    
+    # Если каким-то образом build_report решил, что ошибок нет, но у нас есть unknown/partial,
+    # явно устанавливаем has_errors=True
+    if not has_errors and (unknown_count > 0 or partial_count > 0):
+        logger.warning(f"Принудительно устанавливаем has_errors=True, так как unknown={unknown_count}, partial={partial_count}")
+        has_errors = True
 
     # Fuzzy-сопоставление
     suggestion_shown = False

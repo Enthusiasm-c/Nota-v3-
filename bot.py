@@ -142,11 +142,11 @@ async def ask_assistant(thread_id, message):
     """
     Send a message to the OpenAI Assistant and get the response.
     Использует декоратор with_async_retry_backoff для автоматической обработки ошибок и повторных попыток.
-
+    
     Args:
         thread_id: ID потока в OpenAI Assistant
         message: Сообщение для обработки
-
+        
     Returns:
         str: Ответ от ассистента или сообщение об ошибке
     """
@@ -158,12 +158,12 @@ async def ask_assistant(thread_id, message):
         return (
             "Sorry, the assistant is unavailable at the moment. Please try again later."
         )
-
+    
     # Add the user's message to the thread
     client.beta.threads.messages.create(
         thread_id=thread_id, role="user", content=message
     )
-
+    
     # Run the assistant on the thread
     run = client.beta.threads.runs.create(
         thread_id=thread_id, assistant_id=settings.OPENAI_ASSISTANT_ID
@@ -176,16 +176,16 @@ async def ask_assistant(thread_id, message):
         if time.time() - start_time > timeout:
             # Timeout error - raise exception to trigger retry in decorator
             raise RuntimeError("The assistant took too long to respond.")
-
+        
         run_status = client.beta.threads.runs.retrieve(
             thread_id=thread_id, run_id=run.id
         )
-
+        
         if run_status.status == "completed":
             # Success path
             # Get the latest message from the assistant
             messages = client.beta.threads.messages.list(thread_id=thread_id)
-
+            
             # Return the content of the last message from the assistant
             for msg in messages.data:
                 if msg.role == "assistant":
@@ -195,15 +195,15 @@ async def ask_assistant(thread_id, message):
                             if hasattr(content_part, "text") and content_part.text:
                                 return content_part.text.value
                     return "Assistant responded with no text content."
-
+            
             return "No response from the assistant."
-
+            
         elif run_status.status in ["failed", "cancelled", "expired"]:
             # Fatal error in run - raise exception to trigger retry in decorator
             raise RuntimeError(
                 f"Assistant response failed with status: {run_status.status}"
             )
-
+        
         await asyncio.sleep(1)  # Poll every second
 
 
@@ -291,17 +291,17 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 async def cmd_start(message, state: FSMContext):
     # Получаем текущие данные состояния пользователя
     user_data = await state.get_data()
-
+    
     # Проверяем, есть ли уже thread_id в состоянии
     if "assistant_thread_id" not in user_data:
         # Создаем новый поток для пользователя если нет
         from openai import OpenAI
         from app.config import get_chat_client
-
+        
         client = get_chat_client()
         if not client:
             client = OpenAI(api_key=settings.OPENAI_CHAT_KEY)
-
+            
         thread = client.beta.threads.create()
         # Сохраняем thread_id в состоянии пользователя
         await state.update_data(assistant_thread_id=thread.id)
@@ -331,12 +331,12 @@ async def cb_new_invoice(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-from app.utils.api_decorators import with_progress_stages, update_stage
+from app.utils.api_decorators import with_progress_stages, update_stage_async as update_stage
 
 # Определение стадий для обработки фото
 PHOTO_STAGES = {
     "download": "Получение изображения",
-    "ocr": "Распознавание текста инвойса",
+    "ocr": "Распознавание текста инвойса",  
     "matching": "Сопоставление позиций",
     "report": "Формирование отчета",
 }
@@ -350,107 +350,129 @@ async def photo_handler(message, state: FSMContext, **kwargs):
     Использует декоратор with_progress_stages для отслеживания этапов выполнения.
     2. Загружает и анализирует фото через OCR (с таймаутом 15 секунд и подробным логированием)
     """
-    user_id = message.from_user.id
-    photo_id = message.photo[-1].file_id if message.photo else None
-    stages = kwargs.get('_stages', {})
-    stages_names = kwargs.get('_stages_names', {})
-    req_id = kwargs.get('_req_id', uuid.uuid4().hex[:8])
-    progress_msg = await message.answer(
-        "🔄 Загрузка и анализ фото...",
-        parse_mode=None
-    )
-    progress_msg_id = progress_msg.message_id
-    async def update_progress_message(stage=None, stage_name=None, error_message=None):
-        if error_message:
-            await safe_edit(
-                bot, message.chat.id, progress_msg_id,
-                f"⚠️ {error_message}",
-                parse_mode=None
-            )
-        elif stage and stage_name:
-            await safe_edit(
-                bot, message.chat.id, progress_msg_id,
-                f"🔄 {stage_name}...",
-                parse_mode=None
-            )
-    kwargs['_update_progress'] = update_progress_message
-    try:
-        file = await bot.get_file(message.photo[-1].file_id)
-        img_bytes = await bot.download_file(file.file_path)
-        update_stage("download", kwargs, update_progress_message)
-        logger.info(f"[{req_id}] Downloaded photo from user {user_id}, size {len(img_bytes.getvalue())} bytes")
-        # --- OCR с таймаутом и логированием ---
-        try:
-            img_size = len(img_bytes.getvalue())
-            logger.info(f"[{req_id}] Запускаю OCR для фото от пользователя {user_id}, размер {img_size} байт")
-            ocr_logger.info(f"[{req_id}] BOT: Начинаю OCR-обработку изображения от пользователя {user_id} с таймаутом")
-            await safe_edit(
-                bot, message.chat.id, progress_msg_id,
-                "🔍 Распознаю текст на фото... Это может занять до 15 секунд.",
-                parse_mode=None
-            )
-            ocr_task = asyncio.create_task(asyncio.to_thread(ocr.call_openai_ocr, img_bytes.getvalue(), _req_id=req_id))
-            ocr_result = await asyncio.wait_for(ocr_task, timeout=20.0)
-            update_stage("ocr", kwargs, update_progress_message)
-            logger.info(f"[{req_id}] OCR successful for user {user_id}, found {len(ocr_result.positions)} positions")
-            ocr_logger.info(f"[{req_id}] BOT: OCR успешно завершен с {len(ocr_result.positions)} позициями")
+    global user_matches
+    
+    if not message.photo:
+        await message.reply("Не могу найти фото в сообщении")
+        return
             
-            # Сверяем поставщика с базой данных
-            try:
-                # Загружаем базу поставщиков
-                suppliers = data_loader.load_suppliers("data/base_suppliers.csv")
+    # Получаем язык пользователя из состояния
+    user_data = await state.get_data()
+    lang = user_data.get("lang", "en")
+    
+    # Сообщение о начале процесса распознавания
+    progress_message = await message.reply(
+        t("status.analyzing_image", lang=lang),
+        reply_markup=None
+    )
+    
+    # Получаем file_id последнего (самого большого) фото
+    file_id = message.photo[-1].file_id
+    
+    # Сохраняем временный файл
+    temp_file = TMP_DIR / f"{uuid.uuid4()}.jpg"
+    
+    # Вспомогательная функция для обновления сообщения о прогрессе
+    async def update_progress_message(stage=None, stage_name=None, error_message=None):
+        nonlocal progress_message
+        
+        if error_message:
+            # Сообщение об ошибке
+            error_text = t("errors.ocr_failed", lang=lang, error=error_message)
+            await safe_edit(bot, progress_message.chat.id, progress_message.message_id, error_text)
+            return
                 
-                # Если в результатах OCR есть поставщик, пытаемся его сверить с базой
-                if hasattr(ocr_result, 'supplier') and ocr_result.supplier and ocr_result.supplier.strip():
-                    supplier_match = matcher.match_supplier(ocr_result.supplier, suppliers, threshold=0.9)
-                    
-                    if supplier_match and supplier_match.get("status") == "ok":
-                        # Заменяем имя поставщика на имя из базы данных если совпадение хорошее
-                        original_supplier = ocr_result.supplier
-                        ocr_result.supplier = supplier_match.get("name")
-                        
-                        # Логируем результат сопоставления поставщика
-                        logger.info(f"[{req_id}] Matched supplier '{original_supplier}' to '{ocr_result.supplier}' with score {supplier_match.get('score', 0):.2f}")
-                        
-                        # Не выводим в UI, так как это не основной путь обработки
-                    else:
-                        # Логируем неудачную попытку сопоставления
-                        logger.info(f"[{req_id}] Could not match supplier '{ocr_result.supplier}' to any known supplier")
-                else:
-                    logger.info(f"[{req_id}] No supplier information available in OCR result")
-            except Exception as supplier_err:
-                # Не прерываем основной процесс, если сверка поставщика не удалась
-                logger.error(f"[{req_id}] Supplier matching error: {supplier_err}")
-        except asyncio.TimeoutError:
-            logger.error(f"[{req_id}] OCR timeout for user {user_id}")
-            ocr_logger.error(f"[{req_id}] BOT: Таймаут OCR для пользователя {user_id}")
-            await safe_edit(bot, message.chat.id, progress_msg_id,
-                            "⏱️ Распознавание заняло слишком много времени. Пожалуйста, попробуйте использовать фото с лучшим освещением или контрастом.")
-            return
-        except Exception as ocr_err:
-            error_msg = str(ocr_err)
-            if "timed out" in error_msg.lower():
-                error_msg = "Превышено время ожидания ответа от сервиса. Пожалуйста, попробуйте еще раз."
-            logger.error(f"[{req_id}] OCR error for user {user_id}: {error_msg}")
-            ocr_logger.error(f"[{req_id}] BOT: Ошибка OCR для пользователя {user_id}: {error_msg}")
-            await safe_edit(bot, message.chat.id, progress_msg_id,
-                           f"⚠️ Ошибка распознавания: {error_msg}")
-            return
-        # ... остальной код обработчика photo_handler без изменений ...
-
+        if stage and stage_name:
+            # Обновление прогресса с указанием этапа
+            progress_text = t(
+                "status.ocr_progress", 
+                lang=lang,
+                stage=stage,
+                stage_name=stage_name
+            )
+            
+            try:
+                await safe_edit(bot, progress_message.chat.id, progress_message.message_id, progress_text)
+            except Exception as edit_err:
+                logger.error(f"Error updating progress: {edit_err}")
+    
+    # Основная обработка изображения в защищенном блоке try-except
+    try:
+        # Скачиваем файл
+        await update_progress_message(stage="1/4", stage_name=t("stages.downloading", lang=lang))
+        await bot.download(file=file_id, destination=temp_file)
+        
+        # Настройка контекста для обработки
+        context = {
+            "photo": temp_file,
+            "lang": lang,
+            "user_id": message.from_user.id
+        }
+        
+        # Предобработка изображения
+        context = await update_stage("preprocessing", context, update_progress_message)
+        
+        # OCR-распознавание
+        context = await update_stage("ocr", context, update_progress_message)
+        
+        # Сопоставление товаров
+        context = await update_stage("matching", context, update_progress_message)
+        
+        # Сохраняем результат в состоянии пользователя
+        await state.update_data(edit_context=context)
+        
+        # Если распознано хотя бы одно поле - показываем результат
+        if "invoice" in context and (
+                context["invoice"].get("positions")
+                or context["invoice"].get("date")
+                or context["invoice"].get("supplier")
+        ):
+            # Переходим в режим редактирования
+            await state.set_state(NotaStates.editing)
+            
+            # Показываем распознанные данные в виде таблицы с кнопками редактирования
+            report = await build_report(context["invoice"], lang)
+            
+            # Формируем клавиатуру для редактирования
+            keyboard = kb_edit_invoice(lang)
+            
+            # Обновляем сообщение о прогрессе
+            await safe_edit(
+                bot, 
+                progress_message.chat.id, 
+                progress_message.message_id,
+                report, 
+                keyboard,
+                disable_web_page_preview=True
+            )
+            
+            # Сохраняем ID сообщения с инвойсом для будущего редактирования
+            await state.update_data(invoice_msg_id=progress_message.message_id)
+                
+        else:
+            # Не распознано ни одно поле - сообщаем об ошибке
+            error_msg = t("errors.no_data_extracted", lang=lang)
+            await safe_edit(bot, progress_message.chat.id, progress_message.message_id, error_msg)
+            
+            # Возвращаемся в главное меню
+            await state.set_state(NotaStates.main_menu)
+            
     except Exception as e:
-        # Обработка исключений делегируется декоратору with_progress_stages
-        # Он автоматически определит, на какой стадии произошла ошибка
-        # и вернет пользователю дружественное сообщение
-
-        # Удаляем сообщение о прогрессе, так как будет показано сообщение об ошибке
+        # Обработка ошибок
+        logger.exception(f"Error in OCR process: {e}")
+        error_msg = t("errors.processing_failed", lang=lang, error=str(e))
+        await safe_edit(bot, progress_message.chat.id, progress_message.message_id, error_msg)
+        
+        # Возвращаемся в главное меню
+        await state.set_state(NotaStates.main_menu)
+        
+    finally:
+        # Очистка: удаляем временный файл
         try:
-            await bot.delete_message(message.chat.id, progress_msg_id)
-        except Exception:
-            pass
-
-        # Пробрасываем ошибку дальше для обработки декоратором
-        raise
+            if temp_file.exists():
+                temp_file.unlink()
+        except Exception as cleanup_err:
+            logger.error(f"Error cleaning up temp file: {cleanup_err}")
 
 
 async def handle_nlu_text(message, state: FSMContext):
@@ -468,13 +490,14 @@ async def handle_nlu_text(message, state: FSMContext):
     text = message.text.strip()
     chat_id = message.chat.id
     user_id = message.from_user.id
-
+    
     # Получаем данные состояния пользователя для определения режима
     try:
         user_data = await state.get_data()
     except Exception as state_err:
-        logger.error(f"Error getting state data: {str(state_err)}")
-        user_data = {}
+        logger.error(f"Error getting state data: {state_err}")
+        await message.reply("Произошла ошибка при обработке запроса. Пожалуйста, попробуйте снова.")
+        return
     
     # Получаем язык пользователя
     lang = user_data.get("lang", "en")
@@ -489,7 +512,7 @@ async def handle_nlu_text(message, state: FSMContext):
             parse_mode=None
         )
         return
-
+    
     # Проверяем, находимся ли мы в режиме редактирования поля
     if user_data.get("editing_mode") == "field_edit":
         logger.debug(f"BUGFIX: Handling message as field edit for user {user_id}")
@@ -514,7 +537,7 @@ async def handle_nlu_text(message, state: FSMContext):
             parse_mode=None
         )
         return
-
+    
     # Если не в режиме редактирования, считаем запрос обычным диалогом с ассистентом
     # Отправляем индикатор обработки (используем t для мультиязычности)
     try:
@@ -529,17 +552,17 @@ async def handle_nlu_text(message, state: FSMContext):
         logger.debug(
             f"BUGFIX: Processing text message as assistant dialog for user {user_id}"
         )
-
+        
         # Проверяем, есть ли thread_id в состоянии
         if "assistant_thread_id" not in user_data:
             # Создаем новый поток для ассистента
             from openai import OpenAI
             from app.config import get_chat_client
-
+            
             client = get_chat_client()
             if not client:
                 client = OpenAI(api_key=settings.OPENAI_CHAT_KEY)
-
+                
             thread = client.beta.threads.create()
             # Сохраняем thread_id в состоянии пользователя
             await state.update_data(assistant_thread_id=thread.id)
@@ -548,10 +571,10 @@ async def handle_nlu_text(message, state: FSMContext):
         else:
             # Используем существующий thread_id
             assistant_thread_id = user_data["assistant_thread_id"]
-
+            
         # Получаем ответ от ассистента
         assistant_response = await ask_assistant(assistant_thread_id, text)
-
+        
         # Проверяем на JSON-команду
         try:
             data = json.loads(assistant_response)
@@ -567,7 +590,7 @@ async def handle_nlu_text(message, state: FSMContext):
         except json.JSONDecodeError:
             # Not JSON data, continue with text response
             pass
-
+            
         # Отвечаем новым сообщением
         # Не экранируем HTML-теги для HTML режима
         logger.debug("TELEGRAM OUT >>> %s", assistant_response[:300])
@@ -579,10 +602,10 @@ async def handle_nlu_text(message, state: FSMContext):
             logger.error("Telegram error (assistant): %s\nText: %s", str(e), assistant_response[:500])
             # Если ошибка с HTML-форматированием, попробуем без него
             await message.answer(assistant_response, parse_mode=None)
-
+        
         # Сохраняем состояние редактирования инвойса
         await state.set_state(NotaStates.editing)
-
+        
     except Exception as e:
         logger.error(f"Assistant error: {str(e)}")
         # Отправляем ошибку как новое сообщение
@@ -590,7 +613,7 @@ async def handle_nlu_text(message, state: FSMContext):
             t("error.request_failed", lang=lang) or "Sorry, could not process your request. Please try again.",
             parse_mode=None,
         )
-
+        
     finally:
         # Удаляем сообщение о загрузке
         try:
@@ -684,7 +707,7 @@ async def cb_cancel(callback: CallbackQuery, state: FSMContext):
         t("main.ready_to_work", lang=lang),
         kb=kb_main(lang),
     )
-    
+
     await callback.answer("Operation cancelled")
 
 
@@ -776,7 +799,7 @@ async def cb_field(callback: CallbackQuery, state: FSMContext):
         logger.error(f"Error parsing callback data: {str(parse_err)}")
         await callback.answer("Error processing request")
         return
-
+    
     # Логируем для диагностики
     logger.debug(
         f"BUGFIX: Field edit callback received for field {field}, idx {idx}, message_id {callback.message.message_id}"
@@ -799,14 +822,14 @@ async def cb_field(callback: CallbackQuery, state: FSMContext):
             reply_markup={"force_reply": True},
             parse_mode=ParseMode.HTML
         )
-
+        
         # Логируем ID созданного сообщения
         logger.debug(f"BUGFIX: Force reply message created with ID {reply_msg.message_id}")
-
+        
         # Сохраняем контекст в FSM для последующей обработки
         await state.update_data(
-            edit_idx=idx,
-            edit_field=field,
+            edit_idx=idx, 
+            edit_field=field, 
             msg_id=callback.message.message_id,
             # Важно: отмечаем, что мы находимся в процессе редактирования поля
             # Это поможет правильно маршрутизировать ответ пользователя
@@ -816,7 +839,7 @@ async def cb_field(callback: CallbackQuery, state: FSMContext):
         logger.error(f"Error creating prompt message: {str(msg_err)}")
         # Уведомляем пользователя о проблеме
         await callback.answer("Error creating edit prompt")
-
+    
     # Отвечаем на callback чтобы убрать индикатор загрузки
     await callback.answer()
 
@@ -831,52 +854,52 @@ async def handle_field_edit(message, state: FSMContext):
     Использует декоратор with_async_retry_backoff для автоматической обработки ошибок.
     """
     logger.debug(f"BUGFIX: Starting field edit handler for user {message.from_user.id}")
-
+    
     # Получаем данные из состояния
     data = await state.get_data()
     idx = data.get("edit_idx")
     field = data.get("edit_field")
     msg_id = data.get("msg_id")
-
+    
     # ВАЖНО: очищаем режим редактирования, чтобы следующие сообщения обрабатывались как обычные
     await state.update_data(editing_mode=None)
     logger.debug(f"BUGFIX: Cleared editing_mode in state")
-
+    
     if idx is None or field is None or msg_id is None:
         logger.warning(
             f"Missing required field edit data in state: idx={idx}, field={field}, msg_id={msg_id}"
         )
         await message.answer(t("error.edit_data_not_found", lang=lang))
         return
-
+    
     user_id = message.from_user.id
     key = (user_id, msg_id)
-
+    
     logger.debug(f"BUGFIX: Looking for invoice data with key {key}")
     if key not in user_matches:
         logger.warning(f"No matches found for user {user_id}, message {msg_id}")
         await message.answer(t("error.invoice_data_not_found", lang=lang))
         return
-
+    
     entry = user_matches[key]
     text = message.text.strip()
-
+    
     # Показываем пользователю, что обрабатываем запрос
     processing_msg = await message.answer(t("status.processing_changes", lang=lang))
-
+    
     try:
         logger.debug(
             f"BUGFIX: Processing field edit, text: '{text[:30]}...' (truncated)"
         )
-
+        
         # Обновляем напрямую данные в инвойсе (упрощенный вариант без использования ассистента)
         # Это гарантирует, что мы сможем обработать запрос без сетевых вызовов
-
+        
         # Обновляем поле напрямую
         old_value = entry["match_results"][idx].get(field, "")
         entry["match_results"][idx][field] = text
         logger.debug(f"BUGFIX: Updated {field} from '{old_value}' to '{text}'")
-
+        
         # Запускаем матчер заново для обновленной строки, если нужно
         if field in ["name", "qty", "unit"]:
             products = data_loader.load_products("data/base_products.csv")
@@ -886,14 +909,14 @@ async def handle_field_edit(message, state: FSMContext):
             logger.debug(
                 f"BUGFIX: Re-matched item, new status: {entry['match_results'][idx].get('status')}"
             )
-
+        
         # Создаем отчет
         parsed_data = entry["parsed_data"]
         report, has_errors = build_report(parsed_data, entry["match_results"], escape_html=True)
-
+        
         # Используем HTML отчет без экранирования
         formatted_report = report
-
+        
         # Отправляем новое сообщение с обновленным отчетом
         logger.debug("TELEGRAM OUT >>> %s", formatted_report[:300])
         logger.debug("TELEGRAM parse_mode: %s", ParseMode.HTML)
@@ -971,17 +994,17 @@ async def handle_field_edit(message, state: FSMContext):
                 except Exception as absolutely_final_e:
                     logger.error(f"Absolutely final fallback failed: {absolutely_final_e}")
                     raise
-
-        # Обновляем ссылки в user_matches с новым ID сообщения
-        new_msg_id = result.message_id
+            
+            # Обновляем ссылки в user_matches с новым ID сообщения
+            new_msg_id = result.message_id
         try:
             new_key = (user_id, new_msg_id)
             user_matches[new_key] = entry.copy()
-
+            
             # Удаляем старую запись
             if key in user_matches and key != new_key:
                 del user_matches[key]
-
+            
             logger.debug(f"BUGFIX: Created new report with message_id {new_msg_id}")
         except Exception as e:
             logger.error(f"BUGFIX: Error sending new report: {str(e)}")
@@ -993,20 +1016,20 @@ async def handle_field_edit(message, state: FSMContext):
                 t("example.edit_field_success", {"field": field, "value": text, "line": idx+1}, lang=lang),
                 parse_mode=None,
             )
-
+        
     except Exception as e:
         logger.error(f"Error handling field edit: {str(e)}")
         await message.answer(
             f"Ошибка при обработке изменений. Пожалуйста, попробуйте еще раз."
         )
-
+        
     finally:
         # Удаляем сообщение о загрузке
         try:
             await bot.delete_message(message.chat.id, processing_msg.message_id)
         except Exception:
             pass
-
+        
         # Возвращаемся в режим редактирования инвойса
         await state.set_state(NotaStates.editing)
 

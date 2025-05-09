@@ -4,9 +4,10 @@ from typing import (
 )
 from app.config import settings
 
+# Используем только rapidfuzz вместо Levenshtein
 try:
-    from Levenshtein import ratio as _levenshtein_ratio
-    from Levenshtein import distance as _levenshtein_distance
+    from rapidfuzz.distance import Levenshtein
+    from rapidfuzz.fuzz import ratio
 
     def levenshtein_ratio(
         s1: Sequence[Hashable],
@@ -15,7 +16,8 @@ try:
         processor: Union[Callable[..., Sequence[Hashable]], None] = None,
         score_cutoff: Union[float, None] = None,
     ) -> float:
-        return _levenshtein_ratio(s1, s2)
+        # Используем rapidfuzz.fuzz.ratio для вычисления сходства
+        return ratio(s1, s2, processor=processor, score_cutoff=score_cutoff)
 
     def levenshtein_distance(
         s1: Sequence[Hashable],
@@ -26,7 +28,9 @@ try:
         score_cutoff: Union[float, None] = None,
         score_hint: Union[float, None] = None,
     ) -> int:
-        return _levenshtein_distance(s1, s2)
+        # Используем rapidfuzz.distance.Levenshtein.distance для вычисления расстояния
+        return Levenshtein.distance(s1, s2, weights=weights, processor=processor, 
+                                   score_cutoff=score_cutoff, score_hint=score_hint)
 
     USE_LEVENSHTEIN = True
 except ImportError:

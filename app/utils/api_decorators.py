@@ -447,7 +447,7 @@ def with_progress_stages(stages: Dict[str, str]) -> Callable:
     return decorator
 
 
-def update_stage(stage: str, context: dict, update_func=None) -> None:
+def update_stage(stage: str, context: dict, update_func=None) -> dict:
     """
     Утилита для обновления стадии выполнения внутри декорированной функции.
 
@@ -455,9 +455,12 @@ def update_stage(stage: str, context: dict, update_func=None) -> None:
         stage: Ключ стадии для обновления
         context: Словарь контекста с _stages и _stages_names
         update_func: Необязательная функция для обновления UI
+        
+    Returns:
+        dict: Обновленный словарь контекста для поддержки цепочки вызовов
     """
     if "_stages" not in context or "_stages_names" not in context:
-        return
+        return context
 
     # Обновляем состояние стадии
     if stage in context["_stages"]:
@@ -477,3 +480,43 @@ def update_stage(stage: str, context: dict, update_func=None) -> None:
             except Exception:
                 # Игнорируем ошибки UI, чтобы не прервать основную логику
                 pass
+    
+    # Возвращаем контекст для поддержки цепочки вызовов
+    return context
+
+
+async def update_stage_async(stage: str, context: dict, update_func=None) -> dict:
+    """
+    Асинхронная версия функции update_stage.
+    Утилита для обновления стадии выполнения внутри декорированной функции.
+
+    Args:
+        stage: Ключ стадии для обновления
+        context: Словарь контекста с _stages и _stages_names
+        update_func: Необязательная функция для обновления UI
+        
+    Returns:
+        dict: Обновленный словарь контекста для поддержки цепочки вызовов
+    """
+    if "_stages" not in context or "_stages_names" not in context:
+        return context
+
+    # Обновляем состояние стадии
+    if stage in context["_stages"]:
+        context["_stages"][stage] = True
+
+        # Вызываем функцию обновления UI, если она есть
+        if update_func and callable(update_func):
+            stage_name = context["_stages_names"].get(stage, stage)
+            try:
+                if asyncio.iscoroutinefunction(update_func):
+                    # Для асинхронных функций вызываем с await
+                    await update_func(stage=stage, stage_name=stage_name)
+                else:
+                    update_func(stage=stage, stage_name=stage_name)
+            except Exception:
+                # Игнорируем ошибки UI, чтобы не прервать основную логику
+                pass
+    
+    # Возвращаем контекст для поддержки цепочки вызовов
+    return context
