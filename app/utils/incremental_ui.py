@@ -148,12 +148,13 @@ class IncrementalUI:
         """
         await self.update(text, replace_last=False)
         
-    async def start_spinner(self, update_ms: int = 200) -> None:
+    async def start_spinner(self, update_ms: int = 200, show_text: bool = False) -> None:
         """
         Запускает анимированный спиннер в последней строке.
         
         Args:
             update_ms: Частота обновления спиннера в миллисекундах
+            show_text: Если True, показывает текст рядом со спиннером, иначе только спиннер
         """
         if self._update_task:
             return  # Уже запущен
@@ -169,7 +170,12 @@ class IncrementalUI:
                     # Обновляем с анимированным спиннером
                     self._spinner_idx = (self._spinner_idx + 1) % len(self.SPINNER_CHARS)
                     spinner_char = self.SPINNER_CHARS[self._spinner_idx]
-                    self.lines[-1] = f"{spinner_char} {last_line}"
+                    
+                    # Если show_text=True, показываем текст рядом со спиннером, иначе только спиннер
+                    if show_text:
+                        self.lines[-1] = f"{spinner_char} {last_line}"
+                    else:
+                        self.lines[-1] = f"{spinner_char}"
                     
                     self.current_text = "\n".join(self.lines)
                     
@@ -217,11 +223,18 @@ class IncrementalUI:
             else:
                 self.lines.append(f"{indicator} {text}")
         elif self.lines:
-            # Просто меняем индикатор у последней строки
+            # Если последняя строка содержит только символ спиннера без текста, то оставляем только спиннер
             last_line = self.lines[-1]
-            if last_line.startswith((self.PROGRESS_INDICATOR, *self.SPINNER_CHARS)):
+            if any(last_line == spinner for spinner in self.SPINNER_CHARS):
+                # Не меняем строку, так как в ней только спиннер
+                self.lines[-1] = f"{indicator}"
+            elif last_line.startswith((self.PROGRESS_INDICATOR, *self.SPINNER_CHARS)):
+                # Проверяем, есть ли текст после индикатора
                 content = last_line[1:].strip()  # Убираем старый индикатор
-                self.lines[-1] = f"{indicator} {content}"
+                if content:  # Если есть текст, добавляем индикатор
+                    self.lines[-1] = f"{indicator} {content}"
+                else:  # Если текста нет, оставляем только индикатор
+                    self.lines[-1] = f"{indicator}"
                 
         self.current_text = "\n".join(self.lines)
         

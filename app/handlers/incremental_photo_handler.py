@@ -125,7 +125,6 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
             
             # Stop spinner and update UI
             ui.stop_spinner()
-            await ui.update(t("status.image_received", lang=lang) or "✅ Image received")
             logger.info(f"[{req_id}] Downloaded photo, size {len(img_bytes)} bytes")
         except Exception as e:
             logger.error(f"[{req_id}] Error saving test image: {e}")
@@ -136,12 +135,11 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
             if 'img_bytes' not in locals():
                 img_bytes_io = await message.bot.download_file(file.file_path)
                 img_bytes = img_bytes_io.getvalue()
-                await ui.update(t("status.image_received", lang=lang) or "✅ Image received")
                 logger.info(f"[{req_id}] Downloaded photo, size {len(img_bytes)} bytes")
         
         # Step 2: OCR изображения
         await ui.append(t("status.analyzing_image", lang=lang) or "🖼️ Analyzing image...")
-        await ui.start_spinner()
+        await ui.start_spinner(show_text=False)
         with temp_file(f"ocr_{req_id}", ".jpg") as tmp_path:
             with open(tmp_path, "wb") as f:
                 f.write(img_bytes)
@@ -173,7 +171,7 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         
         # Step 4: Match with products
         await ui.append(t("status.matching_items", lang=lang) or "🔄 Matching items...")
-        await ui.start_spinner()
+        await ui.start_spinner(show_text=False)
         
         # Load product database with caching
         from app.utils.cached_loader import cached_load_products
@@ -196,7 +194,7 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         
         # Match supplier with supplier database
         await ui.append(t("status.matching_supplier", lang=lang) or "🏢 Matching supplier...")
-        await ui.start_spinner()
+        await ui.start_spinner(show_text=False)
         
         try:
             # Load suppliers database with caching
@@ -258,7 +256,7 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         
         # Step 5: Generate report
         await ui.append(t("status.generating_report", lang=lang) or "📋 Generating report...")
-        await ui.start_spinner()
+        await ui.start_spinner(show_text=False)
         
         # Create report with HTML formatting
         report_text, has_errors = build_report(ocr_result, match_results, escape_html=True)
@@ -266,8 +264,9 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         # Save invoice in state for access in edit mode
         await state.update_data(invoice=ocr_result, lang=lang)
         
-        # New keyboard - only "Edit", "Cancel" and "Confirm" buttons (if no errors)
-        inline_kb = build_main_kb(has_errors=True if unknown_count + partial_count > 0 else False, lang=lang)
+        # New keyboard - только с кнопками "Edit", "Cancel" и "Confirm" (если нет ошибок)
+        # Используем значение has_errors из build_report, который учитывает все проблемы (цены, количества и т.д.)
+        inline_kb = build_main_kb(has_errors=has_errors, lang=lang)
         
         ui.stop_spinner()
         # Complete UI with brief summary

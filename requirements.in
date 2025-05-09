@@ -13,3 +13,5 @@ pytest==8.3.5 # dev only
 httpx
 rapidfuzz>=3.13.0
 psutil==7.0.0
+paddlepaddle # для модуля детекции таблиц
+paddleocr>=2.6.0.3 # для модуля детекции таблиц

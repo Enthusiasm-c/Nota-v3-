@@ -2,7 +2,7 @@ status:
   welcome: "👋 Welcome to Nota AI Bot! I'm here to help you process your invoices."
   send_photo: "Please send a photo of your invoice."
   receiving_image: "📸 Receiving image..."
-  image_received: "✅ Image received"
+  image_received: ""
   preprocessing_image: "🖼️ Preprocessing image..."
   image_processed: "✅ Image optimized for OCR"
   recognizing_text: "🔍 Recognizing text (OCR)..."
@@ -14,7 +14,7 @@ status:
   brief_summary: "📋 Found {total} items. ✅ OK: {ok}. ⚠️ Issues: {issues}."
   edit_success: "✅ {field} updated successfully!"
   edit_success_confirm: "All items recognized correctly. Ready to confirm."
-  edit_cancelled: "✏️ Editing canceled."
+  edit_cancelled: "Editing canceled."
   session_expired: "Your session has expired. Please start again."
   processing: "⏳ Processing your request..."
   processing_request: "Processing your request..."
@@ -24,6 +24,12 @@ status:
   changes_applied: "✅ Changes applied"
   sending_to_syrve: "📤 Sending invoice to Syrve..."
   syrve_success: "✅ Invoice #{id} successfully uploaded to Syrve!"
+
+main:
+  ready_to_work: "Ready to work. Send me a photo of an invoice to process."
+
+edit:
+  row_canceled: "Editing for row {line} cancelled."
 
 error:
   photo_processing: "⚠️ An error occurred while processing the photo. Please try again or contact the administrator."
