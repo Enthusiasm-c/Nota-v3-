@@ -215,6 +215,64 @@ def fuzzy_find(query: str, products: List[Dict], thresh: float = 0.75) -> List[D
     
     return matches
 
+def compare_strings_for_products(str1: str, str2: str) -> float:
+    """
+    Специализированная функция сравнения строк для сопоставления продуктов.
+    Включает дополнительные оптимизации и эвристики для названий продуктов.
+    
+    Args:
+        str1: Первая строка (обычно из накладной)
+        str2: Вторая строка (обычно из базы продуктов)
+        
+    Returns:
+        Оценка сходства в диапазоне 0-100
+    """
+    # Проверка кэша
+    cache_key = (str1, str2)
+    if cache_key in _name_comparison_cache:
+        return _name_comparison_cache[cache_key]
+    
+    # Инвертированный ключ
+    reverse_key = (str2, str1)
+    if reverse_key in _name_comparison_cache:
+        return _name_comparison_cache[reverse_key]
+    
+    # Нормализация строк
+    norm1 = normalize_name(str1)
+    norm2 = normalize_name(str2)
+    
+    # Точное совпадение
+    if norm1 == norm2:
+        _name_comparison_cache[cache_key] = 100.0
+        return 100.0
+    
+    # Частичное совпадение (одна строка содержит другую)
+    if norm1 in norm2 or norm2 in norm1:
+        # Вычисляем базовую оценку на основе длины
+        max_len = max(len(norm1), len(norm2))
+        min_len = min(len(norm1), len(norm2))
+        if max_len > 0:
+            similarity = (min_len / max_len) * 90.0  # До 90 баллов для частичного совпадения
+            _name_comparison_cache[cache_key] = similarity
+            return similarity
+    
+    # Использование метрики Левенштейна для общего случая
+    ratio_score = levenshtein_ratio(norm1, norm2) * 80.0  # До 80 баллов
+
+    # Корректировка оценки на основе общих слов
+    words1 = set(norm1.split())
+    words2 = set(norm2.split())
+    common_words = words1.intersection(words2)
+    
+    if common_words:
+        # Бонус за общие слова
+        word_ratio = len(common_words) / max(len(words1), len(words2))
+        word_bonus = word_ratio * 15.0  # До 15 баллов дополнительно
+        ratio_score = min(ratio_score + word_bonus, 100.0)
+    
+    # Кэшируем и возвращаем результат
+    _name_comparison_cache[cache_key] = ratio_score
+    return ratio_score
 
 def match_supplier(supplier_name: str, suppliers: List[Dict], threshold: float = 0.9) -> Dict:
     """

@@ -1,334 +1,213 @@
 """
-IncrementalUI - класс для обеспечения прогрессивных обновлений UI в Telegram-боте.
+Утилита для инкрементального обновления интерфейса пользователя в Telegram.
 
-Позволяет обновлять текст сообщений с индикаторами прогресса и новой информацией
-во время обработки длительных операций.
+Предоставляет удобный интерфейс для показа прогресса длительных операций,
+с поддержкой анимированных индикаторов и обновлений статуса в реальном времени.
 """
 
 import logging
 import asyncio
 import time
+import random
 from typing import Optional, Dict, Any, List, Union, Callable
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, Message
 
 from app.bot_utils import edit_message_text_safe
 
-logger = logging.getLogger("nota.incremental_ui")
+logger = logging.getLogger(__name__)
+
+# Темы спиннеров
+SPINNER_THEMES = {
+    "default": ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
+    "dots": ["⠋", "⠙", "⠚", "⠞", "⠖", "⠦", "⠴", "⠲", "⠳", "⠓"],
+    "loading": ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"],
+    "table": ["◰", "◳", "◲", "◱"],
+    "boxes": ["◰", "◴", "◱", "◵", "◲", "◶", "◳", "◷"],
+    "invoice": ["📄", "📃", "📑", "📜", "📋"],
+    "counting": ["🔢", "🔡", "🔠", "🔤", "🔣"],
+    "lines": ["-", "\\", "|", "/"],
+}
 
 class IncrementalUI:
     """
-    Класс для управления прогрессивными обновлениями UI в Telegram-боте.
+    Класс для инкрементального обновления интерфейса пользователя в Telegram.
     
-    Предоставляет методы для:
-    - Создания сообщения с индикатором загрузки
-    - Обновления сообщения с прогрессом
-    - Завершения обновления UI с финальным сообщением
+    Позволяет показывать прогресс длительных операций, обновляя одно и то же сообщение,
+    вместо отправки множества сообщений. Поддерживает анимированные индикаторы 
+    и различные темы визуализации.
     
-    Пример использования:
-    ```python
-    # Создание
-    ui = IncrementalUI(message.bot, message.chat.id)
-    msg = await ui.start("Начинаю обработку...")
-    
-    # Обновление в процессе выполнения
-    await ui.update("Обработка OCR: 30%")
-    await ui.update("Обработка OCR: 60%")
-    
-    # Добавление новой информации
-    await ui.append("Найдено 5 позиций")
-    
-    # Завершение
-    await ui.complete("Обработка завершена!", kb=result_keyboard)
-    ```
+    Attributes:
+        bot: Экземпляр бота Telegram
+        chat_id: ID чата, в котором отображается сообщение
+        message_id: ID сообщения, которое обновляется
+        text: Текущий текст сообщения
+        _spinner_task: Асинхронная задача для анимации спиннера
+        _spinner_running: Флаг, указывающий, запущен ли спиннер
     """
     
-    # Константы для форматирования индикатора прогресса
-    SPINNER_CHARS = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-    # Добавляем тематические спиннеры
-    SPINNER_THEMES = {
-        "dots": ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
-        "text": ["📄", "📃", "📑", "📜", "📰", "📋"],
-        "scan": ["🔍", "🔎", "🔍", "🔎", "🔍︎", "🔎︎"],
-        "money": ["💰", "💲", "💴", "💵", "💶", "💷"],
-        "calc": ["🧮", "📊", "📈", "📉", "🧾"],
-        "clock": ["🕛", "🕧", "🕐", "🕜", "🕑", "🕝", "🕒", "🕞", "🕓", "🕟", "🕔", "🕠", "🕕", "🕡", "🕖", "🕢", "🕗", "🕣", "🕘", "🕤", "🕙", "🕥", "🕚", "🕦"],
-        "shop": ["🛒", "🛍️", "🏪", "🏬", "🧾", "💸"],
-        "faces": ["🤔", "🤨", "🧐", "🤓", "😎", "🧠"],
-        "words": ["NOTA", "INVOICE", "CHECK", "SCAN", "OCR", "📝"],
-        # Новые тематические спиннеры
-        "invoice": ["🧾", "📋", "📊", "🧾", "📄", "📑"],
-        "table": ["┏━┓", "┃ ┃", "┃ ┃", "┗━┛", "┏━┓", "┣━┫"],
-        "counting": ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"],
-        "loading": ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"],
-        "boxes": ["▫️", "◽", "◻️", "⬜", "⬛", "◼️", "◾", "▪️"]
-    }
-    PROGRESS_INDICATOR = "🔄"
-    COMPLETE_INDICATOR = "✅"
-    ERROR_INDICATOR = "❌"
-    
-    def __init__(self, bot: Bot, chat_id: int, throttle_ms: int = 700):
+    def __init__(self, bot, chat_id: int):
         """
-        Инициализация UI-менеджера.
+        Инициализирует новый UI для инкрементальных обновлений.
         
         Args:
-            bot: Экземпляр бота Aiogram
+            bot: Экземпляр бота Telegram
             chat_id: ID чата для отправки сообщений
-            throttle_ms: Минимальное время между обновлениями в миллисекундах
         """
         self.bot = bot
         self.chat_id = chat_id
-        self.message: Optional[Message] = None
-        self.message_id: Optional[int] = None
-        self.current_text: str = ""
-        self.lines: List[str] = []
-        self.last_update_time: float = 0
-        self.throttle_ms = throttle_ms
-        self.active = False
-        self._spinner_idx = 0
-        self._update_task = None
-        self._current_spinner_theme = "dots"
+        self.message_id = None
+        self.text = ""
+        self._spinner_task = None
+        self._spinner_running = False
+        self._theme = "default"
+        self._start_time = None
         
-    async def start(self, initial_text: str, kb: Optional[InlineKeyboardMarkup] = None) -> Message:
+    async def start(self, initial_text: str = "Начинаю обработку...") -> None:
         """
-        Запускает UI-сессию с начальным сообщением.
+        Начинает новую последовательность обновлений с начальным текстом.
         
         Args:
             initial_text: Начальный текст сообщения
-            kb: Опциональная клавиатура (обычно не нужна для начального сообщения)
-            
-        Returns:
-            Message: Объект отправленного сообщения для удобства
         """
-        self.active = True
-        self.lines = [f"{self.PROGRESS_INDICATOR} {initial_text}"]
-        self.current_text = self.lines[0]
-        
-        # Отправляем начальное сообщение
-        self.message = await self.bot.send_message(
-            chat_id=self.chat_id,
-            text=self.current_text,
-            reply_markup=kb,
-            parse_mode="HTML"
-        )
-        self.message_id = self.message.message_id
-        self.last_update_time = time.time()
-        return self.message
+        self._start_time = time.time()
+        self.text = initial_text
+        try:
+            message = await self.bot.send_message(self.chat_id, initial_text)
+            self.message_id = message.message_id
+            logger.debug(f"Started incremental UI with message_id={self.message_id}")
+        except Exception as e:
+            logger.error(f"Error starting incremental UI: {e}")
+            # Создаем фиктивный message_id, если отправка не удалась
+            self.message_id = 0
     
-    async def update(self, text: str, replace_last: bool = True) -> None:
+    async def update(self, text: str) -> None:
         """
-        Обновляет текст сообщения с прогрессом.
+        Обновляет текст сообщения.
         
         Args:
-            text: Новый текст для отображения
-            replace_last: Если True, заменяет последнюю строку; если False, добавляет новую
+            text: Новый текст сообщения
         """
-        if not self.active or not self.message_id:
-            logger.warning("Attempted to update inactive UI")
-            return
-        
-        # Проверка троттлинга
-        current_time = time.time()
-        time_since_last_update = (current_time - self.last_update_time) * 1000
-        
-        if time_since_last_update < self.throttle_ms:
-            # Слишком рано для следующего обновления, игнорируем
-            logger.debug(f"Throttling update: {time_since_last_update}ms < {self.throttle_ms}ms")
+        if self.message_id is None:
+            logger.warning("Attempting to update before starting UI")
             return
             
-        # Обновляем последнюю строку или добавляем новую
-        if replace_last and self.lines:
-            self.lines[-1] = f"{self.PROGRESS_INDICATOR} {text}"
-        else:
-            self.lines.append(f"{self.PROGRESS_INDICATOR} {text}")
-            
-        # Обновляем текст и сообщение
-        self.current_text = "\n".join(self.lines)
+        self.text = text
         
         try:
-            await edit_message_text_safe(
-                bot=self.bot,
+            await self.bot.edit_message_text(
+                text, 
                 chat_id=self.chat_id,
-                msg_id=self.message_id,
-                text=self.current_text,
-                kb=None  # Не меняем клавиатуру при обновлении прогресса
+                message_id=self.message_id
             )
-            self.last_update_time = current_time
+            logger.debug(f"Updated UI message: {text[:30]}...")
         except Exception as e:
-            logger.error(f"Error updating UI: {e}")
-            
-    async def append(self, text: str, indicator: str = "•") -> None:
-        """
-        Добавляет новую строку к сообщению без изменения статуса.
-        
-        Args:
-            text: Текст для добавления
-            indicator: Индикатор для новой строки (по умолчанию - маркер списка)
-        """
-        await self.update(text, replace_last=False)
-        
-    def set_spinner_theme(self, theme_name: str) -> bool:
-        """
-        Устанавливает тему для анимации спиннера.
-        
-        Args:
-            theme_name: Название темы из SPINNER_THEMES
-            
-        Returns:
-            bool: True если тема найдена, False если нет
-        """
-        if theme_name in self.SPINNER_THEMES:
-            self._current_spinner_theme = theme_name
-            return True
-        return False
+            logger.warning(f"Error updating UI message: {e}")
     
-    async def start_spinner(self, update_ms: int = 200, show_text: bool = False, theme: Optional[str] = None) -> None:
+    async def append(self, new_text: str) -> None:
         """
-        Запускает анимированный спиннер в последней строке.
+        Добавляет новый текст к существующему сообщению.
         
         Args:
-            update_ms: Частота обновления спиннера в миллисекундах
-            show_text: Если True, показывает текст рядом со спиннером, иначе только спиннер
-            theme: Тема спиннера из SPINNER_THEMES (если None, использует текущую тему)
+            new_text: Текст для добавления
         """
-        if self._update_task:
-            return  # Уже запущен
-            
-        # Устанавливаем тему если указана
-        if theme and theme in self.SPINNER_THEMES:
-            self._current_spinner_theme = theme
-            
-        # Выбираем текущий набор символов
-        spinner_chars = self.SPINNER_THEMES.get(self._current_spinner_theme, self.SPINNER_CHARS)
-        
-        async def _spinner_task():
-            last_theme = self._current_spinner_theme
-            frame_idx = 0
-            
-            while self.active:
-                # Проверяем, изменилась ли тема
-                if last_theme != self._current_spinner_theme:
-                    last_theme = self._current_spinner_theme
-                    frame_idx = 0
-                    spinner_chars = self.SPINNER_THEMES.get(self._current_spinner_theme, self.SPINNER_CHARS)
-                
-                if self.lines:
-                    # Получаем последнюю строку без индикатора
-                    last_line = self.lines[-1]
-                    if last_line.startswith(self.PROGRESS_INDICATOR):
-                        last_line = last_line[len(self.PROGRESS_INDICATOR):].strip()
-                    # Проверяем, начинается ли с предыдущего спиннера
-                    elif any(last_line.startswith(char) for char in spinner_chars):
-                        # Находим индекс пробела после спиннера
-                        space_idx = last_line.find(" ")
-                        if space_idx > 0:
-                            last_line = last_line[space_idx+1:]
-                        else:
-                            last_line = ""
-                    
-                    # Обновляем с анимированным спиннером
-                    frame_idx = (frame_idx + 1) % len(spinner_chars)
-                    spinner_char = spinner_chars[frame_idx]
-                    
-                    # Если show_text=True, показываем текст рядом со спиннером, иначе только спиннер
-                    if show_text:
-                        self.lines[-1] = f"{spinner_char} {last_line}"
-                    else:
-                        self.lines[-1] = f"{spinner_char}"
-                    
-                    self.current_text = "\n".join(self.lines)
-                    
-                    try:
-                        await edit_message_text_safe(
-                            bot=self.bot,
-                            chat_id=self.chat_id,
-                            msg_id=self.message_id,
-                            text=self.current_text,
-                            kb=None
-                        )
-                    except Exception as e:
-                        logger.error(f"Error updating spinner: {e}")
-                
-                await asyncio.sleep(update_ms / 1000)
-        
-        self._update_task = asyncio.create_task(_spinner_task())
-        
-    def stop_spinner(self) -> None:
-        """Останавливает анимированный спиннер."""
-        if self._update_task:
-            self._update_task.cancel()
-            self._update_task = None
-            
-    async def complete(self, text: Optional[str] = None, 
-                      kb: Optional[InlineKeyboardMarkup] = None,
-                      success: bool = True) -> None:
+        self.text = f"{self.text}\n{new_text}"
+        await self.update(self.text)
+    
+    async def complete(self, completion_text: Optional[str] = None) -> None:
         """
-        Завершает обновление UI с финальным сообщением и опциональной клавиатурой.
+        Завершает последовательность обновлений с опциональным итоговым текстом.
         
         Args:
-            text: Финальный текст для отображения (если None, использует последнюю строку)
-            kb: Финальная клавиатура для отображения
-            success: Флаг успешного завершения (влияет на индикатор)
+            completion_text: Финальный текст для отображения
+        """
+        # Останавливаем спиннер, если он запущен
+        self.stop_spinner()
+        
+        # Вычисляем общее время выполнения
+        elapsed = time.time() - self._start_time if self._start_time else 0
+        elapsed_str = f" (за {elapsed:.1f} сек)" if elapsed > 0 else ""
+        
+        if completion_text:
+            await self.update(f"{self.text}\n{completion_text}{elapsed_str}")
+        else:
+            await self.update(f"{self.text}\n✅ Готово{elapsed_str}")
+    
+    async def error(self, error_text: str) -> None:
+        """
+        Показывает сообщение об ошибке.
+        
+        Args:
+            error_text: Текст ошибки для отображения
         """
         self.stop_spinner()
-        self.active = False
-        
-        indicator = self.COMPLETE_INDICATOR if success else self.ERROR_INDICATOR
-        
-        if text:
-            # Заменяем последнюю строку с новым индикатором
-            if self.lines:
-                self.lines[-1] = f"{indicator} {text}"
-            else:
-                self.lines.append(f"{indicator} {text}")
-        elif self.lines:
-            # Если последняя строка содержит только символ спиннера без текста, то оставляем только спиннер
-            last_line = self.lines[-1]
-            if any(last_line == spinner for spinner in self.SPINNER_CHARS):
-                # Не меняем строку, так как в ней только спиннер
-                self.lines[-1] = f"{indicator}"
-            elif last_line.startswith((self.PROGRESS_INDICATOR, *self.SPINNER_CHARS)):
-                # Проверяем, есть ли текст после индикатора
-                content = last_line[1:].strip()  # Убираем старый индикатор
-                if content:  # Если есть текст, добавляем индикатор
-                    self.lines[-1] = f"{indicator} {content}"
-                else:  # Если текста нет, оставляем только индикатор
-                    self.lines[-1] = f"{indicator}"
-                
-        self.current_text = "\n".join(self.lines)
-        
-        try:
-            await edit_message_text_safe(
-                bot=self.bot,
-                chat_id=self.chat_id,
-                msg_id=self.message_id,
-                text=self.current_text,
-                kb=kb
-            )
-        except Exception as e:
-            logger.error(f"Error completing UI: {e}")
-            
-    async def error(self, text: str, kb: Optional[InlineKeyboardMarkup] = None) -> None:
+        await self.update(f"{self.text}\n❌ {error_text}")
+    
+    def stop_spinner(self) -> None:
+        """Останавливает анимацию спиннера, если она запущена."""
+        if self._spinner_running and self._spinner_task:
+            self._spinner_running = False
+            if not self._spinner_task.done():
+                self._spinner_task.cancel()
+    
+    async def start_spinner(self, show_text: bool = True, theme: str = "default") -> None:
         """
-        Завершает обновление UI с сообщением об ошибке.
+        Запускает анимированный спиннер, обновляя сообщение.
         
         Args:
-            text: Текст ошибки для отображения
-            kb: Опциональная клавиатура
+            show_text: Показывать ли текст вместе со спиннером
+            theme: Тема спиннера (default, dots, loading и т.д.)
         """
-        await self.complete(text, kb, success=False)
+        # Останавливаем предыдущий спиннер, если он запущен
+        self.stop_spinner()
         
-    async def delete(self) -> None:
-        """Удаляет сообщение с UI."""
-        if self.message_id:
-            try:
-                await self.bot.delete_message(
-                    chat_id=self.chat_id,
-                    message_id=self.message_id
-                )
-            except Exception as e:
-                logger.error(f"Error deleting UI message: {e}")
+        self._theme = theme
+        frames = SPINNER_THEMES.get(theme, SPINNER_THEMES["default"])
+        
+        # Запускаем новую задачу для анимации
+        self._spinner_running = True
+        self._spinner_task = asyncio.create_task(
+            self._animate_spinner(frames, show_text)
+        )
+    
+    async def _animate_spinner(self, frames: List[str], show_text: bool) -> None:
+        """
+        Внутренний метод для анимации спиннера.
+        
+        Args:
+            frames: Кадры анимации спиннера
+            show_text: Показывать ли текст вместе со спиннером
+        """
+        i = 0
+        try:
+            while self._spinner_running:
+                frame = frames[i % len(frames)]
                 
+                if show_text:
+                    spinner_text = f"{frame} {self.text}"
+                else:
+                    # Добавляем спиннер к последней строке
+                    lines = self.text.split('\n')
+                    lines[-1] = f"{lines[-1]} {frame}"
+                    spinner_text = '\n'.join(lines)
+                
+                try:
+                    await self.bot.edit_message_text(
+                        spinner_text,
+                        chat_id=self.chat_id,
+                        message_id=self.message_id
+                    )
+                except Exception as e:
+                    logger.debug(f"Spinner update error (normal during rapid updates): {e}")
+                
+                i += 1
+                await asyncio.sleep(0.3)  # Интервал обновления
+        except asyncio.CancelledError:
+            logger.debug("Spinner animation cancelled")
+        except Exception as e:
+            logger.error(f"Error in spinner animation: {e}")
+            self._spinner_running = False
+
     @staticmethod
     async def with_progress(message: Message, initial_text: str, 
                           process_func: Callable, 

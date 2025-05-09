@@ -174,11 +174,15 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         await ui.start_spinner(show_text=False, theme="invoice")
         
         # Load product database with caching
-        from app.utils.cached_loader import cached_load_products
-        products = cached_load_products("data/base_products.csv", data_loader.load_products)
+        from app.utils.cached_loader import cached_load_data
+        products = cached_load_data("data/base_products.csv", data_loader.load_products)
         
-        # Match positions
+        # Оптимизированное сопоставление продуктов
+        import time
+        match_start = time.time()
         match_results = matcher.match_positions(ocr_result.positions, products)
+        match_time = time.time() - match_start
+        logger.info(f"[{req_id}] Matching completed in {match_time:.2f} seconds")
         
         # Calculate matching statistics
         ok_count = sum(1 for item in match_results if item.get("status") == "ok")
@@ -198,57 +202,56 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         
         try:
             # Load suppliers database with caching
-            from app.utils.cached_loader import cached_load_products
-            suppliers = cached_load_products("data/base_suppliers.csv", data_loader.load_suppliers)
+            suppliers = cached_load_data("data/base_suppliers.csv", data_loader.load_suppliers)
             
-            # Match supplier with database using fuzzy matching (90% threshold)
+            # Безопасная проверка поставщика, обрабатывая возможные ошибки
             if ocr_result and hasattr(ocr_result, 'supplier') and ocr_result.supplier and ocr_result.supplier.strip():
-                supplier_match = matcher.match_supplier(ocr_result.supplier, suppliers, threshold=0.9)
-                
-                if supplier_match and (
-                    (isinstance(supplier_match, dict) and supplier_match.get("status") == "ok") or
-                    (hasattr(supplier_match, "status") and getattr(supplier_match, "status", None) == "ok")
-                ):
-                    # Replace supplier name with the one from database if it's a good match
-                    original_supplier = ocr_result.supplier
-                    # Универсальный способ получить имя
-                    if isinstance(supplier_match, dict):
-                        ocr_result.supplier = supplier_match.get("name")
+                try:
+                    supplier_match = matcher.match_supplier(ocr_result.supplier, suppliers, threshold=0.9)
+                    
+                    # Безопасное извлечение данных, обработка как словаря, так и объекта
+                    if supplier_match:
+                        match_status = None
+                        match_name = None
+                        match_score = None
+                        
+                        if isinstance(supplier_match, dict):
+                            match_status = supplier_match.get("status")
+                            match_name = supplier_match.get("name")
+                            match_score = supplier_match.get("score", 0)
+                        else:
+                            match_status = getattr(supplier_match, "status", None)
+                            match_name = getattr(supplier_match, "name", None)
+                            match_score = getattr(supplier_match, "score", 0)
+                        
+                        if match_status == "ok" and match_name:
+                            # Заменяем поставщика на найденный в базе
+                            original_supplier = ocr_result.supplier
+                            ocr_result.supplier = match_name
+                            
+                            logger.info(f"[{req_id}] Matched supplier '{original_supplier}' to '{match_name}' with score {match_score:.2f}")
+                            
+                            await ui.update(t("status.supplier_matched", 
+                                            {"supplier": match_name}, 
+                                            lang=lang) or f"✅ Supplier matched: {match_name}")
+                        else:
+                            logger.info(f"[{req_id}] Could not match supplier '{ocr_result.supplier}' to any known supplier")
+                            await ui.update(t("status.supplier_unknown", lang=lang) or "ℹ️ Supplier could not be matched")
                     else:
-                        ocr_result.supplier = getattr(supplier_match, "name", original_supplier)
-                    
-                    # Log the supplier matching
-                    logger.info(f"[{req_id}] Matched supplier '{original_supplier}' to '{ocr_result.supplier}' with score {supplier_match.get('score', getattr(supplier_match, 'score', 0)):.2f}")
-                    
-                    # Update UI with matched supplier
-                    try:
-                        await ui.update(t("status.supplier_matched", 
-                                        {"supplier": ocr_result.supplier}, 
-                                        lang=lang) or f"✅ Supplier matched: {ocr_result.supplier}")
-                    except Exception as ui_err:
-                        logger.error(f"[{req_id}] Error updating UI after supplier match: {ui_err}")
-                else:
-                    # Log the failure to match supplier
-                    logger.info(f"[{req_id}] Could not match supplier '{ocr_result.supplier}' to any known supplier")
-                    
-                    # Informational message only, doesn't stop processing
-                    try:
+                        logger.info(f"[{req_id}] No match found for supplier '{ocr_result.supplier}'")
                         await ui.update(t("status.supplier_unknown", lang=lang) or "ℹ️ Supplier could not be matched")
-                    except Exception as ui_err:
-                        logger.error(f"[{req_id}] Error updating UI for unknown supplier: {ui_err}")
+                        
+                except Exception as err:
+                    logger.error(f"[{req_id}] Error during supplier matching: {err}")
+                    await ui.update(t("status.supplier_matching_error", lang=lang) or "⚠️ Supplier matching error")
             else:
                 logger.info(f"[{req_id}] No supplier information available in OCR result")
-                try:
-                    await ui.update(t("status.no_supplier_info", lang=lang) or "ℹ️ No supplier information available")
-                except Exception as ui_err:
-                    logger.error(f"[{req_id}] Error updating UI for missing supplier: {ui_err}")
+                await ui.update(t("status.no_supplier_info", lang=lang) or "ℹ️ No supplier information available")
+                
         except Exception as supplier_err:
             # Don't fail the entire process if supplier matching fails
             logger.error(f"[{req_id}] Supplier matching error: {supplier_err}")
-            try:
-                await ui.update(t("status.supplier_matching_error", lang=lang) or "⚠️ Supplier matching error")
-            except Exception as ui_err:
-                logger.error(f"[{req_id}] Error updating UI for supplier error: {ui_err}")
+            await ui.update(t("status.supplier_matching_error", lang=lang) or "⚠️ Supplier matching error")
         
         ui.stop_spinner()
         
