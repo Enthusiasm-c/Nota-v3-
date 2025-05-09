@@ -25,7 +25,7 @@ from aiogram.filters import Command, CommandStart
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.enums import ParseMode
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
 # Импортируем состояния
 from app.fsm.states import EditFree, NotaStates
@@ -316,7 +316,7 @@ async def cmd_start(message, state: FSMContext):
     ])
     
     await state.set_state(NotaStates.lang)
-    await message.answer(t("main.choose_language", lang=lang), reply_markup=lang_keyboard)
+    await message.answer(t("main.choose_language", lang="en"), reply_markup=lang_keyboard)
 
 
 async def cb_new_invoice(callback: CallbackQuery, state: FSMContext):
