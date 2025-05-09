@@ -45,6 +45,24 @@ class IncrementalUI:
     
     # Константы для форматирования индикатора прогресса
     SPINNER_CHARS = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+    # Добавляем тематические спиннеры
+    SPINNER_THEMES = {
+        "dots": ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
+        "text": ["📄", "📃", "📑", "📜", "📰", "📋"],
+        "scan": ["🔍", "🔎", "🔍", "🔎", "🔍︎", "🔎︎"],
+        "money": ["💰", "💲", "💴", "💵", "💶", "💷"],
+        "calc": ["🧮", "📊", "📈", "📉", "🧾"],
+        "clock": ["🕛", "🕧", "🕐", "🕜", "🕑", "🕝", "🕒", "🕞", "🕓", "🕟", "🕔", "🕠", "🕕", "🕡", "🕖", "🕢", "🕗", "🕣", "🕘", "🕤", "🕙", "🕥", "🕚", "🕦"],
+        "shop": ["🛒", "🛍️", "🏪", "🏬", "🧾", "💸"],
+        "faces": ["🤔", "🤨", "🧐", "🤓", "😎", "🧠"],
+        "words": ["NOTA", "INVOICE", "CHECK", "SCAN", "OCR", "📝"],
+        # Новые тематические спиннеры
+        "invoice": ["🧾", "📋", "📊", "🧾", "📄", "📑"],
+        "table": ["┏━┓", "┃ ┃", "┃ ┃", "┗━┛", "┏━┓", "┣━┫"],
+        "counting": ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"],
+        "loading": ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"],
+        "boxes": ["▫️", "◽", "◻️", "⬜", "⬛", "◼️", "◾", "▪️"]
+    }
     PROGRESS_INDICATOR = "🔄"
     COMPLETE_INDICATOR = "✅"
     ERROR_INDICATOR = "❌"
@@ -69,6 +87,7 @@ class IncrementalUI:
         self.active = False
         self._spinner_idx = 0
         self._update_task = None
+        self._current_spinner_theme = "dots"
         
     async def start(self, initial_text: str, kb: Optional[InlineKeyboardMarkup] = None) -> Message:
         """
@@ -148,28 +167,68 @@ class IncrementalUI:
         """
         await self.update(text, replace_last=False)
         
-    async def start_spinner(self, update_ms: int = 200, show_text: bool = False) -> None:
+    def set_spinner_theme(self, theme_name: str) -> bool:
+        """
+        Устанавливает тему для анимации спиннера.
+        
+        Args:
+            theme_name: Название темы из SPINNER_THEMES
+            
+        Returns:
+            bool: True если тема найдена, False если нет
+        """
+        if theme_name in self.SPINNER_THEMES:
+            self._current_spinner_theme = theme_name
+            return True
+        return False
+    
+    async def start_spinner(self, update_ms: int = 200, show_text: bool = False, theme: Optional[str] = None) -> None:
         """
         Запускает анимированный спиннер в последней строке.
         
         Args:
             update_ms: Частота обновления спиннера в миллисекундах
             show_text: Если True, показывает текст рядом со спиннером, иначе только спиннер
+            theme: Тема спиннера из SPINNER_THEMES (если None, использует текущую тему)
         """
         if self._update_task:
             return  # Уже запущен
             
+        # Устанавливаем тему если указана
+        if theme and theme in self.SPINNER_THEMES:
+            self._current_spinner_theme = theme
+            
+        # Выбираем текущий набор символов
+        spinner_chars = self.SPINNER_THEMES.get(self._current_spinner_theme, self.SPINNER_CHARS)
+        
         async def _spinner_task():
+            last_theme = self._current_spinner_theme
+            frame_idx = 0
+            
             while self.active:
+                # Проверяем, изменилась ли тема
+                if last_theme != self._current_spinner_theme:
+                    last_theme = self._current_spinner_theme
+                    frame_idx = 0
+                    spinner_chars = self.SPINNER_THEMES.get(self._current_spinner_theme, self.SPINNER_CHARS)
+                
                 if self.lines:
                     # Получаем последнюю строку без индикатора
                     last_line = self.lines[-1]
                     if last_line.startswith(self.PROGRESS_INDICATOR):
                         last_line = last_line[len(self.PROGRESS_INDICATOR):].strip()
+                    # Проверяем, начинается ли с предыдущего спиннера
+                    elif any(last_line.startswith(char) for char in spinner_chars):
+                        # Находим индекс пробела после спиннера
+                        space_idx = last_line.find(" ")
+                        if space_idx > 0:
+                            last_line = last_line[space_idx+1:]
+                        else:
+                            last_line = ""
                     
                     # Обновляем с анимированным спиннером
-                    self._spinner_idx = (self._spinner_idx + 1) % len(self.SPINNER_CHARS)
-                    spinner_char = self.SPINNER_CHARS[self._spinner_idx]
+                    frame_idx = (frame_idx + 1) % len(spinner_chars)
+                    spinner_char = spinner_chars[frame_idx]
                     
                     # Если show_text=True, показываем текст рядом со спиннером, иначе только спиннер
                     if show_text:

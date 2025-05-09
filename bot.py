@@ -83,7 +83,7 @@ def create_bot_and_dispatcher():
     storage = MemoryStorage()
     # Исправлено для совместимости с aiogram 3.7.0+
     from aiogram.client.default import DefaultBotProperties
-    bot = Bot(token=settings.TELEGRAM_BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    bot = Bot(token=settings.TELEGRAM_BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
     dp = Dispatcher(storage=storage)
     dp.message.middleware(TracingLogMiddleware())
     dp.callback_query.middleware(TracingLogMiddleware())
@@ -125,7 +125,7 @@ async def safe_edit(bot, chat_id, msg_id, text, kb=None, **kwargs):
     # Не экранируем HTML-теги, если используется HTML режим
     # Экранируем только для Markdown
     parse_mode = kwargs.get("parse_mode")
-    if parse_mode in ("MarkdownV2", ParseMode.MARKDOWN_V2) and not (
+    if parse_mode in ("MarkdownV2", "MARKDOWN_V2") and not (
         text and text.startswith("\\")
     ):
         text = escape_html(text)
@@ -514,7 +514,9 @@ async def handle_nlu_text(message, state: FSMContext):
         return
     
     # Проверяем, находимся ли мы в режиме редактирования поля
-    if user_data.get("editing_mode") == "field_edit":
+    editing_mode = user_data.get("editing_mode")
+    
+    if editing_mode == "field_edit":
         logger.debug(f"BUGFIX: Handling message as field edit for user {user_id}")
         # Вызываем обработчик редактирования поля напрямую
         try:
@@ -525,6 +527,107 @@ async def handle_nlu_text(message, state: FSMContext):
                 t("error.edit_failed", lang=lang) or "Error processing edit. Please try again.",
                 parse_mode=None
             )
+        return
+    
+    # Проверяем, находимся ли мы в режиме редактирования поставщика
+    elif editing_mode == "supplier_edit":
+        logger.debug(f"Processing supplier edit for user {user_id}: '{text}'")
+        # Отправляем индикатор обработки с анимированным спиннером
+        spinner_frames = ["🔄", "🔁", "🔃", "🔀", "↻", "⭮", "⭯", "⟳"]
+        processing_msg = await message.answer(
+            f"{spinner_frames[0]} {t('status.processing_changes', lang=lang) or 'Обрабатываю изменения...'}"
+        )
+        
+        # Анимируем спиннер в отдельной задаче
+        spinner_task = None
+        
+        async def animate_spinner():
+            frame_idx = 0
+            spinner_active = True
+            while spinner_active:
+                try:
+                    frame = spinner_frames[frame_idx % len(spinner_frames)]
+                    await bot.edit_message_text(
+                        chat_id=processing_msg.chat.id,
+                        message_id=processing_msg.message_id,
+                        text=f"{frame} {t('status.processing_supplier', lang=lang) or 'Обновляю поставщика...'}"
+                    )
+                    frame_idx += 1
+                    await asyncio.sleep(0.5)
+                except Exception as e:
+                    logger.debug(f"Spinner animation error: {e}")
+                    spinner_active = False
+        
+        try:
+            # Запускаем анимацию спиннера
+            spinner_task = asyncio.create_task(animate_spinner())
+            
+            # Получаем последнее сообщение с инвойсом для обновления
+            msg_id = user_data.get("edit_msg_id")
+            if not msg_id:
+                # Ищем последнее сообщение в user_matches
+                user_keys = [k for k in user_matches.keys() if k[0] == user_id]
+                if user_keys:
+                    # Берем ключ с наибольшим message_id
+                    key = max(user_keys, key=lambda k: k[1])
+                    msg_id = key[1]
+                    
+            if not msg_id:
+                await message.answer(t("error.invoice_not_found", lang=lang) or "Не удалось найти инвойс для обновления")
+                return
+                
+            # Обновляем поставщика в данных инвойса
+            key = (user_id, msg_id)
+            if key in user_matches:
+                # Обновляем поставщика
+                entry = user_matches[key]
+                if "parsed_data" in entry:
+                    old_supplier = getattr(entry["parsed_data"], "supplier", "")
+                    entry["parsed_data"].supplier = text
+                    logger.info(f"Updated supplier from '{old_supplier}' to '{text}' for user {user_id}")
+                    
+                    # Формируем обновленный отчет
+                    from app.formatters.report import build_report
+                    from app.keyboards import build_main_kb
+                    
+                    report_text, has_errors = build_report(entry["parsed_data"], entry["match_results"], escape_html=True)
+                    
+                    # Отправляем обновленный отчет
+                    result = await message.answer(
+                        report_text,
+                        reply_markup=build_main_kb(has_errors=has_errors, lang=lang),
+                        parse_mode="HTML"
+                    )
+                    
+                    # Обновляем ссылки в user_matches
+                    new_msg_id = result.message_id
+                    new_key = (user_id, new_msg_id)
+                    user_matches[new_key] = entry.copy()
+                    
+                    # Сбрасываем режим редактирования
+                    await state.update_data(editing_mode=None, edit_msg_id=new_msg_id)
+                    
+                    # Отправляем подтверждение
+                    await message.answer(t("edit.supplier_updated", lang=lang) or f"Поставщик обновлен: {text}")
+                else:
+                    await message.answer(t("error.invoice_data_invalid", lang=lang) or "Данные инвойса некорректны")
+            else:
+                await message.answer(t("error.invoice_not_found", lang=lang) or "Не удалось найти инвойс для обновления")
+                
+        except Exception as e:
+            logger.error(f"Error updating supplier: {e}")
+            await message.answer(t("error.update_failed", lang=lang) or "Ошибка при обновлении поставщика")
+        finally:
+            # Остановка анимации спиннера
+            if spinner_task and not spinner_task.done():
+                spinner_task.cancel()
+                
+            # Удаляем сообщение о загрузке
+            try:
+                await bot.delete_message(chat_id, processing_msg.message_id)
+            except Exception:
+                pass
+            
         return
     
     # Проверяем, не обрабатывается ли уже фото
@@ -594,10 +697,10 @@ async def handle_nlu_text(message, state: FSMContext):
         # Отвечаем новым сообщением
         # Не экранируем HTML-теги для HTML режима
         logger.debug("TELEGRAM OUT >>> %s", assistant_response[:300])
-        logger.debug("TELEGRAM parse_mode: %s", ParseMode.HTML)
+        logger.debug("TELEGRAM parse_mode: %s", "HTML")
         logger.debug("TELEGRAM OUT (assistant) >>> %s", assistant_response[:500])
         try:
-            await message.answer(assistant_response, parse_mode=ParseMode.HTML)
+            await message.answer(assistant_response, parse_mode="HTML")
         except Exception as e:
             logger.error("Telegram error (assistant): %s\nText: %s", str(e), assistant_response[:500])
             # Если ошибка с HTML-форматированием, попробуем без него
@@ -623,14 +726,23 @@ async def handle_nlu_text(message, state: FSMContext):
 
 
 async def cb_set_supplier(callback: CallbackQuery, state: FSMContext):
+    # Получаем язык пользователя
+    data = await state.get_data()
+    lang = data.get("lang", "en")
+    
+    # Запоминаем ID сообщения для дальнейшего обновления
+    message_id = callback.message.message_id
+    await state.update_data(edit_msg_id=message_id, editing_mode="supplier_edit")
+    
     await safe_edit(
         bot,
         callback.message.chat.id,
         callback.message.message_id,
-        "Введите название поставщика:",
+        t("edit.enter_supplier_name", lang=lang) or "Введите название поставщика:",
     )
     await callback.answer()
 
+    # Остаемся в режиме редактирования с установленным editing_mode
     await state.set_state(NotaStates.editing)
 
 
@@ -748,7 +860,7 @@ async def cb_edit_line(callback: CallbackQuery, state: FSMContext):
         from app.i18n import t
         await callback.message.answer(
             t("example.edit_prompt", lang=lang),
-            parse_mode=ParseMode.HTML
+            parse_mode="HTML"
         )
     
     # Отвечаем на callback
@@ -829,7 +941,7 @@ async def cb_field(callback: CallbackQuery, state: FSMContext):
             callback.from_user.id,
             field_prompt,
             reply_markup={"force_reply": True},
-            parse_mode=ParseMode.HTML
+            parse_mode="HTML"
         )
         
         # Логируем ID созданного сообщения
@@ -928,7 +1040,7 @@ async def handle_field_edit(message, state: FSMContext):
         
         # Отправляем новое сообщение с обновленным отчетом
         logger.debug("TELEGRAM OUT >>> %s", formatted_report[:300])
-        logger.debug("TELEGRAM parse_mode: %s", ParseMode.HTML)
+        logger.debug("TELEGRAM parse_mode: %s", "HTML")
         logger.debug("TELEGRAM OUT (report) >>> %s", formatted_report[:500])
         try:
             # Проверяем наличие потенциально опасных HTML-тегов
@@ -951,7 +1063,7 @@ async def handle_field_edit(message, state: FSMContext):
                     result = await message.answer(
                         formatted_report,
                         reply_markup=keyboard,
-                        parse_mode=ParseMode.HTML,  # Используем константу из aiogram
+                        parse_mode="HTML",  # Используем константу из aiogram
                     )
                     logger.debug("Successfully sent message with HTML formatting")
                 except Exception as html_error:
@@ -979,7 +1091,7 @@ async def handle_field_edit(message, state: FSMContext):
                 result = await message.answer(
                     formatted_report,
                     reply_markup=keyboard,
-                    parse_mode=ParseMode.HTML,  # Используем константу из aiogram
+                    parse_mode="HTML",  # Используем константу из aiogram
                 )
         except Exception as e:
             logger.error("Telegram error: %s\nText length: %d\nText sample: %s", 
@@ -1148,7 +1260,7 @@ async def confirm_fuzzy_name(callback: CallbackQuery, state: FSMContext):
     result = await callback.message.answer(
         report,
         reply_markup=build_main_kb(has_errors=has_errors),
-        parse_mode=ParseMode.HTML
+        parse_mode="HTML"
     )
     
     # Обновляем ссылку в user_matches с новым ID сообщения
@@ -1216,7 +1328,7 @@ async def reject_fuzzy_name(callback: CallbackQuery, state: FSMContext):
     result = await callback.message.answer(
         report,
         reply_markup=build_main_kb(has_errors=has_errors),
-        parse_mode=ParseMode.HTML
+        parse_mode="HTML"
     )
     
     # Обновляем ссылку в user_matches с новым ID сообщения

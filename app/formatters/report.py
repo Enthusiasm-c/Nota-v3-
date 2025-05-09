@@ -3,6 +3,7 @@ import logging
 logging.getLogger("nota.report").debug("escape func = %s", escape)
 from decimal import Decimal
 from app.utils.formatters import format_price, format_quantity
+import re
 
 def format_idr(val):
     """Format number with narrow space and no currency for table."""
@@ -45,11 +46,17 @@ def build_table(rows):
     from app.utils.formatters import format_price, format_quantity
 
     status_map = {"ok": "✓", "unknown": "❗", "unit_mismatch": "❗", "error": "❗", "manual": ""}
-    def pad(text, width):
-        s = str(text)
-        return s[:width].ljust(width)
+    
+    # Функция для выравнивания текста с учетом HTML-тегов
+    def pad_with_html(text, width):
+        # Удаляем HTML-теги для расчета видимой длины
+        visible_text = re.sub(r'<[^>]+>', '', str(text))
+        visible_len = len(visible_text)
+        # Добавляем пробелы, учитывая разницу между видимой и полной длиной текста
+        padding = max(0, width - visible_len)
+        return f"{text}{' ' * padding}"
 
-    header = f"#  {pad('NAME',14)}{pad('QTY',5)}{pad('UNIT',5)}{pad('PRICE',6)}! "
+    header = f"#  {'NAME'.ljust(14)}{'QTY'.ljust(5)}{'UNIT'.ljust(5)}{'PRICE'.ljust(6)}! "
     divider = '-' * len(header)
     table_rows = [header, divider]
 
@@ -105,7 +112,8 @@ def build_table(rows):
         if status not in ["ok", "manual"] or has_qty_problem or has_price_problem:
             flag = "❗"
         
-        row = f"{str(idx):<2} {pad(name,14)}{pad(qty_str,5)}{pad(unit,5)}{pad(price_str,6)}{pad(flag,2)}"
+        # Используем новую функцию выравнивания с учетом HTML-тегов
+        row = f"{str(idx):<2} {pad_with_html(name, 14)}{pad_with_html(qty_str, 5)}{pad_with_html(unit, 5)}{pad_with_html(price_str, 6)}{flag}"
         table_rows.append(row)
 
     return "\n".join(table_rows)
@@ -133,16 +141,20 @@ def build_summary(match_results):
             
         name = item.get("name", "")
         problems = []
+        error_details = []
         
         # Добавляем описание проблемы в зависимости от статуса
         if status == "unknown":
             problems.append(t("report.name_error") or "item not recognized (name error)")
+            error_details.append("check name")
             has_problems = True
         elif status == "unit_mismatch":
             problems.append(t("report.unit_mismatch") or "unit mismatch error")
+            error_details.append("check unit")
             has_problems = True
         elif status == "error":
             problems.append(t("report.processing_error") or "line processing error")
+            error_details.append("processing error")
             has_problems = True
         elif status == "ok":
             # Изначально считаем позицию корректной, но перепроверим наличие количества и цены
@@ -156,11 +168,41 @@ def build_summary(match_results):
         
         if qty in (None, "", "—"):
             problems.append(t("report.no_quantity") or "quantity not specified")
+            error_details.append("missing quantity")
             has_problems = True
         if price in (None, "", "—"):
             problems.append(t("report.no_price") or "price not specified")
+            error_details.append("missing price")
             has_problems = True
             
+        # Проверка автокоррекции цены
+        if "auto_fixed" in item and item.get("auto_fixed", False):
+            if "original_price" in item and "price" in item:
+                original_price = item.get("original_price")
+                corrected_price = item.get("price")
+                error_details.append(f"price fixed: {corrected_price}")
+                
+        # Проверка ошибок валидации
+        # Арифметические ошибки
+        if "issues" in item:
+            for issue in item.get("issues", []):
+                issue_type = issue.get("type", "")
+                if issue_type == "ARITHMETIC_ERROR":
+                    error_details.append("check math")
+                elif issue_type == "PRICE_ZERO_LOST":
+                    error_details.append(f"price missing 0: {issue.get('fix', '')}")
+                elif issue_type == "PRICE_EXTRA_ZERO":
+                    error_details.append(f"price has extra 0: {issue.get('fix', '')}")
+                elif issue_type == "QTY_DECIMAL_MISSED":
+                    error_details.append(f"quantity fixed: {issue.get('fix', '')}")
+                elif issue_type == "PRICE_TOO_LOW":
+                    error_details.append("price too low")
+                elif issue_type == "PRICE_TOO_HIGH": 
+                    error_details.append("price too high")
+                elif issue_type == "UNIT_MISMATCH":
+                    if "suggestion" in issue:
+                        error_details.append(f"should be {issue.get('suggestion', '')}")
+        
         # Если нет проблем, увеличиваем счетчик корректных позиций
         if not has_problems and status == "ok":
             correct_count += 1
@@ -168,11 +210,16 @@ def build_summary(match_results):
             issues_count += 1
             
         # Добавляем строку ошибки если есть проблемы
-        if problems:
-            error_line = t("report.error_line", params={"line": idx, "name": name, "problem": ', '.join(problems)})
-            if not error_line.startswith("❗") and not error_line.startswith("⚠️"):
-                error_line = f"⚠️ Line {idx} <b>{name}</b>: {', '.join(problems)}"
-            errors.append(error_line)
+        if problems or error_details:
+            # Используем краткое англоязычное описание ошибок, если есть
+            if error_details:
+                error_line = f"⚠️ Line {idx} <b>{name}</b>: {', '.join(error_details)}"
+                errors.append(error_line)
+            else:
+                error_line = t("report.error_line", params={"line": idx, "name": name, "problem": ', '.join(problems)})
+                if not error_line.startswith("❗") and not error_line.startswith("⚠️"):
+                    error_line = f"⚠️ Line {idx} <b>{name}</b>: {', '.join(problems)}"
+                errors.append(error_line)
         elif has_problems:
             # Если есть проблемы, но нет конкретного описания
             error_line = f"⚠️ Line {idx} <b>{name}</b>: {t('report.needs_verification') or 'needs verification'}"
@@ -272,9 +319,11 @@ def build_report(parsed_data, match_results, escape_html=True, page=1, page_size
     header_html = build_header(supplier_str, date_str)
     table = build_table(rows_to_show)
     summary_html = build_summary(match_results)
+    
+    # Используем <code> вместо <pre> для таблицы, чтобы улучшить совместимость с Telegram
     html_report = (
         f"{header_html}"
-        f"<pre>{table}</pre>\n"
+        f"<code>{table}</code>\n"
         f"{summary_html}"
     )
     return html_report.strip(), has_errors

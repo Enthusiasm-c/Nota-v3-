@@ -139,7 +139,7 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         
         # Step 2: OCR изображения
         await ui.append(t("status.analyzing_image", lang=lang) or "🖼️ Analyzing image...")
-        await ui.start_spinner(show_text=False)
+        await ui.start_spinner(show_text=False, theme="loading")
         with temp_file(f"ocr_{req_id}", ".jpg") as tmp_path:
             with open(tmp_path, "wb") as f:
                 f.write(img_bytes)
@@ -171,7 +171,7 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         
         # Step 4: Match with products
         await ui.append(t("status.matching_items", lang=lang) or "🔄 Matching items...")
-        await ui.start_spinner(show_text=False)
+        await ui.start_spinner(show_text=False, theme="invoice")
         
         # Load product database with caching
         from app.utils.cached_loader import cached_load_products
@@ -194,7 +194,7 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         
         # Match supplier with supplier database
         await ui.append(t("status.matching_supplier", lang=lang) or "🏢 Matching supplier...")
-        await ui.start_spinner(show_text=False)
+        await ui.start_spinner(show_text=False, theme="counting")
         
         try:
             # Load suppliers database with caching
@@ -263,7 +263,7 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         
         # Step 5: Generate report
         await ui.append(t("status.generating_report", lang=lang) or "📋 Generating report...")
-        await ui.start_spinner(show_text=False)
+        await ui.start_spinner(show_text=False, theme="table")
         
         # Create report with HTML formatting
         report_text, has_errors = build_report(ocr_result, match_results, escape_html=True)
@@ -285,16 +285,16 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
             telegram_html_tags = ["<b>", "<i>", "<u>", "", "<strike>", "<del>", "<code>", "<pre>", "<a"]
             has_valid_html = any(tag in report_text for tag in telegram_html_tags)
             
-            if "<pre>" in report_text and "</pre>" not in report_text:
-                logger.warning("Unclosed <pre> tag detected in message, attempting to fix")
-                report_text = report_text.replace("<pre>", "<pre>") + "</pre>"
+            if "<code>" in report_text and "</code>" not in report_text:
+                logger.warning("Unclosed <code> tag detected in message, attempting to fix")
+                report_text = report_text.replace("<code>", "<code>") + "</code>"
                 
             logger.debug(f"Sending report with HTML formatting (valid HTML tags: {has_valid_html})")
             for part in split_message(report_text):
                 report_msg = await message.answer(
                     part,
                     reply_markup=inline_kb,
-                    parse_mode=ParseMode.HTML
+                    parse_mode="HTML"
                 )
             logger.debug(f"Successfully sent HTML-formatted report with message_id={report_msg.message_id}")
         except Exception as html_err:

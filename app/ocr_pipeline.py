@@ -132,6 +132,11 @@ class OCRPipeline:
             if not client:
                 logger.error("GPT-4o OCR unavailable: no OpenAI client")
                 return "", 0.0
+                
+            # Проверка наличия атрибута chat у клиента
+            if not hasattr(client, 'chat'):
+                logger.error("GPT-4o OCR unavailable: OpenAI client does not have chat attribute")
+                return "", 0.0
 
             # Формируем простой промпт для ячейки
             cell_prompt = "Внимательно посмотри на изображение. Оно содержит текст из одной ячейки таблицы. Просто извлеки и верни этот текст. Не добавляй никаких объяснений."

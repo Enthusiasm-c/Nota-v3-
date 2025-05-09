@@ -37,7 +37,7 @@ async def edit_message_text_safe(bot, chat_id, msg_id, text, kb):
             message_id=msg_id,
             text=text,
             reply_markup=kb,
-            parse_mode=ParseMode.HTML,
+            parse_mode="HTML",
         )
         # 3. Кэшируем успешный результат
         _edit_cache[cache_key] = {"text": text, "kb": kb_serialized}
