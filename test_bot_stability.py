@@ -11,6 +11,7 @@ import random
 import datetime
 import copy
 import argparse
+import time
 from typing import Dict, List, Any, Optional
 
 from app import matcher, data_loader
@@ -300,51 +301,49 @@ class InvoiceStabilityTester:
     def test_modified_invoice(self, modification_type: str, modified_data: Dict) -> Dict:
         """
         Тестирует обработку модифицированной накладной.
-        
-        Args:
-            modification_type: Тип модификации
-            modified_data: Модифицированные данные накладной
-            
-        Returns:
-            Результаты тестирования
         """
         try:
-            # Создаем объект ParsedData из модифицированных данных
+            timings = {}
+            t0 = time.time()
+            # Проверка структуры positions
+            if not isinstance(modified_data.get('positions'), list):
+                raise ValueError("Поле 'positions' должно быть списком")
+            timings['structure_check'] = time.time() - t0
+            t1 = time.time()
             positions = []
             for pos_dict in modified_data['positions']:
-                # Проверяем, что цена - это число, а не строка
-                price = pos_dict['price']
-                if isinstance(price, str):
-                    # Конвертируем строковые цены с разделителями
-                    price = price.replace(',', '')
-                    price = float(price)
-                    pos_dict['price'] = price
-                
-                # Аналогично для total_price
-                total_price = pos_dict.get('total_price')
-                if isinstance(total_price, str):
-                    total_price = total_price.replace(',', '')
-                    total_price = float(total_price)
-                    pos_dict['total_price'] = total_price
-                
-                # Проверяем наличие обязательного поля qty
-                if 'qty' not in pos_dict or pos_dict['qty'] is None:
-                    pos_dict['qty'] = 1.0  # Устанавливаем значение по умолчанию
-                
-                positions.append(Position(
-                    name=pos_dict['name'],
-                    qty=pos_dict['qty'],
-                    unit=pos_dict['unit'],
-                    price=pos_dict['price'],
-                    total_price=pos_dict.get('total_price')
-                ))
-            
-            # Проверяем формат даты, при необходимости исправляем
-            date = modified_data['date']
-            if isinstance(date, str) and not date.startswith('20'):  # Простая проверка на ISO формат
-                # Пытаемся преобразовать дату в ISO формат
                 try:
-                    # Пробуем разные форматы даты
+                    price = pos_dict['price']
+                    if isinstance(price, str):
+                        price = price.replace(',', '')
+                        price = float(price)
+                        pos_dict['price'] = price
+                    total_price = pos_dict.get('total_price')
+                    if isinstance(total_price, str):
+                        total_price = total_price.replace(',', '')
+                        total_price = float(total_price)
+                        pos_dict['total_price'] = total_price
+                    if 'qty' not in pos_dict or pos_dict['qty'] is None:
+                        pos_dict['qty'] = 1.0
+                    positions.append(Position(
+                        name=pos_dict.get('name', ''),
+                        qty=pos_dict.get('qty', 1.0),
+                        unit=pos_dict.get('unit', ''),
+                        price=pos_dict.get('price', 0),
+                        total_price=pos_dict.get('total_price')
+                    ))
+                except Exception as e:
+                    logger.error(f"Ошибка в позиции: {pos_dict} — {e}")
+                    return {
+                        "modification_type": modification_type,
+                        "error": f"Ошибка в позиции: {e}",
+                        "success_rate": 0
+                    }
+            timings['positions_parse'] = time.time() - t1
+            t2 = time.time()
+            date = modified_data.get('date', datetime.datetime.now().strftime('%Y-%m-%d'))
+            if isinstance(date, str) and not date.startswith('20'):
+                try:
                     for fmt in ['%d.%m.%Y', '%m/%d/%Y', '%d-%m-%Y']:
                         try:
                             parsed_date = datetime.datetime.strptime(date, fmt)
@@ -353,35 +352,29 @@ class InvoiceStabilityTester:
                         except ValueError:
                             continue
                 except Exception:
-                    # Если не удалось распознать формат, используем текущую дату
                     date = datetime.datetime.now().strftime('%Y-%m-%d')
-            
             parsed_data = ParsedData(
-                supplier=modified_data['supplier'],
+                supplier=modified_data.get('supplier', ''),
                 date=date,
                 positions=positions,
                 total_price=modified_data.get('total_price', 0)
             )
-            
-            # Применяем постобработку
+            timings['parsed_data'] = time.time() - t2
+            t3 = time.time()
             logger.info(f"Применяем постобработку для {modification_type}")
             processed_data = postprocess_parsed_data(parsed_data)
-            
-            # Выполняем сопоставление с базой продуктов
+            timings['postprocess'] = time.time() - t3
+            t4 = time.time()
             logger.info(f"Выполняем сопоставление позиций для {modification_type}")
             positions_for_matching = [
                 {"name": pos.name, "qty": pos.qty, "unit": pos.unit, "price": pos.price, "total_price": pos.total_price}
                 for pos in processed_data.positions
             ]
-            
             matched_positions = matcher.match_positions(positions_for_matching, self.products)
-            
-            # Подсчитываем количество успешных сопоставлений
+            timings['matching'] = time.time() - t4
             ok_count = sum(1 for pos in matched_positions if pos['status'] == 'ok')
             partial_count = sum(1 for pos in matched_positions if pos['status'] == 'partial')
             unknown_count = sum(1 for pos in matched_positions if pos['status'] == 'unknown')
-            
-            # Формируем отчет
             report = {
                 "modification_type": modification_type,
                 "total_positions": len(matched_positions),
@@ -389,10 +382,9 @@ class InvoiceStabilityTester:
                 "partial_matches": partial_count,
                 "unknown_matches": unknown_count,
                 "success_rate": (ok_count + partial_count) / len(matched_positions) if matched_positions else 0,
-                "error": None
+                "error": None,
+                "timings": timings
             }
-            
-            # Сохраняем результаты модификации и сопоставления
             output_file = os.path.join(self.output_dir, f"modified_{modification_type}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
             with open(output_file, 'w') as f:
                 json.dump({
@@ -402,12 +394,10 @@ class InvoiceStabilityTester:
                     "matched": matched_positions,
                     "report": report
                 }, f, indent=2, default=str)
-            
             logger.info(f"Результаты теста {modification_type} сохранены в {output_file}")
             logger.info(f"Успешных сопоставлений: {ok_count + partial_count}/{len(matched_positions)} ({report['success_rate']*100:.1f}%)")
-            
+            logger.info(f"[TIMING] {modification_type}: структура {timings['structure_check']:.3f}с, парсинг позиций {timings['positions_parse']:.3f}с, парсинг ParsedData {timings['parsed_data']:.3f}с, постобработка {timings['postprocess']:.3f}с, сопоставление {timings['matching']:.3f}с")
             return report
-        
         except Exception as e:
             logger.error(f"Ошибка при тестировании {modification_type}: {e}")
             return {
@@ -558,6 +548,111 @@ class InvoiceStabilityTester:
         self.test_results['combined'] = self.test_modified_invoice("combined", modified_data)
         return self.test_results['combined']
 
+    def test_missing_fields(self):
+        """
+        Тестирует реакцию на отсутствие обязательных полей в накладной и позициях.
+        """
+        logger.info("Тест: отсутствие обязательных полей")
+        data = copy.deepcopy(self.reference_data)
+        # Удаляем supplier и date
+        data.pop('supplier', None)
+        data.pop('date', None)
+        # Удаляем name и unit у первой позиции
+        if data['positions']:
+            data['positions'][0].pop('name', None)
+            data['positions'][0].pop('unit', None)
+        return self.test_modified_invoice("missing_fields", data)
+
+    def test_wrong_types(self):
+        """
+        Тестирует реакцию на неверные типы данных в полях.
+        """
+        logger.info("Тест: неверные типы данных")
+        data = copy.deepcopy(self.reference_data)
+        for pos in data['positions']:
+            pos['qty'] = "not_a_number"
+            pos['price'] = [123, 456]
+            pos['unit'] = 12345
+        data['date'] = 123456789
+        return self.test_modified_invoice("wrong_types", data)
+
+    def test_null_and_empty(self):
+        """
+        Тестирует реакцию на пустые и null значения в ключевых полях.
+        """
+        logger.info("Тест: пустые и null значения")
+        data = copy.deepcopy(self.reference_data)
+        for pos in data['positions']:
+            pos['name'] = ''
+            pos['unit'] = None
+            pos['price'] = None
+        data['supplier'] = ''
+        data['date'] = None
+        return self.test_modified_invoice("null_and_empty", data)
+
+    def test_extreme_values(self):
+        """
+        Тестирует реакцию на экстремальные значения (очень большие, маленькие, отрицательные).
+        """
+        logger.info("Тест: экстремальные значения")
+        data = copy.deepcopy(self.reference_data)
+        for pos in data['positions']:
+            pos['qty'] = -999999999
+            pos['price'] = 1e20
+            pos['total_price'] = -1e20
+        return self.test_modified_invoice("extreme_values", data)
+
+    def test_duplicate_positions(self):
+        """
+        Тестирует реакцию на дублирование позиций.
+        """
+        logger.info("Тест: дублирование позиций")
+        data = copy.deepcopy(self.reference_data)
+        if data['positions']:
+            data['positions'].append(copy.deepcopy(data['positions'][0]))
+        return self.test_modified_invoice("duplicate_positions", data)
+
+    def test_broken_structure(self):
+        """
+        Тестирует реакцию на битую структуру накладной.
+        """
+        logger.info("Тест: битая структура JSON")
+        data = copy.deepcopy(self.reference_data)
+        data['positions'] = 'not_a_list'
+        return self.test_modified_invoice("broken_structure", data)
+
+    def run_all_robustness_tests(self):
+        """
+        Запускает все дополнительные тесты на устойчивость к структурным и типовым ошибкам.
+        """
+        tests = [
+            self.test_missing_fields,
+            self.test_wrong_types,
+            self.test_null_and_empty,
+            self.test_extreme_values,
+            self.test_duplicate_positions,
+            self.test_broken_structure
+        ]
+        results = []
+        for test in tests:
+            try:
+                results.append(test())
+            except Exception as e:
+                logger.error(f"Ошибка при выполнении теста {test.__name__}: {e}")
+                results.append({"test": test.__name__, "error": str(e)})
+        return results
+
+    def test_units(self):
+        return self.test_modified_invoice("units", self.modify_units(self.reference_data))
+    def test_product_names(self):
+        return self.test_modified_invoice("product_names", self.modify_product_names(self.reference_data))
+    def test_quantities(self):
+        return self.test_modified_invoice("quantities", self.modify_quantities(self.reference_data))
+    def test_prices(self):
+        return self.test_modified_invoice("prices", self.modify_prices(self.reference_data))
+    def test_date(self):
+        return self.test_modified_invoice("date", self.modify_date(self.reference_data))
+
 
 def main():
     """
@@ -573,6 +668,7 @@ def main():
                         help='Показывать подробную информацию о процессе тестирования')
     parser.add_argument('--test', type=str, choices=['units', 'names', 'quantities', 'prices', 'date', 'combined'], 
                         help='Запустить только определенный тест')
+    parser.add_argument('--robust', action='store_true', help='Запустить дополнительные тесты на устойчивость к ошибкам структуры и типов')
     args = parser.parse_args()
     
     # Создаем экземпляр тестера
@@ -593,6 +689,8 @@ def main():
             tester.test_date()
         elif args.test == 'combined':
             tester.test_combined()
+    elif args.robust:
+        tester.run_all_robustness_tests()
     else:
         # Запуск всех тестов
         tester.run_all_tests()

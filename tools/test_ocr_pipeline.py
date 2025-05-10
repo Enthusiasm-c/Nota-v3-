@@ -50,15 +50,28 @@ def print_summary(result):
     accuracy = result.get('accuracy', 0)
     lines = result.get('lines', [])
     issues = result.get('issues', [])
+    timing = result.get('timing', {})
     
     print(f"Статус: {status}")
+    if status == "error":
+        print(f"Ошибка: {result.get('message', 'Неизвестная ошибка')}")
+        
     print(f"Точность: {accuracy:.2%}")
     print(f"Распознано строк: {len(lines)}")
     print(f"Обнаружено проблем: {len(issues)}")
+    
+    # Выводим информацию о времени выполнения
+    if timing:
+        print("\nЗАМЕРЫ ВРЕМЕНИ:")
+        for key, value in timing.items():
+            print(f"  {key}: {value:.2f} сек")
+            
     print("-" * 50)
     
     # Выводим распознанные строки
     print("\nРАСПОЗНАННЫЕ ТОВАРЫ:")
+    if not lines:
+        print("Не найдено ни одной строки! Проверьте качество изображения.")
     for i, line in enumerate(lines):
         name = line.get('name', 'Unknown')
         qty = line.get('qty', 0)
@@ -83,6 +96,14 @@ def print_summary(result):
                 print(f"Строка {line_num}: {issue_type} - исправлено с {old} на {fix}")
             else:
                 print(f"Строка {line_num}: {issue_type} - {message}")
+    
+    # Выводим статистику GPT-4o
+    gpt4o_percent = result.get('gpt4o_percent', 0)
+    gpt4o_count = result.get('gpt4o_count', 0)
+    total_cells = result.get('total_cells', 0)
+    if total_cells:
+        print(f"\nСТАТИСТИКА GPT-4o:")
+        print(f"Доля ячеек, обработанных через GPT-4o: {gpt4o_percent:.1f}% ({gpt4o_count}/{total_cells})")
     
     print("=" * 50)
 

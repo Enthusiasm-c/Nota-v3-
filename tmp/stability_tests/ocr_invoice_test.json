@@ -1,0 +1,4 @@
+{
+  "status": "error",
+  "message": "(NotFound) No allocator found for the place, Place(undefined:0)\n  [Hint: Expected iter != allocators.end(), but received iter == allocators.end().] (at /Users/paddle/xly/workspace/7b5bf7ed-f223-4c37-9311-a1c9d604457b/Paddle/paddle/phi/core/memory/allocation/allocator_facade.cc:381)\n  [operator < matmul > error]"
+}

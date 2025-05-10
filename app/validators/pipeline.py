@@ -35,6 +35,43 @@ class ValidationPipeline:
         Returns:
             Обновленные данные накладной с исправлениями и отметками о проблемах
         """
+        # Проверка структуры
+        result = invoice_data.copy()
+        issues = result.get('issues', [])
+        if not isinstance(invoice_data.get('lines'), list):
+            issues.append({
+                'type': 'STRUCTURE_ERROR',
+                'message': "Поле 'lines' должно быть списком",
+                'severity': 'error'
+            })
+            result['issues'] = issues
+            result['metadata'] = {
+                'total_lines': 0,
+                'total_issues': len(issues),
+                'auto_fixed': 0,
+                'lines_with_issues': 0,
+                'accuracy': 0
+            }
+            return result
+        # Проверка строк
+        for i, line in enumerate(invoice_data['lines']):
+            if not isinstance(line, dict):
+                issues.append({
+                    'type': 'LINE_TYPE_ERROR',
+                    'message': f'Строка {i+1} не является словарём',
+                    'severity': 'error',
+                    'line': i+1
+                })
+        if issues:
+            result['issues'] = issues
+            result['metadata'] = {
+                'total_lines': len(invoice_data['lines']),
+                'total_issues': len(issues),
+                'auto_fixed': 0,
+                'lines_with_issues': len(set([iss.get('line') for iss in issues if 'line' in iss])),
+                'accuracy': 0
+            }
+            return result
         # Применяем арифметический валидатор (исправляет числовые ошибки)
         logger.info("Выполняем арифметическую валидацию...")
         result = self.arithmetic_validator.validate_invoice(invoice_data)

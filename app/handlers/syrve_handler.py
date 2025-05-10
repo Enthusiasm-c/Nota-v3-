@@ -99,17 +99,34 @@ async def handle_invoice_confirm(callback: CallbackQuery, state: FSMContext):
         
         # Timer for XML generation to track performance
         start_time = datetime.now()
-        xml = await generate_invoice_xml(syrve_data, openai_client)
+        # Генерация XML
+        try:
+            xml = await generate_invoice_xml(syrve_data, openai_client)
+        except Exception as e:
+            logger.error(f"Ошибка генерации XML для Syrve: {str(e)}", exc_info=True)
+            await processing_msg.edit_text(
+                t("error.syrve_error", {"message": "Ошибка генерации XML: " + str(e)}, lang=lang),
+                reply_markup=kb_main(lang)
+            )
+            increment_counter("nota_invoices_total", {"status": "failed"})
+            return
         generation_time = (datetime.now() - start_time).total_seconds()
         logger.info(f"XML generation took {generation_time:.2f} seconds")
         
-        # Authenticate with Syrve
-        auth_token = await syrve_client.auth()
+        # Аутентификация и отправка
+        try:
+            auth_token = await syrve_client.auth()
+            result = await syrve_client.import_invoice(auth_token, xml)
+        except Exception as e:
+            logger.error(f"Ошибка отправки накладной в Syrve: {str(e)}", exc_info=True)
+            await processing_msg.edit_text(
+                t("error.syrve_error", {"message": "Ошибка отправки в Syrve: " + str(e)}, lang=lang),
+                reply_markup=kb_main(lang)
+            )
+            increment_counter("nota_invoices_total", {"status": "failed"})
+            return
         
-        # Send to Syrve
-        result = await syrve_client.import_invoice(auth_token, xml)
-        
-        # Process result
+        # Проверка результата
         if result.get("valid", False):
             # Success - update UI
             # Use optimized safe edit instead of direct edit
@@ -129,21 +146,19 @@ async def handle_invoice_confirm(callback: CallbackQuery, state: FSMContext):
             cache_set(f"invoice:{invoice_id}", json.dumps(syrve_data), ex=86400)  # 24 hours
             
         else:
-            # Error from Syrve
-            error_msg = result.get("errorMessage", "Unknown error")
+            # Ошибка от Syrve или OpenAI
+            error_msg = result.get("errorMessage") or result.get("error") or "Unknown error"
             status = result.get("status", 500)
-            
-            if status == 401:
+            # Проверка на ошибки структуры/валидации
+            if "Missing required field" in error_msg or "Invalid" in error_msg:
+                error_text = t("error.syrve_error", {"message": error_msg}, lang=lang)
+            elif status == 401:
                 error_text = t("error.syrve_auth", {}, lang=lang)
             elif status in (403, 409):
                 error_text = t("error.syrve_duplicate", {}, lang=lang)
             else:
-                # Detailed error from Syrve
-                # Limit error message length to 50 chars to prevent overly long messages
                 short_error = error_msg[:50] + ("..." if len(error_msg) > 50 else "")
                 error_text = t("error.syrve_error", {"message": short_error}, lang=lang)
-                
-                # For 500 errors, log to admin chat
                 if status == 500:
                     admin_chat_id = os.getenv("ADMIN_CHAT_ID", getattr(settings, "ADMIN_CHAT_ID", None))
                     if admin_chat_id:
@@ -154,21 +169,16 @@ async def handle_invoice_confirm(callback: CallbackQuery, state: FSMContext):
                             )
                         except Exception as e:
                             logger.error(f"Failed to send admin alert: {str(e)}")
-            
-            # Update UI with error
             await processing_msg.edit_text(
                 error_text,
                 reply_markup=kb_main(lang)
             )
-            
-            # Track failed upload
             increment_counter("nota_invoices_total", {"status": "failed"})
     
     except Exception as e:
-        # Handle unexpected errors
-        logger.error(f"Error processing invoice confirmation: {str(e)}", exc_info=True)
-        await processing_msg.edit_text(
-            t("error.unexpected", {}, lang=lang),
+        logger.error(f"Необработанная ошибка при отправке в Syrve: {str(e)}", exc_info=True)
+        await callback.message.answer(
+            t("error.syrve_error", {"message": str(e)}, lang=lang),
             reply_markup=kb_main(lang)
         )
         increment_counter("nota_invoices_total", {"status": "failed"})
