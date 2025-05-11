@@ -128,9 +128,8 @@ async def main():
         
         # Создаем OCR-пайплайн
         pipeline = OCRPipeline(
-            table_detector_method=args.detector,
-            arithmetic_max_error=args.error_percent,
-            strict_validation=args.strict
+            table_detector_method="paddle",
+            paddle_ocr_lang="en"
         )
         
         # Выполняем OCR

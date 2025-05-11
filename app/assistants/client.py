@@ -417,7 +417,7 @@ def parse_edit_command(user_input: str, invoice_lines=None) -> list:
                 continue
             except Exception:
                 results.append({"action": "unknown", "error": "invalid_total_value"})
-                continue
+            continue
         
         # --- Price ---
         match_price = (
@@ -475,7 +475,7 @@ def parse_edit_command(user_input: str, invoice_lines=None) -> list:
                 
                 name = match_name.group(2).strip()
                 results.append({"action": "set_name", "line": line, "name": name})
-            except Exception:
+                    except Exception:
                 results.append({"action": "unknown", "error": "invalid_line_or_name"})
             continue
         
@@ -497,8 +497,8 @@ def parse_edit_command(user_input: str, invoice_lines=None) -> list:
                     results.append({"action": "unknown", "error": "line_out_of_range", "line": line})
                     continue
                     
-                unit = match_unit.group(2).strip()
-                results.append({"action": "set_unit", "line": line, "unit": unit})
+                    unit = match_unit.group(2).strip()
+                    results.append({"action": "set_unit", "line": line, "unit": unit})
             except Exception:
                 results.append({"action": "unknown", "error": "invalid_line_or_unit"})
             continue
@@ -763,7 +763,7 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
 
         # ОПТИМИЗАЦИЯ 3: Уменьшаем таймаут для запросов редактирования до 30 секунд
         actual_timeout = min(30, timeout)
-        
+
         # Запускаем ассистента с повторными попытками
         logger.info(f"[run_thread_safe_async] Creating run with assistant ID: {cached_assistant_id}")
         try:
@@ -798,7 +798,7 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
             try:
                 messages = await retry_openai_call(
                     client.beta.threads.messages.list,
-                    thread_id=thread_id,
+                        thread_id=thread_id,
                     max_retries=2
                 )
                 
@@ -822,10 +822,10 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
         # Остальной код для обработки ошибок остаётся без изменений
         # ...
 
-    except Exception as e:
+            except Exception as e:
         logger.exception(f"[run_thread_safe_async] Error in OpenAI Assistant API call: {e}")
-        return {
-            "action": "unknown", 
+                return {
+                    "action": "unknown", 
             "error": str(e),
             "user_message": "An error occurred while processing your request. Please try again."
         }
@@ -851,7 +851,7 @@ def attempt_fast_intent_recognition(user_input: str) -> Optional[Dict[str, Any]]
         try:
             line_num = int(price_match.group(2))
             price = price_match.group(4).strip()
-            return {
+                        return {
                 "action": "set_price",
                 "line_index": line_num - 1,  # Конвертируем в 0-based индекс
                 "value": price
@@ -865,7 +865,7 @@ def attempt_fast_intent_recognition(user_input: str) -> Optional[Dict[str, Any]]
         try:
             line_num = int(qty_match.group(2))
             qty = qty_match.group(4).strip()
-            return {
+                return {
                 "action": "set_quantity",
                 "line_index": line_num - 1,  # Конвертируем в 0-based индекс
                 "value": qty
@@ -879,7 +879,7 @@ def attempt_fast_intent_recognition(user_input: str) -> Optional[Dict[str, Any]]
         try:
             line_num = int(unit_match.group(2))
             unit = unit_match.group(4).strip()
-            return {
+                        return {
                 "action": "set_unit",
                 "line_index": line_num - 1,  # Конвертируем в 0-based индекс
                 "value": unit

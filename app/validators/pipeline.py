@@ -1,39 +1,39 @@
-from typing import Dict, List, Any
+"""
+Валидационный пайплайн для последовательной проверки и исправления ошибок.
+
+Включает валидаторы:
+1. ArithmeticValidator: проверяет арифметику (quantity × price = amount)
+2. SanityValidator: проверяет бизнес-правила и здравый смысл
+"""
+
 import logging
-from app.validators.arithmetic import ArithmeticValidator
-from app.validators.sanity import SanityValidator
+from typing import Dict, List, Any, Union
+import os
+import json
+
+from app.validators.arithmetic_validator import ArithmeticValidator
+from app.validators.sanity_validator import SanityValidator
 
 logger = logging.getLogger(__name__)
 
 class ValidationPipeline:
     """
-    Пайплайн для последовательного выполнения нескольких валидаторов.
-    
-    Порядок выполнения:
-    1. Арифметический валидатор (исправление числовых значений)
-    2. Валидатор бизнес-правил (проверка доменной логики)
+    Пайплайн валидации, который последовательно применяет
+    несколько валидаторов к данным накладной.
     """
     
-    def __init__(self, arithmetic_max_error: float = 1.0, strict_mode: bool = False):
+    def __init__(self):
         """
-        Инициализирует пайплайн валидации.
-        
-        Args:
-            arithmetic_max_error: Максимальный процент ошибки для арифметического валидатора
-            strict_mode: Строгий режим для валидатора бизнес-правил
+        Инициализирует пайплайн с набором валидаторов.
         """
-        self.arithmetic_validator = ArithmeticValidator(max_error_percent=arithmetic_max_error)
-        self.sanity_validator = SanityValidator(strict_mode=strict_mode)
+        self.validators = [
+            ArithmeticValidator(),
+            SanityValidator()
+        ]
     
     def validate(self, invoice_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Последовательно применяет все валидаторы к данным накладной.
-        
-        Args:
-            invoice_data: Данные накладной со списком строк (lines)
-            
-        Returns:
-            Обновленные данные накладной с исправлениями и отметками о проблемах
         """
         # Проверка структуры
         result = invoice_data.copy()
@@ -47,71 +47,45 @@ class ValidationPipeline:
             result['issues'] = issues
             result['metadata'] = {
                 'total_lines': 0,
-                'total_issues': len(issues),
-                'auto_fixed': 0,
-                'lines_with_issues': 0,
-                'accuracy': 0
+                'valid_lines': 0,
+                'accuracy': 1.0,  # 100% точность, т.к. нет ошибок валидации (только структуры)
+                'status': 'invalid_structure'
             }
             return result
-        # Проверка строк
-        for i, line in enumerate(invoice_data['lines']):
-            if not isinstance(line, dict):
+        
+        # Последовательно применяем все валидаторы
+        pipeline_result = result
+        total_lines = len(pipeline_result.get('lines', []))
+        error_lines = 0
+        
+        for validator in self.validators:
+            try:
+                pipeline_result = validator.validate(pipeline_result)
+            except Exception as e:
+                logger.error(f"Ошибка в валидаторе {validator.__class__.__name__}: {str(e)}", exc_info=True)
+                issues = pipeline_result.get('issues', [])
                 issues.append({
-                    'type': 'LINE_TYPE_ERROR',
-                    'message': f'Строка {i+1} не является словарём',
-                    'severity': 'error',
-                    'line': i+1
+                    'type': 'VALIDATOR_ERROR',
+                    'message': f"Ошибка валидации: {str(e)}",
+                    'severity': 'error'
                 })
-        if issues:
-            result['issues'] = issues
-            result['metadata'] = {
-                'total_lines': len(invoice_data['lines']),
-                'total_issues': len(issues),
-                'auto_fixed': 0,
-                'lines_with_issues': len(set([iss.get('line') for iss in issues if 'line' in iss])),
-                'accuracy': 0
-            }
-            return result
-        # Применяем арифметический валидатор (исправляет числовые ошибки)
-        logger.info("Выполняем арифметическую валидацию...")
-        result = self.arithmetic_validator.validate_invoice(invoice_data)
+                pipeline_result['issues'] = issues
         
-        # Применяем валидатор бизнес-правил (проверяет доменные правила)
-        logger.info("Выполняем проверку бизнес-правил...")
-        result = self.sanity_validator.validate_invoice(result)
+        # Подсчитываем количество ошибок
+        for issue in pipeline_result.get('issues', []):
+            if issue.get('severity') == 'error' or issue.get('severity') == 'warning':
+                error_lines += 1
         
-        # Группируем проблемы по строкам для удобства анализа
-        issues_by_line = {}
-        for issue in result.get('issues', []):
-            line_num = issue.get('line')
-            if line_num:
-                if line_num not in issues_by_line:
-                    issues_by_line[line_num] = []
-                issues_by_line[line_num].append(issue)
+        # Рассчитываем точность (% успешных строк)
+        valid_lines = total_lines - error_lines
+        accuracy = 1.0 if total_lines == 0 else valid_lines / total_lines
         
-        # Добавляем поле issues_by_line
-        result['issues_by_line'] = issues_by_line
-        
-        # Считаем общую статистику
-        total_lines = len(result.get('lines', []))
-        total_issues = len(result.get('issues', []))
-        auto_fixed = result.get('auto_fixed_count', 0)
-        
-        # Вычисляем процент корректно распознанных строк
-        if total_lines > 0:
-            lines_with_issues = len(issues_by_line)
-            correct_lines = total_lines - lines_with_issues + auto_fixed
-            accuracy = correct_lines / total_lines
-        else:
-            accuracy = 0
-        
-        # Добавляем метаданные
-        result['metadata'] = {
+        # Добавляем метаданные о результатах валидации
+        pipeline_result['metadata'] = {
             'total_lines': total_lines,
-            'total_issues': total_issues,
-            'auto_fixed': auto_fixed,
-            'lines_with_issues': len(issues_by_line),
-            'accuracy': round(accuracy, 4)
+            'valid_lines': valid_lines,
+            'accuracy': accuracy,
+            'status': 'valid' if accuracy >= 0.9 else 'needs_review'
         }
         
-        return result 
+        return pipeline_result 

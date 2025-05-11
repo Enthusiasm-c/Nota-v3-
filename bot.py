@@ -525,8 +525,8 @@ async def handle_nlu_text(message, state: FSMContext):
             logger.error(f"Error during field edit: {str(field_edit_err)}")
             await message.answer(
                 t("error.edit_failed", lang=lang) or "Error processing edit. Please try again.",
-                parse_mode=None
-            )
+                    parse_mode=None
+                )
         return
     
     # Проверяем, находимся ли мы в режиме редактирования поставщика
@@ -613,8 +613,8 @@ async def handle_nlu_text(message, state: FSMContext):
                     await message.answer(t("error.invoice_data_invalid", lang=lang) or "Данные инвойса некорректны")
             else:
                 await message.answer(t("error.invoice_not_found", lang=lang) or "Не удалось найти инвойс для обновления")
-                
-        except Exception as e:
+            
+    except Exception as e:
             logger.error(f"Error updating supplier: {e}")
             await message.answer(t("error.update_failed", lang=lang) or "Ошибка при обновлении поставщика")
         finally:
@@ -625,8 +625,8 @@ async def handle_nlu_text(message, state: FSMContext):
             # Удаляем сообщение о загрузке
             try:
                 await bot.delete_message(chat_id, processing_msg.message_id)
-            except Exception:
-                pass
+        except Exception:
+            pass
             
         return
     
@@ -888,7 +888,7 @@ async def cb_cancel_row(callback: CallbackQuery, state: FSMContext):
             t("main.ready_to_work", lang=lang) or "Ready to work. Send me a photo of an invoice to process.",
             kb=kb_main(lang),
         )
-        
+
         # Возвращаемся в главное меню
         await state.set_state(NotaStates.main_menu)
     else:
@@ -911,7 +911,7 @@ async def cb_field(callback: CallbackQuery, state: FSMContext):
             
         _, field, idx = parts
         try:
-            idx = int(idx)
+    idx = int(idx)
         except ValueError:
             logger.error(f"Invalid index in callback data: {callback.data}")
             await callback.answer("Error processing request")
@@ -937,25 +937,25 @@ async def cb_field(callback: CallbackQuery, state: FSMContext):
         if not field_prompt:
             field_prompt = f"Enter new value for {field} (line {idx+1}):"
             
-        reply_msg = await callback.message.bot.send_message(
-            callback.from_user.id,
+    reply_msg = await callback.message.bot.send_message(
+        callback.from_user.id,
             field_prompt,
-            reply_markup={"force_reply": True},
+        reply_markup={"force_reply": True},
             parse_mode="HTML"
-        )
-        
-        # Логируем ID созданного сообщения
-        logger.debug(f"BUGFIX: Force reply message created with ID {reply_msg.message_id}")
-        
-        # Сохраняем контекст в FSM для последующей обработки
-        await state.update_data(
-            edit_idx=idx, 
-            edit_field=field, 
-            msg_id=callback.message.message_id,
-            # Важно: отмечаем, что мы находимся в процессе редактирования поля
-            # Это поможет правильно маршрутизировать ответ пользователя
+    )
+    
+    # Логируем ID созданного сообщения
+    logger.debug(f"BUGFIX: Force reply message created with ID {reply_msg.message_id}")
+    
+    # Сохраняем контекст в FSM для последующей обработки
+    await state.update_data(
+        edit_idx=idx, 
+        edit_field=field, 
+        msg_id=callback.message.message_id,
+        # Важно: отмечаем, что мы находимся в процессе редактирования поля
+        # Это поможет правильно маршрутизировать ответ пользователя
             editing_mode="field_edit",
-        )
+    )
     except Exception as msg_err:
         logger.error(f"Error creating prompt message: {str(msg_err)}")
         # Уведомляем пользователя о проблеме
@@ -1000,7 +1000,7 @@ async def handle_field_edit(message, state: FSMContext):
     if key not in user_matches:
         logger.warning(f"No matches found for user {user_id}, message {msg_id}")
         await message.answer(t("error.invoice_data_not_found", lang=lang))
-        return
+            return
     
     entry = user_matches[key]
     text = message.text.strip()
@@ -1060,8 +1060,8 @@ async def handle_field_edit(message, state: FSMContext):
                 logger.debug("Detecting potential HTML formatting issues, trying to send without formatting")
                 try:
                     # Пробуем сначала с HTML-форматированием 
-                    result = await message.answer(
-                        formatted_report,
+            result = await message.answer(
+                formatted_report,
                         reply_markup=keyboard,
                         parse_mode="HTML",  # Используем константу из aiogram
                     )

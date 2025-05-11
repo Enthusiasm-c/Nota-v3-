@@ -33,111 +33,142 @@ class OCRPipeline:
     
     def __init__(self, 
                  table_detector_method="paddle",
-                 arithmetic_max_error=1.0, 
-                 strict_validation=False,
                  paddle_ocr_lang="en"):
         """
         Инициализирует OCR-пайплайн.
         
         Args:
             table_detector_method: Метод детекции таблиц ('paddle', etc.)
-            arithmetic_max_error: Максимальный процент ошибки для арифметического валидатора
-            strict_validation: Строгий режим для валидатора бизнес-правил
             paddle_ocr_lang: Язык для PaddleOCR
         """
         self.table_detector = get_detector(method=table_detector_method)
-        self.validation_pipeline = ValidationPipeline(
-            arithmetic_max_error=arithmetic_max_error,
-            strict_mode=strict_validation
-        )
+        self.validation_pipeline = ValidationPipeline()
         self.paddle_ocr = PaddleOCR(use_angle_cls=True, lang=paddle_ocr_lang, show_log=False)
         self.low_conf_threshold = 0.7  # Порог уверенности для fallback на GPT-4o
     
-    async def process_image(self, image_bytes: bytes, lang: List[str] = None) -> Dict[str, Any]:
+    async def process_image(self, image_bytes: bytes, lang: List[str], max_retries: int = 2) -> Dict[str, Any]:
         """
-        Обрабатывает изображение накладной.
+        Обрабатывает изображение, извлекает таблицу и распознает текст.
         
         Args:
             image_bytes: Бинарные данные изображения
-            lang: Список языков для OCR (по умолчанию ['id', 'en'])
+            lang: Список языков для OCR
+            max_retries: Максимальное количество попыток при ошибках
             
         Returns:
-            Словарь с результатами распознавания и валидации
+            Структура данных с результатами OCR
         """
-        if lang is None:
-            lang = ['id', 'en']
+        start_time = time.time()
+        timing = {}
         
         try:
-            # Замеряем общее время выполнения
-            start_time = time.time()
-            
-            # Шаг 1: Детекция таблицы и ячеек
-            table_start = time.time()
-            logger.info("Шаг 1: Детекция таблицы и ячеек")
-            cells = self.table_detector.extract_cells(image_bytes)
-            table_time = time.time() - table_start
-            logger.info(f"[TIMING] Детекция таблицы: {table_time:.2f} сек. Обнаружено ячеек: {len(cells)}")
-            
-            # Шаг 2: OCR для каждой ячейки
-            ocr_start = time.time()
-            logger.info("Шаг 2: OCR для ячеек")
-            lines_data = await self._process_cells(cells, lang)
-            ocr_time = time.time() - ocr_start
-            
-            # Проверяем тип данных перед валидацией
-            if not isinstance(lines_data, list):
-                logger.error(f"Некорректный тип данных от OCR: {type(lines_data)}. Ожидался List[Dict]. Содержимое: {lines_data}")
-                return {
-                    "status": "error",
-                    "message": f"Некорректный формат данных OCR: {type(lines_data)}",
-                    "timing": {
-                        "table_detection": table_time,
-                        "ocr": ocr_time,
-                        "total": time.time() - start_time
-                    }
+            # Пытаемся использовать детектор таблиц
+            table_detection_start = time.time()
+            try:
+                table_detector = get_detector("paddle")
+                table_data = table_detector.detect(image_bytes)
+                cells = table_detector.extract_cells(image_bytes)
+                timing['table_detection'] = time.time() - table_detection_start
+                
+                # Обрабатываем ячейки
+                processing_start = time.time()
+                lines = await self._process_cells(cells, lang)
+                timing['cell_processing'] = time.time() - processing_start
+                
+                # Собираем результат
+                result = {
+                    'status': 'success',
+                    'lines': lines,
+                    'accuracy': 0.8,  # Оценка точности по умолчанию
+                    'issues': [],
+                    'timing': timing
                 }
-            
-            logger.info(f"[TIMING] OCR: {ocr_time:.2f} сек. Распознано строк: {len(lines_data)}")
-            
-            # Шаг 3: Валидация и исправление ошибок
-            validation_start = time.time()
-            logger.info("Шаг 3: Валидация данных")
-            invoice_data = {"lines": lines_data}
-            result = self.validation_pipeline.validate(invoice_data)
-            validation_time = time.time() - validation_start
-            logger.info(f"[TIMING] Валидация: {validation_time:.2f} сек")
-            
-            # Шаг 4: Формирование итогового результата
-            logger.info("Шаг 4: Подготовка ответа")
-            metadata = result.get('metadata', {})
-            
-            # Общее время выполнения
-            total_time = time.time() - start_time
-            logger.info(f"[TIMING] Общее время обработки: {total_time:.2f} сек")
-            
-            response = {
-                "status": "ok",
-                "accuracy": metadata.get('accuracy', 0),
-                "lines": result.get('lines', []),
-                "issues": result.get('issues', []),
-                "gpt4o_percent": getattr(self, '_last_gpt4o_percent', 0),
-                "gpt4o_count": getattr(self, '_last_gpt4o_count', 0),
-                "total_cells": getattr(self, '_last_total_cells', 0),
-                "timing": {
-                    "table_detection": table_time,
-                    "ocr": ocr_time,
-                    "validation": validation_time,
-                    "total": total_time
-                }
+                
+            except Exception as e:
+                # Ошибка детектора таблиц - используем резервный метод (OpenAI Vision)
+                logger.warning(f"Ошибка при использовании детектора таблиц: {str(e)}, переключаемся на OpenAI Vision")
+                
+                # Сбрасываем таймеры и фиксируем ошибку
+                timing['table_detection_error'] = time.time() - table_detection_start
+                timing['table_detection_error_message'] = str(e)
+                
+                # Используем OpenAI Vision для всего изображения
+                vision_start = time.time()
+                result = await self._process_with_openai_vision(image_bytes, lang)
+                timing['vision_processing'] = time.time() - vision_start
+                result['timing'] = timing
+                result['used_fallback'] = True
+                
+            # Применяем валидацию
+            if result['status'] == 'success':
+                validation_start = time.time()
+                validation_pipeline = ValidationPipeline()
+                validated_result = validation_pipeline.validate(result)
+                timing['validation'] = time.time() - validation_start
+                validated_result['timing'] = timing
+                validated_result['total_time'] = time.time() - start_time
+                return validated_result
+            else:
+                result['total_time'] = time.time() - start_time
+                return result
+                
+        except Exception as e:
+            # Крайний случай - общая ошибка
+            logger.error(f"Критическая ошибка в OCR-пайплайне: {str(e)}", exc_info=True)
+            return {
+                'status': 'error',
+                'message': f"Ошибка обработки: {str(e)}",
+                'timing': timing,
+                'total_time': time.time() - start_time
             }
             
-            return response
+    async def _process_with_openai_vision(self, image_bytes: bytes, lang: List[str]) -> Dict[str, Any]:
+        """
+        Резервный метод обработки через OpenAI Vision API.
+        Используется, когда PaddleOCR/PPStructure не может обработать изображение.
+        
+        Args:
+            image_bytes: Бинарные данные изображения
+            lang: Список языков для OCR
+            
+        Returns:
+            Структура данных с результатами OCR
+        """
+        try:
+            # Используем OpenAI Vision для распознавания таблицы
+            vision_result = await call_openai_ocr(
+                image_bytes=image_bytes, 
+                system_prompt=OCR_SYSTEM_PROMPT,
+                api_key=settings.OPENAI_API_KEY
+            )
+            
+            # Преобразуем результат в формат строк
+            if isinstance(vision_result, str):
+                try:
+                    parsed = json.loads(vision_result)
+                    if isinstance(parsed, dict) and 'lines' in parsed:
+                        return {
+                            'status': 'success',
+                            'lines': parsed.get('lines', []),
+                            'accuracy': 0.9,  # Оценка точности для OpenAI Vision
+                            'issues': []
+                        }
+                except json.JSONDecodeError:
+                    # Если результат не является JSON, пытаемся обработать текст
+                    logger.warning("OpenAI не вернул JSON, пытаемся обработать текст")
+            
+            # Возвращаем ошибку, если не удалось разобрать результат
+            return {
+                'status': 'error',
+                'message': "Не удалось разобрать результат OpenAI Vision",
+                'raw_result': vision_result[:200] + '...' if len(str(vision_result)) > 200 else vision_result
+            }
             
         except Exception as e:
-            logger.error(f"Ошибка в OCR-пайплайне: {e}", exc_info=True)
+            logger.error(f"Ошибка в резервном методе OpenAI Vision: {str(e)}", exc_info=True)
             return {
-                "status": "error",
-                "message": str(e)
+                'status': 'error',
+                'message': f"Ошибка в резервном методе: {str(e)}"
             }
     
     async def _process_cells(self, cells: List[Dict[str, Any]], lang: List[str]) -> List[Dict[str, Any]]:
