@@ -10,48 +10,22 @@ class Settings(BaseSettings):
     OPENAI_MODEL: str = "gpt-3.5-turbo"
 
     # Fuzzy matching configuration
-    MATCH_THRESHOLD: float = 0.7  # Повышаем порог сравнения с 0.75 до 0.7
-    MATCH_EXACT_BONUS: float = 0.1  # Bonus for substring matches (0-1.0)
-    MATCH_LENGTH_PENALTY: float = 0.05  # Увеличиваем штраф за разницу в длине
-    MATCH_MIN_SCORE: float = 0.6  # Повышаем минимальный порог для предложений
-    
-    # Часто ошибочно распознаваемые слова
-    SIMILAR_WORD_PAIRS: list[tuple[str, str]] = [
-        ("romana", "romaine"),
-        ("chick", "chickpeas"),
-        ("local", "english"),
-        ("fresh", "merah"),
-    ]
+    MATCH_THRESHOLD: float = 0.75  # Default match threshold (0-1.0)
+    MATCH_EXACT_BONUS: float = 0.05  # Bonus for substring matches (0-1.0)
+    MATCH_LENGTH_PENALTY: float = 0.1  # Penalty weight for length differences (0-1.0)
+    MATCH_MIN_SCORE: float = 0.5  # Minimum score to show in suggestions (0-1.0)
 
     # OpenAI API configuration
     USE_OPENAI_OCR: bool = False
     OPENAI_OCR_KEY: str = os.getenv("OPENAI_OCR_KEY", "")
     OPENAI_CHAT_KEY: str = os.getenv("OPENAI_CHAT_KEY", "")
-    OPENAI_ASSISTANT_ID: str = os.getenv("OPENAI_ASSISTANT_ID", "asst_zkAj2P6JswgpT0Nc2bcsjeIU")
-    OPENAI_VISION_ASSISTANT_ID: str = os.getenv("OPENAI_VISION_ASSISTANT_ID", "")
+    OPENAI_ASSISTANT_ID: str = os.getenv("OPENAI_ASSISTANT_ID", "")
     
     # Image preprocessing configuration
     USE_IMAGE_PREPROCESSING: bool = False  # True=enable, False=disable image preprocessing
 
     # Business logic configuration
     OWN_COMPANY_ALIASES: list[str] = ["Bali Veg Ltd", "Nota AI Cafe"]
-
-    # Base URL for server (used for image links)
-    BASE_URL: str = os.environ.get("BASE_URL", "")
-
-    MAX_PRODUCTS_IN_PROMPT: int = 50
-
-    # Словарь для автокоррекции имен продуктов
-    NAME_AUTOCORRECTION: dict[str, str] = {
-        "romana": "romaine",
-        "chick peas": "chickpeas",
-        "green beans": "green bean",
-        "tomatoes": "tomato",
-        "mangoes": "mango",
-    }
-
-    # Установка лимита fuzzy-сопоставления для предложений
-    FUZZY_SUGGESTIONS_LIMIT: int = 3
 
     model_config = SettingsConfigDict(
         extra="allow", env_file=os.getenv("ENV_FILE", ".env"), env_file_encoding="utf-8"

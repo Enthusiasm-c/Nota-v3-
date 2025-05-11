@@ -6,33 +6,26 @@ and analyzing invoices with progressive UI updates.
 """
 
 import asyncio
-import json
 import logging
+import uuid
 import os
 import tempfile
 from pathlib import Path
-import uuid
-from datetime import datetime
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
 from aiogram.enums import ParseMode
-from typing import Dict, List, Optional, Tuple
 
 from app.utils.incremental_ui import IncrementalUI
 from app import ocr, matcher, data_loader
 from app.formatters.report import build_report
-from app.keyboards import build_main_kb, kb_main
+from app.keyboards import build_main_kb
 from app.utils.md import clean_html
+from app.imgprep import prepare_for_ocr, prepare_without_preprocessing
 from app.i18n import t
-from app.config import settings
 
 # Import NotaStates from states module
 from app.fsm.states import NotaStates
-from app.utils.task_manager import register_task, cancel_task
-from app.utils.file_manager import temp_file, save_test_image, cleanup_temp_files
-from app.utils.processing_pipeline import process_invoice_pipeline
-from app.utils.incremental_ui_example import split_message
 
 logger = logging.getLogger(__name__)
 
@@ -64,34 +57,18 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
     photo_id = message.photo[-1].file_id if message.photo else None
     req_id = uuid.uuid4().hex[:8]  # Unique request ID for logging
     
-    # --- ОТМЕНА ПРЕДЫДУЩЕЙ ЗАДАЧИ ---
-    prev_task_id = data.get("current_ocr_task")
-    if prev_task_id:
-        cancel_task(prev_task_id)
-        logger.info(f"[{req_id}] Cancelled previous task {prev_task_id} for user {user_id}")
-    # ---
-    
-    # Принудительно сбрасываем флаг обработки фото, даже если он был установлен
-    # Это позволит начать обработку нового фото, даже если предыдущее зависло
-    await state.update_data(processing_photo=False)
-    
-    # Проверяем снова, чтобы убедиться, что флаг сброшен
-    data = await state.get_data()
+    # Check if already processing a photo
+    if data.get("processing_photo"):
+        logger.warning(f"Already processing a photo for user {user_id}, ignoring new photo")
+        await message.answer(
+            t("status.wait_for_processing", lang=lang) or "Please wait while I finish processing your current photo.",
+            parse_mode=None
+        )
+        return
     
     # Set processing flag
     await state.update_data(processing_photo=True)
     
-    # --- РЕГИСТРАЦИЯ НОВОЙ ЗАДАЧИ ---
-    task_id = f"ocr_{user_id}_{req_id}"
-    current_task = asyncio.current_task()
-    register_task(task_id, current_task)
-    await state.update_data(current_ocr_task=task_id)
-    
-    # Очистка старых временных файлов
-    cleanup_count = await asyncio.to_thread(cleanup_temp_files, False)
-    if cleanup_count > 0:
-        logger.info(f"Cleaned up {cleanup_count} old temporary files")
-
     logger.info(f"[{req_id}] Received new photo from user {user_id}")
     
     # Initialize IncrementalUI
@@ -103,86 +80,79 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         # Get file information
         file = await message.bot.get_file(message.photo[-1].file_id)
         
-        # Получаем и выводим URL для тестирования с OpenAI
-        token = getattr(message.bot, 'token', os.environ.get('BOT_TOKEN', 'UNKNOWN_TOKEN'))
-        file_url = f"https://api.telegram.org/file/bot{token}/{file.file_path}"
-        logger.info(f"[{req_id}] TELEGRAM IMAGE URL: {file_url}")
+        # Animate loading process
+        await ui.start_spinner()
         
-        # Сохраняем в файл для последующего тестирования в OpenAI Playground
-        try:
-            img_path = f"/tmp/telegram_image_{req_id}.jpg"
-            # Animate loading process
-            await ui.start_spinner()
-            
-            # Download file content
-            img_bytes_io = await message.bot.download_file(file.file_path)
-            img_bytes = img_bytes_io.getvalue()
-            
-            # Сохраняем копию для тестирования
-            with open(img_path, 'wb') as f:
-                f.write(img_bytes)
-            logger.info(f"[{req_id}] Saved test image to {img_path}")
-            
-            # Stop spinner and update UI
-            ui.stop_spinner()
-            logger.info(f"[{req_id}] Downloaded photo, size {len(img_bytes)} bytes")
-        except Exception as e:
-            logger.error(f"[{req_id}] Error saving test image: {e}")
-            ui.stop_spinner()  # Все равно останавливаем спиннер
-            
-            # Продолжаем обычную обработку фото при ошибке сохранения тестового файла
-            # Download file content снова, если не удалось ранее
-            if 'img_bytes' not in locals():
-                img_bytes_io = await message.bot.download_file(file.file_path)
-                img_bytes = img_bytes_io.getvalue()
-                logger.info(f"[{req_id}] Downloaded photo, size {len(img_bytes)} bytes")
+        # Download file content
+        img_bytes_io = await message.bot.download_file(file.file_path)
+        img_bytes = img_bytes_io.getvalue()
         
-        # Step 2: OCR изображения
-        await ui.append(t("status.analyzing_image", lang=lang) or "🖼️ Analyzing image...")
-        await ui.start_spinner(show_text=False, theme="loading")
-        with temp_file(f"ocr_{req_id}", ".jpg") as tmp_path:
-            with open(tmp_path, "wb") as f:
-                f.write(img_bytes)
-            # Новый асинхронный пайплайн
+        # Stop spinner and update UI
+        ui.stop_spinner()
+        await ui.update(t("status.image_received", lang=lang) or "✅ Image received")
+        logger.info(f"[{req_id}] Downloaded photo, size {len(img_bytes)} bytes")
+        
+        # Step 2: Preprocess image
+        await ui.append(t("status.preprocessing_image", lang=lang) or "🖼️ Preprocessing image...")
+        await ui.start_spinner()
+        
+        # Create a temporary file to save the original image
+        tmp_dir = Path(tempfile.gettempdir()) / "nota"
+        os.makedirs(tmp_dir, exist_ok=True)
+        tmp_path = tmp_dir / f"{req_id}.jpg"
+        
+        with open(tmp_path, "wb") as f:
+            f.write(img_bytes)
+        
+        # Import settings to check if preprocessing is enabled
+        from app.config import settings
+        
+        # Preprocess the image (if enabled)
+        if settings.USE_IMAGE_PREPROCESSING:
             try:
-                processed_bytes, ocr_result = await process_invoice_pipeline(
-                    img_bytes, tmp_path, req_id
-                )
+                processed_bytes = await asyncio.to_thread(prepare_for_ocr, tmp_path, use_preprocessing=True)
+                logger.info(f"[{req_id}] Image preprocessed: original={len(img_bytes)}b, processed={len(processed_bytes)}b")
+                img_bytes = processed_bytes  # Use the processed image for OCR
+            except Exception as prep_err:
+                logger.warning(f"[{req_id}] Image preprocessing failed: {str(prep_err)}. Using original image.")
+                # Continue with original image if preprocessing fails
+        else:
+            # Skip preprocessing and use original image
+            try:
+                # Just convert to proper format without any preprocessing
+                processed_bytes = await asyncio.to_thread(prepare_without_preprocessing, tmp_path)
+                logger.info(f"[{req_id}] Image preprocessing DISABLED. Using original image.")
                 img_bytes = processed_bytes
-                ui.stop_spinner()
-                positions_count = len(ocr_result.positions) if ocr_result and ocr_result.positions else 0
-                await ui.update(t("status.text_recognized", {"count": positions_count}, lang=lang) or 
-                               f"✅ Text recognized: found {positions_count} items")
-                logger.info(f"[{req_id}] OCR completed successfully, found {positions_count} items")
-            except Exception as ocr_err:
-                ui.stop_spinner()
-                logger.error(f"[{req_id}] OCR error: {ocr_err.__class__.__name__}: {str(ocr_err)}")
-                await ui.update(t("status.text_recognition_failed", lang=lang) or "❌ Text recognition failed")
-                raise
+            except Exception as read_err:
+                logger.warning(f"[{req_id}] Error reading original image: {str(read_err)}. Using raw bytes.")
+                # Continue with completely raw bytes if even format conversion fails
         
-        # Step 3: Playground image (save_test_image)
-        test_image_path = await asyncio.to_thread(save_test_image, img_bytes, req_id)
-        if test_image_path:
-            base_url = data.get("base_url", getattr(settings, "BASE_URL", ""))
-            if base_url:
-                playground_msg = f"🔍 Для тестирования в playground: {base_url}/{test_image_path}"
-                await message.answer(playground_msg)
-                logger.info(f"[{req_id}] Отправлена ссылка на тестовое изображение")
+        ui.stop_spinner()
+        await ui.update(t("status.image_processed", lang=lang) or "✅ Image optimized for OCR")
+        
+        # Step 3: OCR image
+        await ui.append(t("status.recognizing_text", lang=lang) or "🔍 Recognizing text (OCR)...")
+        await ui.start_spinner()
+        
+        # Run OCR in a separate thread for non-blocking operation
+        ocr_result = await ocr.call_openai_ocr(img_bytes)
+        
+        ui.stop_spinner()
+        positions_count = len(ocr_result.positions) if ocr_result.positions else 0
+        await ui.update(t("status.text_recognized", {"count": positions_count}, lang=lang) or 
+                       f"✅ Text recognized: found {positions_count} items")
+        logger.info(f"[{req_id}] OCR completed successfully, found {positions_count} items")
         
         # Step 4: Match with products
         await ui.append(t("status.matching_items", lang=lang) or "🔄 Matching items...")
-        await ui.start_spinner(show_text=False, theme="invoice")
+        await ui.start_spinner()
         
         # Load product database with caching
-        from app.utils.cached_loader import cached_load_data
-        products = cached_load_data("data/base_products.csv", data_loader.load_products)
+        from app.utils.cached_loader import cached_load_products
+        products = cached_load_products("data/base_products.csv", data_loader.load_products)
         
-        # Оптимизированное сопоставление продуктов
-        import time
-        match_start = time.time()
+        # Match positions
         match_results = matcher.match_positions(ocr_result.positions, products)
-        match_time = time.time() - match_start
-        logger.info(f"[{req_id}] Matching completed in {match_time:.2f} seconds")
         
         # Calculate matching statistics
         ok_count = sum(1 for item in match_results if item.get("status") == "ok")
@@ -196,65 +166,6 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
                        f"✅ Matching completed: {ok_count} ✓, {unknown_count} ❌, {partial_count} ⚠️")
         logger.info(f"[{req_id}] Matching completed: {ok_count} OK, {unknown_count} unknown, {partial_count} partial")
         
-        # Match supplier with supplier database
-        await ui.append(t("status.matching_supplier", lang=lang) or "🏢 Matching supplier...")
-        await ui.start_spinner(show_text=False, theme="counting")
-        
-        try:
-            # Load suppliers database with caching
-            suppliers = cached_load_data("data/base_suppliers.csv", data_loader.load_suppliers)
-            
-            # Безопасная проверка поставщика, обрабатывая возможные ошибки
-            if ocr_result and hasattr(ocr_result, 'supplier') and ocr_result.supplier and ocr_result.supplier.strip():
-                try:
-                    supplier_match = matcher.match_supplier(ocr_result.supplier, suppliers, threshold=0.9)
-                    
-                    # Безопасное извлечение данных, обработка как словаря, так и объекта
-                    if supplier_match:
-                        match_status = None
-                        match_name = None
-                        match_score = None
-                        
-                        if isinstance(supplier_match, dict):
-                            match_status = supplier_match.get("status")
-                            match_name = supplier_match.get("name")
-                            match_score = supplier_match.get("score", 0)
-                        else:
-                            match_status = getattr(supplier_match, "status", None)
-                            match_name = getattr(supplier_match, "name", None)
-                            match_score = getattr(supplier_match, "score", 0)
-                        
-                        if match_status == "ok" and match_name:
-                            # Заменяем поставщика на найденный в базе
-                            original_supplier = ocr_result.supplier
-                            ocr_result.supplier = match_name
-                            
-                            logger.info(f"[{req_id}] Matched supplier '{original_supplier}' to '{match_name}' with score {match_score:.2f}")
-                            
-                            await ui.update(t("status.supplier_matched", 
-                                            {"supplier": match_name}, 
-                                            lang=lang) or f"✅ Supplier matched: {match_name}")
-                        else:
-                            logger.info(f"[{req_id}] Could not match supplier '{ocr_result.supplier}' to any known supplier")
-                            await ui.update(t("status.supplier_unknown", lang=lang) or "ℹ️ Supplier could not be matched")
-                    else:
-                        logger.info(f"[{req_id}] No match found for supplier '{ocr_result.supplier}'")
-                        await ui.update(t("status.supplier_unknown", lang=lang) or "ℹ️ Supplier could not be matched")
-                        
-                except Exception as err:
-                    logger.error(f"[{req_id}] Error during supplier matching: {err}")
-                    await ui.update(t("status.supplier_matching_error", lang=lang) or "⚠️ Supplier matching error")
-            else:
-                logger.info(f"[{req_id}] No supplier information available in OCR result")
-                await ui.update(t("status.no_supplier_info", lang=lang) or "ℹ️ No supplier information available")
-                
-        except Exception as supplier_err:
-            # Don't fail the entire process if supplier matching fails
-            logger.error(f"[{req_id}] Supplier matching error: {supplier_err}")
-            await ui.update(t("status.supplier_matching_error", lang=lang) or "⚠️ Supplier matching error")
-        
-        ui.stop_spinner()
-        
         # Save data for access in other handlers
         from bot import user_matches
         user_matches[(user_id, 0)] = {  # 0 - temporary ID, will be updated below
@@ -266,7 +177,7 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         
         # Step 5: Generate report
         await ui.append(t("status.generating_report", lang=lang) or "📋 Generating report...")
-        await ui.start_spinner(show_text=False, theme="table")
+        await ui.start_spinner()
         
         # Create report with HTML formatting
         report_text, has_errors = build_report(ocr_result, match_results, escape_html=True)
@@ -274,9 +185,8 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         # Save invoice in state for access in edit mode
         await state.update_data(invoice=ocr_result, lang=lang)
         
-        # New keyboard - только с кнопками "Edit", "Cancel" и "Confirm" (если нет ошибок)
-        # Используем значение has_errors из build_report, который учитывает все проблемы (цены, количества и т.д.)
-        inline_kb = build_main_kb(has_errors=has_errors, lang=lang)
+        # New keyboard - only "Edit", "Cancel" and "Confirm" buttons (if no errors)
+        inline_kb = build_main_kb(has_errors=True if unknown_count + partial_count > 0 else False, lang=lang)
         
         ui.stop_spinner()
         # Complete UI with brief summary
@@ -285,20 +195,19 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         # Send full report as a separate message
         try:
             # Check message for potential HTML problems before sending
-            telegram_html_tags = ["<b>", "<i>", "<u>", "", "<strike>", "<del>", "<code>", "<pre>", "<a"]
+            telegram_html_tags = ["<b>", "<i>", "<u>", "<s>", "<strike>", "<del>", "<code>", "<pre>", "<a"]
             has_valid_html = any(tag in report_text for tag in telegram_html_tags)
             
-            if "<code>" in report_text and "</code>" not in report_text:
-                logger.warning("Unclosed <code> tag detected in message, attempting to fix")
-                report_text = report_text.replace("<code>", "<code>") + "</code>"
+            if "<pre>" in report_text and "</pre>" not in report_text:
+                logger.warning("Unclosed <pre> tag detected in message, attempting to fix")
+                report_text = report_text.replace("<pre>", "<pre>") + "</pre>"
                 
             logger.debug(f"Sending report with HTML formatting (valid HTML tags: {has_valid_html})")
-            for part in split_message(report_text):
-                report_msg = await message.answer(
-                    part,
-                    reply_markup=inline_kb,
-                    parse_mode="HTML"
-                )
+            report_msg = await message.answer(
+                report_text,
+                reply_markup=inline_kb,
+                parse_mode=ParseMode.HTML
+            )
             logger.debug(f"Successfully sent HTML-formatted report with message_id={report_msg.message_id}")
         except Exception as html_err:
             logger.warning(f"Error sending HTML report: {str(html_err)}")
@@ -330,7 +239,9 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
                     
                     # Last resort - send a brief summary
                     try:
-                        simple_message = t("status.brief_summary", {"total": positions_count, "ok": ok_count, "issues": unknown_count + partial_count}, lang=lang) or (
+                        simple_message = t("status.brief_summary", 
+                                          {"total": positions_count, "ok": ok_count, "issues": unknown_count + partial_count},
+                                          lang=lang) or (
                             f"📋 Found {positions_count} items. "
                             f"✅ OK: {ok_count}. "
                             f"⚠️ Issues: {unknown_count + partial_count}."
@@ -376,6 +287,3 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         
         # Return to initial state
         await state.set_state(NotaStates.main_menu)
-    finally:
-        await state.update_data(processing_photo=False)
-        await state.update_data(current_ocr_task=None)

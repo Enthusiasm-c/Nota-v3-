@@ -3,17 +3,17 @@ Syrve API client for Nota AI.
 Provides integration with Syrve restaurant management system.
 """
 
-import logging
+import hashlib
 import httpx
-import asyncio
 import json
-from typing import Dict, Any, Optional, List, Union
-import uuid
-from datetime import datetime
+import logging
+import xml.etree.ElementTree as ET
+from typing import Dict, List, Optional, Any, Union
 from pathlib import Path
+from typing import Dict, Any, List
 
-from app.utils.redis_cache import cache_get, cache_set
 from app.utils.api_decorators import with_retry_backoff
+from app.utils.redis_cache import cache_get, cache_set
 
 logger = logging.getLogger(__name__)
 
@@ -28,177 +28,170 @@ class SyrveClient:
     - Retrieving suppliers
     - Importing invoices
     """
-    
+
     def __init__(self, api_url: str, login: str, password: str):
         """
         Initialize the Syrve client.
-        
         Args:
-            api_url: Base URL for the Syrve API
+            api_url: Base URL for the Syrve API (e.g., https://host:port)
             login: API login username
-            password: API login password
+            password: API login password (plain text)
         """
         self.api_url = api_url.rstrip('/')
         self.login = login
         self.password = password
         self.timeout = 30  # Default timeout in seconds
-        
+
+    def _get_sha1_password(self) -> str:
+        # Syrve Resto API: для данной конфигурации используем sha1(password) без префикса
+        return hashlib.sha1(self.password.encode("utf-8")).hexdigest()
+
     async def auth(self) -> str:
         """
         Authenticate with the Syrve API and get an access token.
-        
         Returns:
             Access token string
-            
         Raises:
             Exception: If authentication fails
         """
         # Check if there's a cached token
         cache_key = f"syrve:key:{self.login}"
         cached_token = cache_get(cache_key)
-        
         if cached_token:
             logger.info("Using cached Syrve auth token")
             return cached_token
         
-        # Authenticate and get a new token
-        auth_url = f"{self.api_url}/api/auth/login"
-        auth_data = {
-            "login": self.login,
-            "password": self.password
-        }
-        
+        # Try GET /resto/api/auth with params (login, pass)
+        auth_url = f"{self.api_url}/resto/api/auth"
+        pass_hash = self._get_sha1_password()
+        params = {"login": self.login, "pass": pass_hash}
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(auth_url, json=auth_data)
+            async with httpx.AsyncClient(timeout=self.timeout, verify=False) as client:
+                response = await client.get(auth_url, params=params)
                 response.raise_for_status()
-                data = response.json()
-                token = data.get("key")
-                
+                token = response.text.strip()
                 if not token:
                     raise ValueError("No auth token in response")
-                
-                # Cache the token with a 45-minute TTL
+                logger.info("Successfully authenticated with Syrve API (GET /resto/api/auth)")
+                # Cache the token (45 минут)
                 cache_set(cache_key, token, ex=45*60)
-                logger.info("Successfully authenticated with Syrve API")
                 return token
         except httpx.HTTPStatusError as e:
-            logger.error(f"Syrve auth failed with status {e.response.status_code}: {e.response.text}")
+            if e.response.status_code in [404, 405, 501, 400]:
+                logger.info("GET /resto/api/auth failed, trying POST")
+            else:
+                logger.error(f"GET /resto/api/auth failed with status {e.response.status_code}: {e.response.text}")
+                raise
+        except Exception as e:
+            logger.error(f"GET /resto/api/auth failed: {str(e)}")
+        
+        # Try POST /resto/api/auth with Content-Type: application/x-www-form-urlencoded
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout, verify=False) as client:
+                response = await client.post(
+                    auth_url,
+                    data=params,
+                    headers={"Content-Type": "application/x-www-form-urlencoded"}
+                )
+                response.raise_for_status()
+                token = response.text.strip()
+                if not token:
+                    raise ValueError("No auth token in response")
+                logger.info("Successfully authenticated with Syrve API (POST /resto/api/auth)")
+                # Cache the token (45 минут)
+                cache_set(cache_key, token, ex=45*60)
+                return token
+        except httpx.HTTPStatusError as e:
+            logger.error(f"POST /resto/api/auth failed with status {e.response.status_code}: {e.response.text}")
             raise
         except Exception as e:
-            logger.error(f"Syrve auth failed: {str(e)}")
-            raise
-    
+            logger.error(f"POST /resto/api/auth failed: {str(e)}")
+            raise Exception("Both GET and POST authentication methods failed")
+
     async def logout(self, key: str) -> None:
         """
         Log out from the Syrve API.
-        
         Args:
             key: Auth token to invalidate
-            
         Returns:
             None
         """
-        logout_url = f"{self.api_url}/api/auth/logout"
+        logout_url = f"{self.api_url}/resto/api/logout"
+        params = {"key": key}
+        cache_key = f"syrve:key:{self.login}"
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(
-                    logout_url,
-                    headers={"Authorization": f"Bearer {key}"}
-                )
+            async with httpx.AsyncClient(timeout=self.timeout, verify=False) as client:
+                response = await client.post(logout_url, params=params)
                 response.raise_for_status()
-                
-                # Remove from cache
-                cache_key = f"syrve:key:{self.login}"
-                cache_get(cache_key, None)
-                
+                # Remove from cache only on success
+                cache_set(cache_key, None)
                 logger.info("Successfully logged out from Syrve API")
         except Exception as e:
             logger.warning(f"Syrve logout failed: {str(e)}")
-    
+
     async def get_suppliers(self, key: str) -> List[Dict[str, Any]]:
         """
         Get list of suppliers from Syrve.
-        
         Args:
-            key: Auth token
-            
+            key: Auth token (string)
         Returns:
             List of supplier dictionaries
         """
-        suppliers_url = f"{self.api_url}/api/suppliers"
+        suppliers_url = f"{self.api_url}/resto/api/suppliers"
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(timeout=self.timeout, verify=False) as client:
                 response = await client.get(
                     suppliers_url,
-                    headers={"Authorization": f"Bearer {key}"}
+                    cookies={"key": key}
                 )
                 response.raise_for_status()
-                suppliers = response.json()
-                logger.info(f"Retrieved {len(suppliers)} suppliers from Syrve")
-                return suppliers
+                # Try to parse response as JSON
+                try:
+                    return response.json()
+                except json.JSONDecodeError:
+                    # If not JSON, try to parse as XML
+                    logger.info("Response is not JSON, trying to parse as XML")
+                    xml_content = response.text
+                    root = ET.fromstring(xml_content)
+                    suppliers = []
+                    # Assume structure: <suppliers><supplier>...</supplier>...</suppliers>
+                    # Or another hierarchical XML structure
+                    for supplier in root.findall('.//employee'):  # Assume suppliers are stored in 'employee' tags
+                        supplier_dict = {}
+                        for child in supplier:
+                            supplier_dict[child.tag] = child.text
+                        suppliers.append(supplier_dict)
+                    return suppliers
         except Exception as e:
             logger.error(f"Failed to get suppliers: {str(e)}")
             raise
-    
+
     @with_retry_backoff(max_retries=1, initial_backoff=1.0, backoff_factor=2.0)
     async def import_invoice(self, key: str, xml: str) -> Dict[str, Any]:
         """
         Import an invoice to Syrve.
-        
         Args:
             key: Auth token
             xml: XML invoice data
-            
         Returns:
             Response data from Syrve API
-            
         Raises:
             Exception: If the import fails
         """
-        import_url = f"{self.api_url}/api/documents/import"
-        
+        import_url = f"{self.api_url}/resto/api/documents/import/incomingInvoice"
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(timeout=self.timeout, verify=False) as client:
                 response = await client.post(
                     import_url,
+                    params={"key": key},
                     content=xml,
                     headers={
-                        "Authorization": f"Bearer {key}",
                         "Content-Type": "application/xml"
                     }
                 )
-                
-                # Handle 401 by refreshing token and retrying
-                if response.status_code == 401:
-                    logger.warning("Auth token expired, refreshing and retrying")
-                    # Remove from cache to force re-auth
-                    cache_key = f"syrve:key:{self.login}"
-                    cache_set(cache_key, None)
-                    # Let the retry decorator handle the retry
-                    raise httpx.HTTPStatusError("Token expired", request=response.request, response=response)
-                
                 response.raise_for_status()
-                result = response.json()
-                
-                logger.info(f"Invoice import result: {result}")
-                return result
-        except httpx.HTTPStatusError as e:
-            status_code = e.response.status_code
-            try:
-                error_data = e.response.json()
-                error_message = error_data.get("errorMessage", str(e))
-            except Exception:
-                error_message = e.response.text or str(e)
-                
-            logger.error(f"Invoice import failed with status {status_code}: {error_message}")
-            
-            # Return a structured error response
-            return {
-                "valid": False,
-                "status": status_code,
-                "errorMessage": error_message
-            }
+                # Ответ всегда XML, возвращаем как строку или парсим при необходимости
+                return {"response": response.text, "valid": response.status_code == 200}
         except Exception as e:
             logger.error(f"Invoice import failed: {str(e)}")
             return {
@@ -244,7 +237,7 @@ async def generate_invoice_xml(invoice_data: Dict[str, Any], openai_client) -> s
         ]
         
         # Call OpenAI API with optimized parameters
-        response = await openai_client.chat.completions.acreate(
+        response = await openai_client.chat.completions.create(
             model="gpt-4o",  # Using the latest model for best results
             messages=messages,
             temperature=0.1,  # Low temperature for deterministic output

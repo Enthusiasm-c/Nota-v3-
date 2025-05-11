@@ -1,0 +1,254 @@
+{
+  "test_name": "Изменение поставщика",
+  "success": true,
+  "invoice": {
+    "supplier": "New Supplier Name LTD",
+    "date": "2025-04-20",
+    "positions": [
+      {
+        "name": "mushroom",
+        "qty": 1.0,
+        "unit": "pcs",
+        "price": 40000.0,
+        "price_per_unit": null,
+        "total_price": 40000.0
+      },
+      {
+        "name": "Romana",
+        "qty": 1.0,
+        "unit": "pcs",
+        "price": 55000.0,
+        "price_per_unit": null,
+        "total_price": 55000.0
+      },
+      {
+        "name": "english spinach",
+        "qty": 0.5,
+        "unit": "kg",
+        "price": 80000.0,
+        "price_per_unit": null,
+        "total_price": 40000.0
+      },
+      {
+        "name": "green beans",
+        "qty": 0.5,
+        "unit": "kg",
+        "price": 18000.0,
+        "price_per_unit": null,
+        "total_price": 9000.0
+      },
+      {
+        "name": "Tomato",
+        "qty": 2.0,
+        "unit": "kg",
+        "price": 20000.0,
+        "price_per_unit": null,
+        "total_price": 40000.0
+      },
+      {
+        "name": "dill",
+        "qty": 0.05,
+        "unit": "kg",
+        "price": 90000.0,
+        "price_per_unit": null,
+        "total_price": 4500.0
+      },
+      {
+        "name": "local spinach",
+        "qty": 2.0,
+        "unit": "kg",
+        "price": 15000.0,
+        "price_per_unit": null,
+        "total_price": 30000.0
+      },
+      {
+        "name": "potato",
+        "qty": 15.0,
+        "unit": "kg",
+        "price": 25000.0,
+        "price_per_unit": null,
+        "total_price": 375000.0
+      },
+      {
+        "name": "hazelnut",
+        "qty": 0.2,
+        "unit": "kg",
+        "price": 250000.0,
+        "price_per_unit": null,
+        "total_price": 50000.0
+      },
+      {
+        "name": "baking paper",
+        "qty": 1.0,
+        "unit": "pcs",
+        "price": 285000.0,
+        "price_per_unit": null,
+        "total_price": 285000.0
+      },
+      {
+        "name": "egg",
+        "qty": 15.0,
+        "unit": "pcs",
+        "price": 55000.0,
+        "price_per_unit": null,
+        "total_price": 825000.0
+      },
+      {
+        "name": "flour terigu",
+        "qty": 4.0,
+        "unit": "kg",
+        "price": 16000.0,
+        "price_per_unit": null,
+        "total_price": 64000.0
+      },
+      {
+        "name": "corn starch",
+        "qty": 2.0,
+        "unit": "kg",
+        "price": 23000.0,
+        "price_per_unit": null,
+        "total_price": 46000.0
+      },
+      {
+        "name": "hand glove M black",
+        "qty": 1.0,
+        "unit": "pcs",
+        "price": 90000.0,
+        "price_per_unit": null,
+        "total_price": 90000.0
+      },
+      {
+        "name": "chick peas",
+        "qty": 12.0,
+        "unit": "kg",
+        "price": 32000.0,
+        "price_per_unit": null,
+        "total_price": 384000.0
+      },
+      {
+        "name": "sunkist",
+        "qty": 0.5,
+        "unit": "kg",
+        "price": 35000.0,
+        "price_per_unit": null,
+        "total_price": 17500.0
+      },
+      {
+        "name": "pineapple",
+        "qty": 3.0,
+        "unit": "pcs",
+        "price": 8000.0,
+        "price_per_unit": null,
+        "total_price": 24000.0
+      },
+      {
+        "name": "dragon fruit",
+        "qty": 4.0,
+        "unit": "pcs",
+        "price": 25000.0,
+        "price_per_unit": null,
+        "total_price": 100000.0
+      },
+      {
+        "name": "Mango",
+        "qty": 2.5,
+        "unit": "kg",
+        "price": 70000.0,
+        "price_per_unit": null,
+        "total_price": 175000.0
+      },
+      {
+        "name": "paprika merah",
+        "qty": 1.0,
+        "unit": "pcs",
+        "price": 70000.0,
+        "price_per_unit": null,
+        "total_price": 70000.0
+      },
+      {
+        "name": "zucchini",
+        "qty": 1.5,
+        "unit": "kg",
+        "price": 55000.0,
+        "price_per_unit": null,
+        "total_price": 82500.0
+      },
+      {
+        "name": "cucumber",
+        "qty": 3.0,
+        "unit": "kg",
+        "price": 16000.0,
+        "price_per_unit": null,
+        "total_price": 48000.0
+      },
+      {
+        "name": "chicken breast",
+        "qty": 5.0,
+        "unit": "kg",
+        "price": 57000.0,
+        "price_per_unit": null,
+        "total_price": 285000.0
+      },
+      {
+        "name": "lumajang",
+        "qty": 20.0,
+        "unit": "kg",
+        "price": 22000.0,
+        "price_per_unit": null,
+        "total_price": 440000.0
+      },
+      {
+        "name": "carrot",
+        "qty": 2.0,
+        "unit": "kg",
+        "price": 25000.0,
+        "price_per_unit": null,
+        "total_price": 50000.0
+      },
+      {
+        "name": "lemon",
+        "qty": 4.0,
+        "unit": "pcs",
+        "price": 35000.0,
+        "price_per_unit": null,
+        "total_price": 140000.0
+      },
+      {
+        "name": "apple lokal",
+        "qty": 1.0,
+        "unit": "pcs",
+        "price": 40000.0,
+        "price_per_unit": null,
+        "total_price": 40000.0
+      },
+      {
+        "name": "watermelon",
+        "qty": 7.0,
+        "unit": "pcs",
+        "price": 13000.0,
+        "price_per_unit": null,
+        "total_price": 91000.0
+      },
+      {
+        "name": "lime",
+        "qty": 2.0,
+        "unit": "pcs",
+        "price": 20000.0,
+        "price_per_unit": null,
+        "total_price": 40000.0
+      },
+      {
+        "name": "caramel",
+        "qty": 5.0,
+        "unit": "kg",
+        "price": 35000.0,
+        "price_per_unit": null,
+        "total_price": 175000.0
+      }
+    ],
+    "price": null,
+    "price_per_unit": null,
+    "total_price": 4111500.0,
+    "supplier_status": null
+  }
+}
