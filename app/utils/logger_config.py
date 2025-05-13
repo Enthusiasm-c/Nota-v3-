@@ -78,10 +78,10 @@ def configure_logging(environment="development", log_dir="logs"):
             "\033[1;36m%(asctime)s\033[0m - \033[1;33m%(name)s\033[0m - \033[1;35m%(levelname)s\033[0m - %(message)s"
         ))
     else:
-    console.setLevel(levels["default"])
-    console.setFormatter(logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    ))
+        console.setLevel(levels["default"])
+        console.setFormatter(logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        ))
     root_logger.addHandler(console)
     
     # Main bot log file

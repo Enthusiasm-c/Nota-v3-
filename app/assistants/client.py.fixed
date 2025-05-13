@@ -789,13 +789,16 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
         latency_monitor.record_latency(latency * 1000)
         logger.info(f"assistant_latency_ms={int(latency*1000)}")
         
+        # Остальной код остаётся без изменений, включая обработку ответа
+        # ...
+
         # Когда получаем результат, кешируем его для будущих схожих запросов
         if run.status == "completed":
             # После успешного получения результата
             try:
                 messages = await retry_openai_call(
                     client.beta.threads.messages.list,
-                    thread_id=thread_id,
+                        thread_id=thread_id,
                     max_retries=2
                 )
                 
@@ -821,16 +824,13 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
                     "user_message": "An error occurred while processing your request. Please try again."
                 }
         
-        # Обработка других статусов (failed, cancelled и т.д.)
-        return {
-            "action": "unknown",
-            "error": f"run_status_{run.status}",
-            "user_message": "Не удалось обработать ваш запрос. Пожалуйста, попробуйте еще раз."
-        }
-    except Exception as e:
+        # Остальной код для обработки ошибок остаётся без изменений
+        # ...
+
+            except Exception as e:
         logger.exception(f"[run_thread_safe_async] Error in OpenAI Assistant API call: {e}")
-        return {
-            "action": "unknown", 
+                return {
+                    "action": "unknown", 
             "error": str(e),
             "user_message": "An error occurred while processing your request. Please try again."
         }
@@ -856,7 +856,7 @@ def attempt_fast_intent_recognition(user_input: str) -> Optional[Dict[str, Any]]
         try:
             line_num = int(price_match.group(2))
             price = price_match.group(4).strip()
-            return {
+                        return {
                 "action": "set_price",
                 "line_index": line_num - 1,  # Конвертируем в 0-based индекс
                 "value": price
@@ -870,7 +870,7 @@ def attempt_fast_intent_recognition(user_input: str) -> Optional[Dict[str, Any]]
         try:
             line_num = int(qty_match.group(2))
             qty = qty_match.group(4).strip()
-            return {
+                return {
                 "action": "set_quantity",
                 "line_index": line_num - 1,  # Конвертируем в 0-based индекс
                 "value": qty
@@ -884,7 +884,7 @@ def attempt_fast_intent_recognition(user_input: str) -> Optional[Dict[str, Any]]
         try:
             line_num = int(unit_match.group(2))
             unit = unit_match.group(4).strip()
-            return {
+                        return {
                 "action": "set_unit",
                 "line_index": line_num - 1,  # Конвертируем в 0-based индекс
                 "value": unit

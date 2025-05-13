@@ -189,7 +189,7 @@ def calculate_string_similarity(s1: str, s2: str) -> float:
             return 0.95
     
     # Проверка на формы единственного/множественного числа
-            for plural, singular in SINGULAR_PLURAL_FORMS:
+    for plural, singular in SINGULAR_PLURAL_FORMS:
         if (s1_norm.endswith(plural) and s2_norm.endswith(singular)) or \
            (s1_norm.endswith(singular) and s2_norm.endswith(plural)):
             return 0.95

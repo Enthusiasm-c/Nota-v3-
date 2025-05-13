@@ -91,29 +91,6 @@ def create_bot_and_dispatcher():
     return bot, dp
 
 
-def register_handlers(dp, bot=None):
-    """
-    Регистрирует обработчики для диспетчера.
-    
-    Args:
-        dp: Диспетчер
-        bot: Экземпляр бота (опционально)
-    """
-    try:
-        # Импорт роутера для редактирования
-        from app.handlers.edit_flow import router as edit_flow_router
-        
-        # Регистрация обработчиков событий
-        dp.include_router(edit_flow_router)
-        
-        # Другие обработчики событий - исключаем для теста с ruff
-        
-        logger.info("Обработчики зарегистрированы")
-    except Exception as e:
-        logger.error(f"Ошибка при регистрации обработчиков: {e}")
-        # Для тестовых целей игнорируем ошибки регистрации
-
-
 # Глобальные bot и dp убраны для тестируемости.
 bot = None
 dp = None

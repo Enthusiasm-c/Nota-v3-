@@ -79,9 +79,9 @@ def set_name(invoice: Dict[str, Any], line_index: int, value: str, manual_edit: 
             if match_results and match_results[0].get("matched_name"):
                 result["positions"][line_index]["matched_name"] = match_results[0]["matched_name"]
                 result["positions"][line_index]["status"] = match_results[0]["status"]
-        else:
-            # В противном случае сбрасываем статус для повторного матчинга
-            result["positions"][line_index]["status"] = "unknown"
+            else:
+                # В противном случае сбрасываем статус для повторного матчинга
+                result["positions"][line_index]["status"] = "unknown"
     else:
         logger.warning(f"Попытка установить название для несуществующей строки: {line_index + 1}")
     
