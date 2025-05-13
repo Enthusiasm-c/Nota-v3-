@@ -21,7 +21,6 @@ from app import ocr, matcher, data_loader
 from app.formatters.report import build_report
 from app.keyboards import build_main_kb
 from app.utils.md import clean_html
-from app.imgprep import prepare_for_ocr, prepare_without_preprocessing
 from app.i18n import t
 
 # Import NotaStates from states module
@@ -39,10 +38,9 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
     
     Provides the user with visual information about the processing at each stage:
     1. Photo download
-    2. Image preprocessing
-    3. OCR recognition
-    4. Position matching
-    5. Report generation
+    2. OCR recognition
+    3. Position matching
+    4. Report generation
     
     Args:
         message: Incoming Telegram message with photo
@@ -92,50 +90,12 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         await ui.update(t("status.image_received", lang=lang) or "✅ Image received")
         logger.info(f"[{req_id}] Downloaded photo, size {len(img_bytes)} bytes")
         
-        # Step 2: Preprocess image
-        await ui.append(t("status.preprocessing_image", lang=lang) or "🖼️ Preprocessing image...")
-        await ui.start_spinner()
-        
-        # Create a temporary file to save the original image
-        tmp_dir = Path(tempfile.gettempdir()) / "nota"
-        os.makedirs(tmp_dir, exist_ok=True)
-        tmp_path = tmp_dir / f"{req_id}.jpg"
-        
-        with open(tmp_path, "wb") as f:
-            f.write(img_bytes)
-        
-        # Import settings to check if preprocessing is enabled
-        from app.config import settings
-        
-        # Preprocess the image (if enabled)
-        if settings.USE_IMAGE_PREPROCESSING:
-            try:
-                processed_bytes = await asyncio.to_thread(prepare_for_ocr, tmp_path, use_preprocessing=True)
-                logger.info(f"[{req_id}] Image preprocessed: original={len(img_bytes)}b, processed={len(processed_bytes)}b")
-                img_bytes = processed_bytes  # Use the processed image for OCR
-            except Exception as prep_err:
-                logger.warning(f"[{req_id}] Image preprocessing failed: {str(prep_err)}. Using original image.")
-                # Continue with original image if preprocessing fails
-        else:
-            # Skip preprocessing and use original image
-            try:
-                # Just convert to proper format without any preprocessing
-                processed_bytes = await asyncio.to_thread(prepare_without_preprocessing, tmp_path)
-                logger.info(f"[{req_id}] Image preprocessing DISABLED. Using original image.")
-                img_bytes = processed_bytes
-            except Exception as read_err:
-                logger.warning(f"[{req_id}] Error reading original image: {str(read_err)}. Using raw bytes.")
-                # Continue with completely raw bytes if even format conversion fails
-        
-        ui.stop_spinner()
-        await ui.update(t("status.image_processed", lang=lang) or "✅ Image optimized for OCR")
-        
-        # Step 3: OCR image
+        # Step 2: OCR image
         await ui.append(t("status.recognizing_text", lang=lang) or "🔍 Recognizing text (OCR)...")
         await ui.start_spinner()
         
-        # Run OCR in a separate thread for non-blocking operation
-        ocr_result = await ocr.call_openai_ocr(img_bytes)
+        # Run OCR without await since it's not an async function
+        ocr_result = ocr.call_openai_ocr(img_bytes)
         
         ui.stop_spinner()
         positions_count = len(ocr_result.positions) if ocr_result.positions else 0
@@ -143,7 +103,7 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
                        f"✅ Text recognized: found {positions_count} items")
         logger.info(f"[{req_id}] OCR completed successfully, found {positions_count} items")
         
-        # Step 4: Match with products
+        # Step 3: Match with products
         await ui.append(t("status.matching_items", lang=lang) or "🔄 Matching items...")
         await ui.start_spinner()
         
@@ -175,7 +135,7 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
             "req_id": req_id,
         }
         
-        # Step 5: Generate report
+        # Step 4: Generate report
         await ui.append(t("status.generating_report", lang=lang) or "📋 Generating report...")
         await ui.start_spinner()
         
@@ -198,92 +158,50 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
             telegram_html_tags = ["<b>", "<i>", "<u>", "<s>", "<strike>", "<del>", "<code>", "<pre>", "<a"]
             has_valid_html = any(tag in report_text for tag in telegram_html_tags)
             
-            if "<pre>" in report_text and "</pre>" not in report_text:
-                logger.warning("Unclosed <pre> tag detected in message, attempting to fix")
-                report_text = report_text.replace("<pre>", "<pre>") + "</pre>"
-                
-            logger.debug(f"Sending report with HTML formatting (valid HTML tags: {has_valid_html})")
-            report_msg = await message.answer(
-                report_text,
-                reply_markup=inline_kb,
-                parse_mode=ParseMode.HTML
-            )
-            logger.debug(f"Successfully sent HTML-formatted report with message_id={report_msg.message_id}")
-        except Exception as html_err:
-            logger.warning(f"Error sending HTML report: {str(html_err)}")
+            # Try to send with HTML first if we have valid HTML tags
+            if has_valid_html:
+                result = await message.answer(report_text, reply_markup=inline_kb, parse_mode="HTML")
+            else:
+                # If no HTML tags, send without parse_mode
+                result = await message.answer(report_text, reply_markup=inline_kb)
             
-            # If that doesn't work, try without formatting
+            # Update message ID in user_matches
+            new_key = (user_id, result.message_id)
+            user_matches[new_key] = user_matches.pop((user_id, 0))
+            
+            # Save message ID in state for future reference
+            await state.update_data(invoice_msg_id=result.message_id)
+            
+            logger.info(f"[{req_id}] Report sent successfully")
+            
+        except Exception as msg_err:
+            logger.error(f"[{req_id}] Error sending report: {str(msg_err)}")
+            # Try to send without HTML formatting as fallback
             try:
-                logger.debug("Attempting to send report without formatting")
-                report_msg = await message.answer(
-                    report_text,
-                    reply_markup=inline_kb,
-                    parse_mode=None
+                clean_report = clean_html(report_text)
+                result = await message.answer(clean_report, reply_markup=inline_kb)
+                new_key = (user_id, result.message_id)
+                user_matches[new_key] = user_matches.pop((user_id, 0))
+                await state.update_data(invoice_msg_id=result.message_id)
+                logger.info(f"[{req_id}] Report sent with fallback formatting")
+            except Exception as final_err:
+                logger.error(f"[{req_id}] Critical error sending report: {str(final_err)}")
+                await message.answer(
+                    t("error.report_failed", lang=lang) or 
+                    "Error generating report. Please try again or contact support."
                 )
-                logger.debug(f"Successfully sent plain report with message_id={report_msg.message_id}")
-            except Exception as plain_err:
-                logger.warning(f"Error sending plain report: {str(plain_err)}")
-                
-                # Last option - clean HTML from text and send
-                try:
-                    logger.debug("Sending report with cleaned HTML")
-                    cleaned_message = clean_html(report_text)
-                    report_msg = await message.answer(
-                        cleaned_message,
-                        reply_markup=inline_kb,
-                        parse_mode=None
-                    )
-                    logger.debug(f"Successfully sent cleaned report with message_id={report_msg.message_id}")
-                except Exception as clean_err:
-                    logger.error(f"All report sending attempts failed: {str(clean_err)}")
-                    
-                    # Last resort - send a brief summary
-                    try:
-                        simple_message = t("status.brief_summary", 
-                                          {"total": positions_count, "ok": ok_count, "issues": unknown_count + partial_count},
-                                          lang=lang) or (
-                            f"📋 Found {positions_count} items. "
-                            f"✅ OK: {ok_count}. "
-                            f"⚠️ Issues: {unknown_count + partial_count}."
-                        )
-                        report_msg = await message.answer(
-                            simple_message, 
-                            reply_markup=inline_kb, 
-                            parse_mode=None
-                        )
-                        logger.debug(f"Sent summary message with message_id={report_msg.message_id}")
-                    except Exception as final_err:
-                        logger.error(f"All message attempts failed: {str(final_err)}")
-                        report_msg = None
         
-        # If message was sent successfully, update links in user_matches
-        if report_msg:
-            try:
-                # Update message_id in user_matches
-                entry = user_matches.pop((user_id, 0), None)
-                if entry:
-                    new_key = (user_id, report_msg.message_id)
-                    user_matches[new_key] = entry
-                    logger.debug(f"Updated user_matches with new message_id={report_msg.message_id}")
-            except Exception as key_err:
-                logger.error(f"Error updating user_matches: {str(key_err)}")
-        
-        # Update user state and clear processing flag
-        await state.update_data(processing_photo=False)
+        # Set state to editing mode
         await state.set_state(NotaStates.editing)
-        logger.info(f"[{req_id}] Invoice processing completed for user {user_id}")
         
     except Exception as e:
-        logger.error(f"[{req_id}] Error processing photo: {str(e)}", exc_info=True)
-        
-        # Complete UI with error message
-        await ui.error(
-            t("error.photo_processing", lang=lang) or 
-            "An error occurred while processing the photo. Please try again or contact the administrator."
-        )
-        
+        logger.error(f"[{req_id}] Error processing photo: {str(e)}")
+        error_msg = t("error.processing_failed", lang=lang) or "Error processing photo. Please try again."
+        # Показываем ошибку через UI
+        await ui.error(error_msg)
+        await state.set_state(NotaStates.main_menu)
+    finally:
         # Clear processing flag
         await state.update_data(processing_photo=False)
-        
-        # Return to initial state
-        await state.set_state(NotaStates.main_menu)
+        # Останавливаем спиннер, если он все еще активен
+        ui.stop_spinner()

@@ -60,6 +60,8 @@ def set_name(invoice: Dict[str, Any], line_index: int, value: str, manual_edit: 
     Returns:
         Dict: Обновленный инвойс
     """
+    from app.matcher import match_positions
+    from app.data_loader import load_products
     result = deepcopy(invoice)
     
     if 0 <= line_index < len(result.get("positions", [])):
@@ -70,6 +72,13 @@ def set_name(invoice: Dict[str, Any], line_index: int, value: str, manual_edit: 
             # что означает "принято пользователем, не считать ошибкой"
             result["positions"][line_index]["status"] = "manual"
             logger.info(f"Line {line_index+1} manually edited by user: name = '{value}'")
+        else:
+            # Пытаемся найти соответствие в базе продуктов
+            products = load_products()
+            match_results = match_positions([result["positions"][line_index]], products)
+            if match_results and match_results[0].get("matched_name"):
+                result["positions"][line_index]["matched_name"] = match_results[0]["matched_name"]
+                result["positions"][line_index]["status"] = match_results[0]["status"]
         else:
             # В противном случае сбрасываем статус для повторного матчинга
             result["positions"][line_index]["status"] = "unknown"

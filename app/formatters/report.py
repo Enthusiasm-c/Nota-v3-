@@ -54,69 +54,54 @@ def build_table(rows):
         visible_len = len(visible_text)
         # Добавляем пробелы, учитывая разницу между видимой и полной длиной текста
         padding = max(0, width - visible_len)
-        return f"{text}{' ' * padding}"
+        return str(text) + " " * padding
 
-    header = f"#  {'NAME'.ljust(14)}{'QTY'.ljust(5)}{'UNIT'.ljust(5)}{'PRICE'.ljust(6)}! "
-    divider = '-' * len(header)
-    table_rows = [header, divider]
+    # Определяем максимальную длину для каждого столбца
+    name_width = max(len(str(row.get("name", ""))) for row in rows) + 2
+    qty_width = max(len(format_quantity(row.get("qty", ""))) for row in rows) + 2
+    unit_width = max(len(str(row.get("unit", ""))) for row in rows) + 2
+    price_width = max(len(format_price(row.get("price", ""))) for row in rows) + 2
 
-    for idx, item in enumerate(rows, 1):
-        name = item.get("name", "")
-        if len(name) > 13:
-            name = name[:12] + "…"
-        name = html_escape(name)
-        qty = item.get("qty", None)
-        unit = html_escape(str(item.get("unit", "")))
-        status = item.get("status", "")
+    # Формируем заголовок таблицы
+    header = (
+        f"{'NAME'.ljust(name_width)} "
+        f"{'QTY'.ljust(qty_width)} "
+        f"{'UNIT'.ljust(unit_width)} "
+        f"{'PRICE'.ljust(price_width)} "
+        f"STATUS"
+    )
+
+    # Формируем строки таблицы
+    table_rows = []
+    for row in rows:
+        # Используем matched_name если есть, иначе исходное имя
+        display_name = row.get("matched_name", row.get("name", ""))
+        name = html_escape(str(display_name))
         
-        # Выделение имени если есть проблема с распознаванием товара
-        if status == "unknown":
+        qty = format_quantity(row.get("qty", ""))
+        unit = html_escape(str(row.get("unit", "")))
+        price = format_price(row.get("price", ""))
+        status = status_map.get(row.get("status", ""), "")
+        
+        # Выделяем неопознанные позиции жирным
+        if row.get("status") in ["unknown", "unit_mismatch", "error"]:
             name = f"<b>{name}</b>"
-        
-        # Подсветка UNIT если проблема в единице измерения
-        if status == "unit_mismatch":
+            qty = f"<b>{qty}</b>"
             unit = f"<b>{unit}</b>"
-            
-        # Используем price если есть, иначе unit_price, иначе вычисляем из total/qty
-        price = item.get("price", None)
-        if price in (None, "", "—"):
-            price = item.get("unit_price", None)
-        total = item.get("total", None)
+            price = f"<b>{price}</b>"
         
-        # Проверка на проблемы с значениями qty или price
-        has_qty_problem = qty in (None, "", "—")
-        has_price_problem = price in (None, "", "—") and total in (None, "", "—")
-        
-        computed_price = None
-        if (price in (None, "", "—")) and (total not in (None, "", "—")) and (qty not in (None, "", "—")):
-            try:
-                computed_price = float(total) / float(qty)
-                price_str = format_price(computed_price, decimal_places=0)
-            except Exception:
-                price_str = "—"
-        else:
-            price_str = format_price(price, decimal_places=0) if price not in (None, "", "—") else "—"
-        
-        # Используем унифицированный форматтер для количества
-        qty_str = format_quantity(qty) if qty not in (None, "") else "—"
-        
-        # Отображаем проблемные значения жирным шрифтом
-        if has_qty_problem:
-            qty_str = f"<b>{qty_str}</b>"
-        if has_price_problem:
-            price_str = f"<b>{price_str}</b>"
-        
-        # Столбец с флажком для проблемных позиций
-        # Если статус не ОК и не manual, или есть проблемы с qty/price, показываем восклицательный знак
-        flag = ""
-        if status not in ["ok", "manual"] or has_qty_problem or has_price_problem:
-            flag = "❗"
-        
-        # Используем новую функцию выравнивания с учетом HTML-тегов
-        row = f"{str(idx):<2} {pad_with_html(name, 14)}{pad_with_html(qty_str, 5)}{pad_with_html(unit, 5)}{pad_with_html(price_str, 6)}{flag}"
-        table_rows.append(row)
+        # Формируем строку таблицы с выравниванием
+        table_row = (
+            f"{pad_with_html(name, name_width)} "
+            f"{pad_with_html(qty, qty_width)} "
+            f"{pad_with_html(unit, unit_width)} "
+            f"{pad_with_html(price, price_width)} "
+            f"{status}"
+        )
+        table_rows.append(table_row)
 
-    return "\n".join(table_rows)
+    # Собираем таблицу
+    return header + "\n" + "\n".join(table_rows)
 
 
 def build_summary(match_results):

@@ -3,6 +3,8 @@ from typing import (
     List, Dict, Optional, Tuple, Sequence, Hashable, Callable, Any, Union
 )
 from app.config import settings
+from rapidfuzz import fuzz, process
+from functools import lru_cache
 
 # Используем только rapidfuzz вместо Levenshtein
 try:
@@ -136,96 +138,137 @@ def normalize_product_name(name):
     return name
 
 def get_normalized_strings(s1: str, s2: str) -> Tuple[str, str]:
-    if s1 is None:
-        s1 = ""
-    if s2 is None:
-        s2 = ""
+    """
+    Нормализует две строки для сравнения.
+    """
+    if not s1 or not s2:
+        return "", ""
 
     s1 = s1.lower().strip()
     s2 = s2.lower().strip()
 
-    for char in [",", ".", "-", "_", "(", ")", "/", "\\"]:
-        s1 = s1.replace(char, " ")
-        s2 = s2.replace(char, " ")
-
-    s1 = " ".join(s1.split())
-    s2 = " ".join(s2.split())
-
     return s1, s2
 
-
+@lru_cache(maxsize=1000)
 def calculate_string_similarity(s1: str, s2: str) -> float:
+    """
+    Оптимизированная функция сравнения строк с использованием rapidfuzz.
+    
+    Args:
+        s1, s2: Строки для сравнения
+        
+    Returns:
+        Оценка сходства в диапазоне 0.0-1.0
+    """
+    if not s1 or not s2:
+        return 0.0
+        
     s1, s2 = get_normalized_strings(s1, s2)
+    
+    # Точное совпадение
     if s1 == s2:
         return 1.0
 
-    # Нормализуем названия продуктов
+    # Нормализация названий продуктов
     s1_norm = normalize_product_name(s1)
     s2_norm = normalize_product_name(s2)
     
-    # Если после нормализации названия совпали
     if s1_norm == s2_norm:
-        return 0.95  # Даем высокий, но не идеальный вес, чтобы отличать от полных совпадений
+        return 0.95
     
-    # Проверка на совпадение отдельных слов
-    words1 = s1.split()
-    words2 = s2.split()
+    # Используем быстрый алгоритм ratio из rapidfuzz
+    base_score = fuzz.ratio(s1_norm, s2_norm) / 100.0
     
-    # Если одинаковое количество слов, анализируем каждое слово
-    if len(words1) == len(words2):
-        word_matches = sum(1 for w1, w2 in zip(words1, words2) if w1 == w2)
-        # Если большинство слов совпадают, но не все, увеличиваем вес для проверки
-        if word_matches > 0 and word_matches == len(words1) - 1:
-            # Находим несовпадающее слово и проверяем, не слишком ли оно похоже
-            non_matching_idx = [i for i, (w1, w2) in enumerate(zip(words1, words2)) if w1 != w2][0]
-            word1 = words1[non_matching_idx]
-            word2 = words2[non_matching_idx]
-            
-            # Проверка на варианты единственного/множественного числа
-            for plural, singular in SINGULAR_PLURAL_FORMS:
-                if (word1 == plural and word2 == singular) or (word1 == singular and word2 == plural):
-                    logger.info(f"Обнаружены формы единственного/множественного числа: '{word1}' и '{word2}' в '{s1}' и '{s2}'")
-                    return 0.95  # Высокое сходство для форм единственного/множественного числа
-            
-            # Проверка по списку известных похожих слов
-            for sim_pair in getattr(settings, 'SIMILAR_WORD_PAIRS', []):
-                if (word1, word2) == sim_pair or (word2, word1) == sim_pair:
-                    logger.warning(f"Обнаружена известная проблемная пара слов: '{word1}' и '{word2}' в '{s1}' и '{s2}'")
-                    # Уменьшаем коэффициент сходства для известных проблемных пар
-                    return 0.7  # Достаточно для "partial", но не для "ok"
-            
-            # Особая проверка для других похожих слов
-            if levenshtein_ratio(word1, word2) > 0.7:
-                logger.warning(f"Обнаружены похожие, но разные слова: '{word1}' и '{word2}' в '{s1}' и '{s2}'")
+    # Проверяем на частичное вхождение
+    if s1_norm in s2_norm or s2_norm in s1_norm:
+        base_score = max(base_score, 0.85)
     
-    ratio = levenshtein_ratio(s1, s2)
-    
-    # Дополнительная проверка для продуктов
-    # Проверяем, являются ли строки вариантами одного и того же товара
+    # Проверка на варианты из словаря
     for base_name, variants in PRODUCT_VARIANTS.items():
-        if (s1 in variants or s1 == base_name) and (s2 in variants or s2 == base_name):
-            logger.info(f"Найдены синонимы в словаре вариантов: '{s1}' и '{s2}'")
-            return 0.95  # Высокое сходство для известных вариантов
+        if (s1_norm in variants or s1_norm == base_name) and (s2_norm in variants or s2_norm == base_name):
+            return 0.95
     
-    if s1 in s2 or s2 in s1:
-        ratio = min(ratio + settings.MATCH_EXACT_BONUS, 1.0)
+    # Проверка на формы единственного/множественного числа
+            for plural, singular in SINGULAR_PLURAL_FORMS:
+        if (s1_norm.endswith(plural) and s2_norm.endswith(singular)) or \
+           (s1_norm.endswith(singular) and s2_norm.endswith(plural)):
+            return 0.95
+            
+    return base_score
 
-    max_len = max(len(s1), len(s2))
-    if max_len > 0:
-        len_diff_penalty = abs(len(s1) - len(s2)) / max_len
-        ratio = max(ratio - (len_diff_penalty * settings.MATCH_LENGTH_PENALTY), 0.0)
+def fuzzy_find(query: str, products: List[Dict], thresh: float = 0.75) -> List[Dict]:
+    """
+    Оптимизированный поиск продуктов с использованием rapidfuzz.
+    
+    Args:
+        query: Поисковый запрос
+        products: Список продуктов
+        thresh: Порог сходства
+        
+    Returns:
+        Список совпадающих продуктов
+    """
+    if not query or not products:
+        return []
+    
+    query = query.lower().strip()
+    
+    # Создаем список названий для быстрого поиска
+    names = []
+    name_to_product = {}
+    
+    for product in products:
+        if isinstance(product, dict):
+            name = product.get("name", "")
+            product_id = product.get("id", "")
+        else:
+            name = getattr(product, "name", "")
+            product_id = getattr(product, "id", "")
+            
+        if name:
+            normalized = normalize_product_name(name.lower().strip())
+            names.append(normalized)
+            name_to_product[normalized] = {"name": name, "id": product_id}
+    
+    # Используем process.extract для эффективного поиска
+    matches = process.extract(
+        normalize_product_name(query),
+        names,
+        scorer=fuzz.ratio,
+        score_cutoff=int(thresh * 100)
+    )
+    
+    results = []
+    for name, score, _ in matches:
+        product_data = name_to_product[name]
+        results.append({
+            "name": product_data["name"],
+            "id": product_data["id"],
+            "score": score / 100.0
+        })
 
-    return ratio
-
+    return results
 
 def fuzzy_best(name: str, catalog: dict[str, str]) -> tuple[str, float]:
+    """
+    Находит наилучшее совпадение в каталоге.
+    
+    Args:
+        name: Название для поиска
+        catalog: Словарь названий продуктов
+        
+    Returns:
+        Кортеж (название продукта, оценка сходства)
+    """
     name_l = name.lower().strip()
 
+    # Проверяем точное совпадение
     for prod in catalog.keys():
         prod_l = prod.lower().strip()
         if name_l == prod_l:
             return prod, 100.0
 
+    # Ищем наилучшее совпадение
     candidates = []
     for prod in catalog.keys():
         prod_l = prod.lower().strip()
@@ -241,108 +284,6 @@ def fuzzy_best(name: str, catalog: dict[str, str]) -> tuple[str, float]:
 
     best, score, _ = candidates[0]
     return best, score
-
-
-def fuzzy_find(query: str, products: List[Dict], thresh: float = 0.75) -> List[Dict]:
-    """
-    Find products with similar names using fuzzy matching.
-    
-    Args:
-        query: The search query (product name)
-        products: List of product dictionaries
-        thresh: Similarity threshold (0.0-1.0)
-        
-    Returns:
-        List of matching products with similarity >= threshold
-    """
-    if not query or not products:
-        return []
-    
-    query = query.lower().strip()
-    matches = []
-    
-    for product in products:
-        if isinstance(product, dict):
-            name = product.get("name", "")
-            product_id = product.get("id", "")
-        else:
-            name = getattr(product, "name", "")
-            product_id = getattr(product, "id", "")
-            
-        if not name:
-            continue
-            
-        similarity = calculate_string_similarity(query, name)
-        if similarity >= thresh:
-            matches.append({
-                "name": name,
-                "id": product_id,
-                "score": similarity
-            })
-    
-    # Sort by similarity score (highest first)
-    matches.sort(key=lambda x: x["score"], reverse=True)
-    
-    return matches
-
-def compare_strings_for_products(str1: str, str2: str) -> float:
-    """
-    Специализированная функция сравнения строк для сопоставления продуктов.
-    Включает дополнительные оптимизации и эвристики для названий продуктов.
-    
-    Args:
-        str1: Первая строка (обычно из накладной)
-        str2: Вторая строка (обычно из базы продуктов)
-        
-    Returns:
-        Оценка сходства в диапазоне 0-100
-    """
-    # Проверка кэша
-    cache_key = (str1, str2)
-    if cache_key in _name_comparison_cache:
-        return _name_comparison_cache[cache_key]
-    
-    # Инвертированный ключ
-    reverse_key = (str2, str1)
-    if reverse_key in _name_comparison_cache:
-        return _name_comparison_cache[reverse_key]
-    
-    # Нормализация строк
-    norm1 = normalize_name(str1)
-    norm2 = normalize_name(str2)
-    
-    # Точное совпадение
-    if norm1 == norm2:
-        _name_comparison_cache[cache_key] = 100.0
-        return 100.0
-    
-    # Частичное совпадение (одна строка содержит другую)
-    if norm1 in norm2 or norm2 in norm1:
-        # Вычисляем базовую оценку на основе длины
-        max_len = max(len(norm1), len(norm2))
-        min_len = min(len(norm1), len(norm2))
-        if max_len > 0:
-            similarity = (min_len / max_len) * 90.0  # До 90 баллов для частичного совпадения
-            _name_comparison_cache[cache_key] = similarity
-            return similarity
-    
-    # Использование метрики Левенштейна для общего случая
-    ratio_score = levenshtein_ratio(norm1, norm2) * 80.0  # До 80 баллов
-
-    # Корректировка оценки на основе общих слов
-    words1 = set(norm1.split())
-    words2 = set(norm2.split())
-    common_words = words1.intersection(words2)
-    
-    if common_words:
-        # Бонус за общие слова
-        word_ratio = len(common_words) / max(len(words1), len(words2))
-        word_bonus = word_ratio * 15.0  # До 15 баллов дополнительно
-        ratio_score = min(ratio_score + word_bonus, 100.0)
-    
-    # Кэшируем и возвращаем результат
-    _name_comparison_cache[cache_key] = ratio_score
-    return ratio_score
 
 def match_supplier(supplier_name: str, suppliers: List[Dict], threshold: float = 0.9) -> Dict:
     """
@@ -557,6 +498,14 @@ def match_positions(
             "price": price_f,
             "line_total": line_total_f,
         }
+
+        # Добавляем название из базы, если нашли соответствие
+        if best_match and (status == "ok" or status == "partial"):
+            if isinstance(best_match, dict):
+                matched_name = best_match.get("name", "")
+            else:
+                matched_name = getattr(best_match, "name", "")
+            result["matched_name"] = matched_name
 
         if (
             return_suggestions

@@ -1,0 +1,7 @@
+Ошибка API: name 'client' is not defined
+
+Трассировка:
+Traceback (most recent call last):
+  File "/Users/denisdomashenko/Nota-v3-/debug_ocr_detailed.py", line 132, in run_step_by_step_debug
+    response = client.chat.completions.create(
+NameError: name 'client' is not defined

@@ -1,1 +1,4 @@
-# Пакет imgprep больше не содержит никакой логики. Предобработка изображений полностью удалена.
+"""
+Empty module placeholder.
+Image preprocessing has been removed from the system.
+"""

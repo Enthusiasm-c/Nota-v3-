@@ -818,6 +818,11 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
                     return result
             except Exception as e:
                 logger.exception(f"[run_thread_safe_async] Error handling successful run: {e}")
+                return {
+                    "action": "unknown", 
+                    "error": str(e),
+                    "user_message": "An error occurred while processing your request. Please try again."
+                }
         
         # Остальной код для обработки ошибок остаётся без изменений
         # ...

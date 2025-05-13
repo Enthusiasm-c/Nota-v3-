@@ -10,6 +10,7 @@ from datetime import datetime
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
+from openai import AsyncOpenAI
 
 from app.fsm.states import NotaStates
 from app.syrve_client import SyrveClient, generate_invoice_xml
@@ -237,6 +238,13 @@ def prepare_invoice_data(invoice, match_results, invoice_id):
         if match_results and i < len(match_results):
             match_item = match_results[i]
             product_id = match_item.get("product_id")
+            
+            # Используем matched_name из результатов сопоставления
+            if match_item.get("matched_name"):
+                if isinstance(position, dict):
+                    position["name"] = match_item["matched_name"]
+                else:
+                    setattr(position, "name", match_item["matched_name"])
         
         # Skip items without product ID
         if not product_id:

@@ -70,15 +70,33 @@ def configure_logging(environment="development", log_dir="logs"):
     # Configure root logger
     root_logger.setLevel(levels["default"])
     
-    # Console handler
+    # Console handler with more detailed format for development
     console = logging.StreamHandler()
+    if environment == "development":
+        console.setLevel(logging.DEBUG)
+        console.setFormatter(logging.Formatter(
+            "\033[1;36m%(asctime)s\033[0m - \033[1;33m%(name)s\033[0m - \033[1;35m%(levelname)s\033[0m - %(message)s"
+        ))
+    else:
     console.setLevel(levels["default"])
     console.setFormatter(logging.Formatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     ))
     root_logger.addHandler(console)
     
-    # File handler with rotation
+    # Main bot log file
+    bot_handler = logging.handlers.RotatingFileHandler(
+        f"{log_dir}/bot.log", 
+        maxBytes=10*1024*1024,  # 10 MB
+        backupCount=5
+    )
+    bot_handler.setLevel(levels["default"])
+    bot_handler.setFormatter(logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    ))
+    root_logger.addHandler(bot_handler)
+    
+    # General application log
     file_handler = logging.handlers.RotatingFileHandler(
         f"{log_dir}/nota.log", 
         maxBytes=10*1024*1024,  # 10 MB

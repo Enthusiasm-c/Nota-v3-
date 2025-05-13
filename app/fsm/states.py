@@ -6,7 +6,6 @@ class EditFree(StatesGroup):
     awaiting_pick_name = State()  # Added for fuzzy match feature
     
 class NotaStates(StatesGroup):
-    lang = State()
     main_menu = State()
     awaiting_file = State()
     progress = State()

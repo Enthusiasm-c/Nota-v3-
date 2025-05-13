@@ -48,6 +48,18 @@ fi
 # Загрузка переменных окружения
 source "$PROJECT_DIR/.env"
 
+# Настройка переменных для логирования
+export ENV="development"  # Режим разработки для подробных логов
+export LOG_LEVEL="DEBUG"  # Уровень логирования
+export PYTHONUNBUFFERED=1  # Отключаем буферизацию вывода Python
+
+# Запуск бота с перенаправлением логов
+python bot.py 2>&1 | tee -a "$LOG_FILE"
+
+# Сохраняем PID бота
+echo $! > "$LOG_DIR/bot.pid"
+log "Bot started with PID: $!"
+
 # Функция для показа логов в реальном времени
 tail_logs() {
     # Организуем вывод логов в systemd журнал

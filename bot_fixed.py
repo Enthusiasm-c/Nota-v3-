@@ -933,6 +933,7 @@ async def cb_field(callback: CallbackQuery, state: FSMContext):
             field_prompt = f"Enter new value for {field} (line {idx+1}):"
             
         reply_msg = await callback.message.bot.send_message(
+
             callback.from_user.id,
             field_prompt,
             reply_markup={"force_reply": True},
@@ -994,7 +995,7 @@ async def handle_field_edit(message, state: FSMContext):
     if key not in user_matches:
         logger.warning(f"No matches found for user {user_id}, message {msg_id}")
         await message.answer(t("error.invoice_data_not_found", lang=lang))
-            return
+        return
     
     entry = user_matches[key]
     text = message.text.strip()
@@ -1035,24 +1036,24 @@ async def handle_field_edit(message, state: FSMContext):
             from app.utils.md import clean_html
             from app.keyboards import build_edit_keyboard
             
-                keyboard = build_edit_keyboard(True)
+            keyboard = build_edit_keyboard(True)
             
-            if '<' in formatted_report and '>' in formatted_report:
-                try:
-                    # Пробуем сначала с HTML-форматированием 
-            result = await message.answer(
+                if '<' in formatted_report and '>' in formatted_report:
+                    try:
+                        # Пробуем сначала с HTML-форматированием 
+                        result = await message.answer(
                 formatted_report,
-                        reply_markup=keyboard,
-                        parse_mode="HTML"
+                            reply_markup=keyboard,
+                            parse_mode="HTML"
                     )
                     logger.debug("Successfully sent message with HTML formatting")
                 except Exception as html_error:
                     logger.error(f"Error sending with HTML parsing: {html_error}")
-                    try:
+                        try:
                         # Пробуем без форматирования
-                        result = await message.answer(
+                                    result = await message.answer(
                             formatted_report,
-                            reply_markup=keyboard,
+                                reply_markup=keyboard,
                             parse_mode=None
                         )
                         logger.debug("Successfully sent message without HTML parsing")
@@ -1060,15 +1061,15 @@ async def handle_field_edit(message, state: FSMContext):
                         logger.error(f"Error sending without HTML parsing: {format_error}")
                         # Если не получилось - очищаем HTML-теги
                         clean_formatted_report = clean_html(formatted_report)
-                        result = await message.answer(
+                                    result = await message.answer(
                             clean_formatted_report,
-                            reply_markup=keyboard,
+                                reply_markup=keyboard,
                             parse_mode=None
                         )
                         logger.debug("Sent message with cleaned HTML")
             else:
                 # Стандартный случай - пробуем с HTML
-                result = await message.answer(
+                            result = await message.answer(
                     formatted_report,
                     reply_markup=keyboard,
                     parse_mode="HTML"
@@ -1093,14 +1094,14 @@ async def handle_field_edit(message, state: FSMContext):
                 simple_msg = t("example.edit_field_success", {"field": field, "value": text, "line": idx+1}, lang=lang)
                 if not simple_msg:
                     simple_msg = f"Field '{field}' updated to '{text}' for line {idx+1}"
-                result = await message.answer(simple_msg, parse_mode=None)
+                            result = await message.answer(simple_msg, parse_mode=None)
                 logger.info("Sent fallback simple message")
                 return  # Выходим досрочно
             except Exception as final_e:
                 logger.error(f"Final fallback message failed: {final_e}")
-                try:
+                    try:
                     # Крайний случай - простое сообщение без i18n
-                    result = await message.answer(f"Field updated successfully.", parse_mode=None)
+                                result = await message.answer(f"Field updated successfully.", parse_mode=None)
                     logger.info("Sent basic fallback message")
                     return  # Выходим досрочно
                 except Exception as absolutely_final_e:
@@ -1411,7 +1412,7 @@ def _graceful_shutdown(signum, frame):
             if loop.is_running():
                 shutdown_task = asyncio.run_coroutine_threadsafe(shutdown_thread_pool(), loop)
                 # Уменьшаем таймаут с 3 до 1.5 сек
-                try:
+                    try:
                     shutdown_task.result(timeout=1.5)
                 except (asyncio.TimeoutError, concurrent.futures.TimeoutError):
                     logger.warning("Timeout waiting for thread pool shutdown")
@@ -1437,7 +1438,7 @@ def _graceful_shutdown(signum, frame):
                 dp._polling = False
             loop = asyncio.get_event_loop()
             if loop.is_running():
-                try:
+                    try:
                     # Уменьшаем таймаут с 5 до 2 сек
                     stop_task = asyncio.run_coroutine_threadsafe(dp.stop_polling(), loop)
                     stop_task.result(timeout=2.0)
@@ -1461,7 +1462,7 @@ def _graceful_shutdown(signum, frame):
                             task.cancel()
                     
                     # Уменьшаем таймаут с 2 до 1 сек
-                    try:
+                        try:
                         gather_task = asyncio.run_coroutine_threadsafe(
                             asyncio.gather(*pending, return_exceptions=True), 
                             loop

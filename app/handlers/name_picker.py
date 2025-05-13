@@ -35,17 +35,20 @@ async def handle_pick_name(call: CallbackQuery, state: FSMContext):
         _, row_idx, product_id = call.data.split(":")
         row_idx = int(row_idx)
     except (ValueError, IndexError):
+        # Get user language preference
+        data = await state.get_data()
+        lang = data.get("lang", "en")
         await call.answer(t("error.invalid_callback_data", {}, lang=lang))
         return
     
     # Get invoice from state
     data = await state.get_data()
     invoice = data.get("invoice")
+    lang = data.get("lang", "en")  # Get user language preference
+    
     if not invoice:
         await call.answer(t("error.invoice_not_found"))
         return
-    
-    lang = data.get("lang", "en")  # Get user language preference
     
     # Convert to dict format if needed
     invoice = parsed_to_dict(invoice)
@@ -64,21 +67,25 @@ async def handle_pick_name(call: CallbackQuery, state: FSMContext):
             await call.answer(t("error.product_not_found", lang=lang))
             return
         
-        # Get product name
+        # Get product name from database
         product_name = getattr(selected_product, "name", None)
         if product_name is None and isinstance(selected_product, dict):
             product_name = selected_product.get("name", "")
         
-        # Update invoice with the new name
+        # Update invoice with the database name
         if 0 <= row_idx < len(invoice.get("positions", [])):
             # Save original name for alias
             original_name = invoice["positions"][row_idx].get("name", "")
             
-            # Update with the selected product name
+            # Update with the selected product name from database
             invoice = set_name(invoice, row_idx, product_name)
+            
+            # Set matched_name to ensure it's displayed correctly
+            invoice["positions"][row_idx]["matched_name"] = product_name
             
             # Recalculate errors and update report
             match_results = match_positions(invoice["positions"], products)
+            
             text, has_errors = report.build_report(invoice, match_results)
             
             # Count remaining issues
@@ -90,45 +97,28 @@ async def handle_pick_name(call: CallbackQuery, state: FSMContext):
             # Remove inline keyboard from the suggestion message
             await call.message.edit_reply_markup(reply_markup=None)
             
-            # Delete processing message
-            await processing_msg.delete()
-            
-            # Generate keyboard based on errors presence
-            keyboard = build_main_kb(has_errors, lang=lang)
-            
-            # Send updated report
+            # Show updated report
             await call.message.answer(
                 text,
-                reply_markup=keyboard,
+                reply_markup=build_main_kb(has_errors=has_errors),
                 parse_mode="HTML"
             )
             
-            # Add success message
-            success_message = t("name_changed", {"name": product_name}, lang=lang)
-            if not has_errors:
-                success_message += t("edit_success_confirm", {}, lang=lang)
-                
-            await call.message.answer(success_message, parse_mode="HTML")
-        else:
+            # Add alias for future matching
+            if original_name and original_name.lower() != product_name.lower():
+                await add_alias(original_name, product_id)
+        
             await processing_msg.delete()
-            await call.message.answer(t("error.position_not_found", {"index": row_idx}, lang=lang))
+        await call.answer()
     
     except Exception as e:
-        logger.error(f"[handle_pick_name] Error updating name: {str(e)}")
-        
-        # Delete processing message
-        try:
-            await processing_msg.delete()
-        except Exception:
-            pass
-            
-        await call.message.answer(t("error.update_name", lang=lang))
-    
-    # Answer callback query
+        logger.exception("Error in handle_pick_name")
+        await processing_msg.delete()
+        await call.message.answer(
+            t("error.processing_error", lang=lang),
+            reply_markup=build_main_kb()
+        )
     await call.answer()
-    
-    # Stay in the same state for continued editing
-    await state.set_state(EditFree.awaiting_input)
 
 
 async def show_fuzzy_suggestions(message: Message, state: FSMContext, name: str, row_idx: int, lang: str = "en"):
