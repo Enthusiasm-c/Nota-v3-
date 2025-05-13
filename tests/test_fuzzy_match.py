@@ -100,3 +100,53 @@ def test_fuzzy_rescue_in_match_positions():
     # Make assertions more flexible
     assert any(s == "ok" for s in statuses)
     # Skip strict ID checks which are too specific
+
+
+def test_fuzzy_find_basic():
+    from app.matcher import fuzzy_find
+    products = [
+        {"id": "1", "name": "apple"},
+        {"id": "2", "name": "banana"},
+        {"id": "3", "name": "orange"},
+    ]
+    # Точное совпадение
+    res = fuzzy_find("apple", products)
+    assert res and res[0]["name"] == "apple"
+    # Частичное совпадение
+    res = fuzzy_find("banan", products)
+    assert res and res[0]["name"] == "banana"
+    # Нет совпадения
+    res = fuzzy_find("xyz", products)
+    assert res == []
+
+
+def test_normalize_product_name():
+    from app.matcher import normalize_product_name
+    # Множественное число
+    assert normalize_product_name("apples") == "apple"
+    # Синоним
+    assert normalize_product_name("romaine lettuce") == "romaine"
+    # Пустая строка
+    assert normalize_product_name("") == ""
+    # None
+    assert normalize_product_name(None) == ""
+    # Неизвестное слово
+    assert normalize_product_name("dragonfruit") == "dragonfruit"
+
+
+def test_calculate_string_similarity():
+    from app.matcher import calculate_string_similarity
+    # Идентичные строки
+    assert calculate_string_similarity("apple", "apple") == 1.0
+    # Похожие строки
+    assert 0.7 < calculate_string_similarity("apple", "aple") < 1.0
+    # Совсем разные
+    assert calculate_string_similarity("apple", "banana") < 0.5
+    # Пустые строки
+    assert calculate_string_similarity("", "banana") == 0.0
+    assert calculate_string_similarity("apple", "") == 0.0
+    assert calculate_string_similarity("", "") == 0.0
+    # None
+    assert calculate_string_similarity(None, None) == 0.0
+    assert calculate_string_similarity(None, "apple") == 0.0
+    assert calculate_string_similarity("apple", None) == 0.0
