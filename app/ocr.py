@@ -19,15 +19,17 @@ from app.utils.debug_logger import log_ocr_call, log_ocr_performance, ocr_logger
 from app.ocr_prompt import build_prompt
 from app.postprocessing import postprocess_parsed_data, clean_num
 from app.utils.enhanced_logger import log_indonesian_invoice, log_format_issues, PerformanceTimer
+from app.utils.ocr_cache import get_from_cache, save_to_cache
 
-# --- Удалено: tool_schema, VISION_ASSISTANT_TIMEOUT_SECONDS ---
-
-# --- Добавляю импорт оптимизации изображений ---
-# try:
-#     from app.imgprep import prepare_for_ocr
-#     IMG_PREP_AVAILABLE = True
-# except ImportError:
-#     IMG_PREP_AVAILABLE = False
+# --- Импорт оптимизации изображений ---
+try:
+    from app.imgprep import prepare_for_ocr
+    IMG_PREP_AVAILABLE = True
+except ImportError:
+    # Если модуль недоступен, определяем заглушку для обеспечения совместимости
+    def prepare_for_ocr(image_bytes, **kwargs):
+        return image_bytes
+    IMG_PREP_AVAILABLE = False
 
 # Схема для функции получения данных инвойса
 INVOICE_FUNCTION_SCHEMA = {
@@ -91,25 +93,44 @@ INVOICE_FUNCTION_SCHEMA = {
 
 @log_ocr_call
 @with_retry_backoff(max_retries=1, initial_backoff=0.5, backoff_factor=2.0)
-def call_openai_ocr(image_bytes: bytes, _req_id=None) -> ParsedData:
+def call_openai_ocr(image_bytes: bytes, _req_id=None, use_cache: bool = True) -> ParsedData:
     """
     Прямой вызов OpenAI Vision API (gpt-4o) для распознавания инвойса с использованием function calling.
+    Включает кеширование результатов и оптимизацию изображений.
+    
     Args:
         image_bytes: Байты изображения для обработки
         _req_id: Идентификатор запроса для логирования
+        use_cache: Использовать ли кеширование результатов
+        
     Returns:
         ParsedData: Структурированные данные инвойса
+        
     Raises:
         RuntimeError: При ошибках API или парсинга данных
     """
+    t0 = time.time()
+    req_id = _req_id or f"ocr_{int(t0)}"
+    ocr_logger.info(f"[{req_id}] Начинаю OCR-обработку изображения размером {len(image_bytes)} байт (Vision API)")
+    
+    # Проверяем кеш, если разрешено
+    if use_cache:
+        cached_result = get_from_cache(image_bytes)
+        if cached_result:
+            ocr_logger.info(f"[{req_id}] Используем кешированный результат OCR")
+            elapsed = time.time() - t0
+            ocr_logger.info(f"[{req_id}] OCR из кеша завершен за {elapsed:.2f} сек")
+            
+            # Добавляем метрику для мониторинга кеша
+            increment_counter("nota_ocr_cache_hits")
+            
+            return cached_result
+    
+    # Если результата нет в кеше, продолжаем обработку
     client = get_ocr_client()
     if not client:
         logging.error("OCR unavailable: no OpenAI OCR client")
         raise RuntimeError("OCR unavailable: Please check your OPENAI_OCR_KEY")
-
-    t0 = time.time()
-    req_id = _req_id or f"ocr_{int(t0)}"
-    ocr_logger.info(f"[{req_id}] Начинаю OCR-обработку изображения размером {len(image_bytes)} байт (Vision API)")
 
     # Мониторинг памяти
     try:
@@ -122,19 +143,19 @@ def call_openai_ocr(image_bytes: bytes, _req_id=None) -> ParsedData:
     t_step = log_ocr_performance(t0, "Initialization", req_id)
     prompt = build_prompt()
 
-    # --- Автоматическая оптимизация изображения ---
-    # if IMG_PREP_AVAILABLE:
-    #     try:
-    #         # Сохраняем изображение во временный файл
-    #         tmp_path = f"/tmp/nota_ocr_{req_id}.jpg"
-    #         with open(tmp_path, "wb") as f:
-    #             f.write(image_bytes)
-    #         image_bytes = prepare_for_ocr(tmp_path, use_preprocessing=True)
-    #         ocr_logger.info(f"[{req_id}] Изображение оптимизировано для Vision API, размер: {len(image_bytes)} байт")
-    #     except Exception as prep_err:
-    #         ocr_logger.warning(f"[{req_id}] Ошибка оптимизации изображения: {prep_err}. Использую оригинал.")
-
-    # Просто используем image_bytes как есть, без изменений
+    # Автоматическая оптимизация изображения
+    try:
+        # Оптимизируем размер изображения без сохранения во временный файл
+        original_size = len(image_bytes)
+        image_bytes = prepare_for_ocr(image_bytes, use_preprocessing=True)
+        new_size = len(image_bytes)
+        
+        if new_size < original_size:
+            ocr_logger.info(f"[{req_id}] Изображение оптимизировано для Vision API, размер: {new_size} байт (сжатие {(1 - new_size/original_size)*100:.1f}%)")
+        else:
+            ocr_logger.info(f"[{req_id}] Изображение не требует оптимизации, размер: {new_size} байт")
+    except Exception as prep_err:
+        ocr_logger.warning(f"[{req_id}] Ошибка оптимизации изображения: {prep_err}. Использую оригинал.")
 
     # Формируем base64 изображение
     b64_image = base64.b64encode(image_bytes).decode("utf-8")
@@ -200,11 +221,20 @@ def call_openai_ocr(image_bytes: bytes, _req_id=None) -> ParsedData:
 
         try:
             parsed_data = ParsedData.model_validate(data)
-            parsed_data = postprocess_parsed_data(parsed_data)
+            parsed_data = postprocess_parsed_data(parsed_data, req_id)
             elapsed = time.time() - t0
             logging.info(f"OCR successful after {elapsed:.1f}s with {len(parsed_data.positions)} positions")
             t_step = log_ocr_performance(t_step, "Validation completed", req_id)
             ocr_logger.info(f"[{req_id}] OCR успешно завершен за {elapsed:.2f} сек, найдено {len(parsed_data.positions)} позиций")
+            
+            # Сохраняем результат в кеш, если разрешено
+            if use_cache and len(parsed_data.positions) > 0:
+                try:
+                    save_to_cache(image_bytes, parsed_data)
+                    ocr_logger.info(f"[{req_id}] Результат OCR сохранен в кеш")
+                except Exception as cache_err:
+                    ocr_logger.warning(f"[{req_id}] Ошибка при сохранении в кеш: {str(cache_err)}")
+            
             return parsed_data
         except Exception as validation_err:
             logging.error(f"Model validation error: {validation_err}")
