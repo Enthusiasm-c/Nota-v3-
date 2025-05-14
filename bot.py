@@ -25,7 +25,7 @@ from aiogram.filters import Command, CommandStart
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.enums import ParseMode
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, Message
 
 # Импортируем состояния
 from app.fsm.states import EditFree, NotaStates
@@ -91,6 +91,10 @@ def create_bot_and_dispatcher():
     return bot, dp
 
 
+async def cmd_start(message: Message):
+    await message.answer("Hi! I'm Nota AI Bot. How can I help you today?")
+
+
 def register_handlers(dp, bot=None):
     """
     Регистрирует обработчики для диспетчера.
@@ -100,15 +104,35 @@ def register_handlers(dp, bot=None):
         bot: Экземпляр бота (опционально)
     """
     try:
-        # Импорт роутера для редактирования
+        # Импортируем роутеры
         from app.handlers.edit_flow import router as edit_flow_router
+        from app.handlers.incremental_photo_handler import router as photo_router
         
-        # Регистрация обработчиков событий
-        dp.include_router(edit_flow_router)
+        # Проверяем, не был ли уже добавлен роутер
+        if not hasattr(dp, '_registered_routers'):
+            dp._registered_routers = set()
+            
+        # ВАЖНО: Регистрируем роутер обработки фотографий ПЕРВЫМ
+        # чтобы он имел приоритет над другими обработчиками
+        if 'photo_router' not in dp._registered_routers:
+            dp.include_router(photo_router)
+            dp._registered_routers.add('photo_router')
+            logger.info("Зарегистрирован обработчик фотографий")
+            
+        # Регистрируем роутер редактирования
+        if 'edit_flow_router' not in dp._registered_routers:
+            dp.include_router(edit_flow_router)
+            dp._registered_routers.add('edit_flow_router')
+            logger.info("Зарегистрирован обработчик редактирования")
+            
+        # Регистрируем команду старт
+        dp.message.register(cmd_start, CommandStart())
         
-        # Другие обработчики событий - исключаем для теста с ruff
+        # Регистрируем fallback-хендлер ПОСЛЕ всех остальных обработчиков
+        # чтобы он не перехватывал сообщения с фото
+        dp.message.register(text_fallback)
         
-        logger.info("Обработчики зарегистрированы")
+        logger.info("Все обработчики зарегистрированы успешно")
     except Exception as e:
         logger.error(f"Ошибка при регистрации обработчиков: {e}")
         # Для тестовых целей игнорируем ошибки регистрации
@@ -555,12 +579,6 @@ user_matches = {}
 # Removed duplicate safe_edit function
 
 
-async def text_fallback(message):
-    await message.answer(
-        "📸 Please send an invoice photo (image only).", parse_mode=None
-    )
-
-
 import signal
 import sys
 import os
@@ -701,6 +719,7 @@ if __name__ == "__main__":
         # Парсинг аргументов командной строки
         parser = argparse.ArgumentParser(description='Nota Telegram Bot')
         parser.add_argument('--test-mode', action='store_true', help='Запуск в тестовом режиме для проверки зависимостей')
+        parser.add_argument('--force-restart', action='store_true', help='Принудительно сбросить сессию Telegram API перед запуском')
         args = parser.parse_args()
         
         # Создаем директорию для логов если её нет
@@ -742,6 +761,20 @@ if __name__ == "__main__":
         # Стандартный запуск бота
         # Создаем бота и диспетчер
         bot, dp = create_bot_and_dispatcher()
+        
+        # Если указан флаг force-restart, выполняем сброс сессии Telegram API
+        if args.force_restart:
+            try:
+                logger.info("Force-restarting bot: terminating existing webhook/polling sessions...")
+                # Отправляем запрос на удаление webhook и сброс getUpdates сессии
+                await bot.delete_webhook(drop_pending_updates=True)
+                # Дополнительная пауза для гарантированного сброса сессии
+                await asyncio.sleep(0.5)
+                logger.info("Existing webhook and polling sessions terminated")
+            except Exception as e:
+                logger.error(f"Error during forced restart: {e}")
+        
+        # Регистрируем обработчики
         register_handlers(dp, bot)
         
         # Проверка конфигурации логирования
@@ -749,7 +782,8 @@ if __name__ == "__main__":
         logger.debug(f"Logger configuration: {len(root_logger.handlers)} handlers")
         
         # Запускаем бота сразу, не дожидаясь инициализации пула
-        polling_task = asyncio.create_task(dp.start_polling(bot))
+        logger.info("Starting bot polling...")
+        polling_task = asyncio.create_task(dp.start_polling(bot, drop_pending_updates=True))
         
         # Инициализируем пул потоков OpenAI Assistant API в фоновом режиме
         async def init_openai_pool():
@@ -773,11 +807,28 @@ if __name__ == "__main__":
         logger.info("✅ Parallel API processing")
         logger.info("✅ Fixed i18n formatting issues")
         logger.info("✅ Improved logging with duplication prevention")
+        logger.info("✅ Conflict resolution for Telegram API sessions")
         
         # Запускаем задачу периодической очистки временных файлов
         asyncio.create_task(periodic_cleanup())
         
-        # Ожидаем завершения поллинга (не должно произойти до остановки бота)
-        await polling_task
+        # Логируем успешный запуск
+        logger.info("Bot is now running and ready to process messages!")
+        
+        try:
+            # Ожидаем завершения поллинга (не должно произойти до остановки бота)
+            await polling_task
+        except Exception as e:
+            logger.error(f"Error in polling task: {e}")
+            # Критическая ошибка, завершаем все задачи
+            _graceful_shutdown(None, None)
 
     asyncio.run(main())
+
+# Экспорт для тестов
+from app.handlers.edit_flow import handle_free_edit_text
+try:
+    from .cb_edit_line import cb_edit_line
+except ImportError:
+    # Если cb_edit_line определён в другом месте, импортируем напрямую
+    from app.handlers.edit_flow import handle_edit_free as cb_edit_line

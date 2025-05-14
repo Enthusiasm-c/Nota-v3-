@@ -53,12 +53,18 @@ export ENV="development"  # Режим разработки для подроб�
 export LOG_LEVEL="DEBUG"  # Уровень логирования
 export PYTHONUNBUFFERED=1  # Отключаем буферизацию вывода Python
 
-# Запуск бота с перенаправлением логов
-python bot.py 2>&1 | tee -a "$LOG_FILE"
+# Запускаем бота через check_and_restart.py для решения проблемы с конфликтами сессий
+log "Starting bot with safe restart to prevent Telegram API conflicts..."
+python check_and_restart.py 2>&1 | tee -a "$LOG_FILE"
 
-# Сохраняем PID бота
-echo $! > "$LOG_DIR/bot.pid"
-log "Bot started with PID: $!"
+# Получаем PID запущенного бота
+BOT_PID=$(ps aux | grep 'python.*bot\.py' | grep -v grep | awk '{print $2}' | head -1)
+if [ -n "$BOT_PID" ]; then
+    echo "$BOT_PID" > "$LOG_DIR/bot.pid"
+    log "Bot started with PID: $BOT_PID"
+else
+    log "WARNING: Could not find bot PID, it may not have started correctly."
+fi
 
 # Функция для показа логов в реальном времени
 tail_logs() {
@@ -110,10 +116,14 @@ trap shutdown SIGINT SIGTERM
 # Начинаем следить за логами
 tail_logs
 
-# Запускаем бота в фоне и запоминаем его PID
-python bot.py >> "$LOG_DIR/bot_output.log" 2>> "$LOG_DIR/bot_stderr.log" &
-BOT_PID=$!
-log "Bot started with PID: $BOT_PID"
+# PID бота уже должен быть определён ранее через check_and_restart.py
+if [ -z "$BOT_PID" ]; then
+    # Если не определён, значит что-то пошло не так
+    log "ERROR: Bot PID not set, unable to monitor process"
+    exit 1
+fi
+
+log "Monitoring bot process with PID: $BOT_PID"
 
 # Ждем завершения процесса
 wait $BOT_PID
