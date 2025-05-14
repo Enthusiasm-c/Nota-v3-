@@ -114,12 +114,13 @@ class IncrementalUI:
         self.text = f"{self.text}\n{new_text}"
         await self.update(self.text)
     
-    async def complete(self, completion_text: Optional[str] = None) -> None:
+    async def complete(self, completion_text: Optional[str] = None, kb: Optional[InlineKeyboardMarkup] = None) -> None:
         """
-        Завершает последовательность обновлений с опциональным итоговым текстом.
+        Завершает последовательность обновлений с опциональным итоговым текстом и клавиатурой.
         
         Args:
             completion_text: Финальный текст для отображения
+            kb: Опциональная клавиатура для добавления к сообщению
         """
         # Останавливаем спиннер, если он запущен
         self.stop_spinner()
@@ -128,20 +129,54 @@ class IncrementalUI:
         elapsed = time.time() - self._start_time if self._start_time else 0
         elapsed_str = f" (за {elapsed:.1f} сек)" if elapsed > 0 else ""
         
+        # Формируем финальный текст
         if completion_text:
-            await self.update(f"{self.text}\n{completion_text}{elapsed_str}")
+            final_text = f"{self.text}\n{completion_text}{elapsed_str}"
         else:
-            await self.update(f"{self.text}\n✅ Готово{elapsed_str}")
+            final_text = f"{self.text}\n✅ Готово{elapsed_str}"
+        
+        try:
+            # Если есть клавиатура, используем ее
+            if kb:
+                await self.bot.edit_message_text(
+                    final_text,
+                    chat_id=self.chat_id,
+                    message_id=self.message_id,
+                    reply_markup=kb
+                )
+            else:
+                await self.update(final_text)
+        except Exception as e:
+            logger.error(f"Error completing UI: {e}")
+            # Пробуем альтернативный способ в случае ошибки
+            try:
+                await edit_message_text_safe(
+                    bot=self.bot,
+                    chat_id=self.chat_id,
+                    msg_id=self.message_id,
+                    text=final_text,
+                    kb=kb
+                )
+            except Exception as e2:
+                logger.error(f"Fallback edit also failed: {e2}")
     
-    async def error(self, error_text: str) -> None:
+    async def error(self, error_text: str, show_timing: bool = False) -> None:
         """
         Показывает сообщение об ошибке.
         
         Args:
             error_text: Текст ошибки для отображения
+            show_timing: Показывать ли время выполнения
         """
         self.stop_spinner()
-        await self.update(f"{self.text}\n❌ {error_text}")
+        
+        # Вычисляем время только если нужно отображать
+        elapsed_str = ""
+        if show_timing and self._start_time:
+            elapsed = time.time() - self._start_time
+            elapsed_str = f" (через {elapsed:.1f} сек)"
+            
+        await self.update(f"{self.text}\n❌ {error_text}{elapsed_str}")
     
     def stop_spinner(self) -> None:
         """Останавливает анимацию спиннера, если она запущена."""

@@ -1,9 +1,11 @@
 from aiogram import Router, CallbackQuery, Message, F
 import re
 import logging
+import asyncio
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from app.fsm.states import EditFree
+from app.utils.processing_guard import require_user_free, require_rate_limit
 from app.edit import free_parser
 from aiogram.types import ForceReply
 
@@ -103,37 +105,33 @@ async def handle_field_choose(call: CallbackQuery, state: FSMContext):
 
 
 # --- Cancel for row: restore Edit button ---
-@router.callback_query(F.data.startswith("cancel:"))
-async def handle_cancel(call: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    if call.data == "cancel:all":
-        try:
-            await call.message.edit_reply_markup(reply_markup=None)
-        except Exception:
-            pass
-        # После отмены редактирования — показать первую страницу отчёта с клавиатурой
-        invoice = data.get("invoice")
-        if invoice:
-            match_results = matcher.match_positions(
-                invoice["positions"], data_loader.load_products()
-            )
-            page = 1
-            table_rows = [r for r in match_results]
-            total_rows = len(table_rows)
-            page_size = 15
-            total_pages = (total_rows + page_size - 1) // page_size
-            text, has_errors = invoice_report.build_report(invoice, match_results, page=page)
-            await call.message.edit_text(
-                text,
-                reply_markup=keyboards.build_invoice_report(
-                    text, has_errors, match_results, page=page, total_pages=total_pages
-                ),
-                parse_mode="HTML"
-            )
-        else:
-            await call.message.edit_text("Editing cancelled. All keyboards removed.", parse_mode="HTML")
-    idx = int(call.data.split(":")[1])
-    await call.message.edit_reply_markup(reply_markup=keyboards.kb_edit(idx))
+# Модифицированный обработчик для кнопок cancel:<index> (НЕ для cancel:all)
+@router.callback_query(lambda call: call.data.startswith("cancel:") and call.data != "cancel:all")
+async def handle_cancel_row(call: CallbackQuery, state: FSMContext):
+    """
+    Обработчик для кнопок "Cancel" для отдельных строк.
+    Обработчик для "cancel:all" находится в bot.py
+    """
+    # Немедленно отвечаем на callback, чтобы пользователь увидел, что кнопка сработала
+    await call.answer("Отмена редактирования строки")
+    
+    try:
+        parts = call.data.split(":")
+        if len(parts) > 1:
+            # Сначала получаем необходимые данные
+            data = await state.get_data()
+            lang = data.get("lang", "en")
+            
+            # Преобразуем индекс и обработаем другие виды отмены
+            idx = int(parts[1])
+            logger.info(f"Отмена редактирования строки {idx}")
+            
+            # Используем актуальную клавиатуру редактирования
+            from app.keyboards import build_edit_keyboard
+            await call.message.edit_reply_markup(reply_markup=build_edit_keyboard(has_errors=True, lang=lang))
+    except Exception as e:
+        logger.error(f"Ошибка в обработчике cancel: {e}")
+        await call.answer("Произошла ошибка. Попробуйте загрузить новое фото.")
 
 
 # --- UX финального отчёта: обработчики новых кнопок ---
@@ -148,7 +146,7 @@ async def handle_page_prev(call: CallbackQuery, state: FSMContext):
         await call.answer(
             "Session expired. Please resend the invoice.", show_alert=True
         )
-        return
+        
     page = max(1, page - 1)
     await state.update_data(invoice_page=page)
     match_results = matcher.match_positions(
@@ -205,7 +203,7 @@ async def handle_cancel_edit(call: CallbackQuery, state: FSMContext):
         await call.answer(
             "Session expired. Please resend the invoice.", show_alert=True
         )
-        return
+        
     page = data.get("invoice_page", 1)
     match_results = matcher.match_positions(
         invoice["positions"], data_loader.load_products()

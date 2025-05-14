@@ -1,5 +1,10 @@
 """
-Utilities for caching frequently accessed data.
+Оптимизированный кеш для данных и результатов сравнения строк.
+
+Модуль предоставляет функции для:
+1. Эффективной загрузки данных из файлов с кешированием по времени и mtime
+2. Кеширования результатов сравнения строк для ускорения работы matcher
+3. Статистики использования кеша
 """
 
 import time
@@ -7,161 +12,363 @@ import os
 import threading
 import logging
 import functools
-from typing import Dict, Any, Callable, List, Optional, Tuple, Hashable
+import asyncio
+from typing import Dict, Any, Callable, List, Optional, Tuple, Hashable, Set, Union
 
 logger = logging.getLogger(__name__)
 
-# Global cache for products data
-_products_cache = {
-    "data": None,
-    "last_updated": 0,
-    "file_mtime": 0
-}
-_cache_lock = threading.Lock()
+# Глобальный кеш для данных продуктов и поставщиков с отслеживанием времени модификации файлов
+_DATA_CACHE = {}
+_MODIFIED_TIMES = {}
+_CACHE_LOCK = threading.RLock()
 
-# Глобальный кэш для хранения загруженных данных
-_data_cache = {}
-_cache_timestamps = {}
-_cache_ttl = 300  # 5 минут время жизни кэша по умолчанию
+# Кеш для результатов сравнения строк с оптимизированной очисткой
+_STRING_CACHE = {}
+_STRING_CACHE_LOCK = threading.RLock()
+_STRING_CACHE_MAX_SIZE = 25000  # Увеличенный размер кеша
+_STRING_CACHE_HITS = 0
+_STRING_CACHE_MISSES = 0
 
-# Кэш для результатов сравнения строк
-_string_comparison_cache = {}
-_string_cache_size = 10000  # Максимальный размер кэша
-_string_cache_hits = 0
-_string_cache_misses = 0
+# Интервал проверки изменения файлов (в секундах)
+CHECK_INTERVAL = 60  # 1 минута
 
-def cached_load_data(path: str, loader_func: Callable, ttl: int = 300) -> List[Dict[str, Any]]:
+# Флаг того, запущен ли фоновый поток очистки кеша
+_CLEANUP_THREAD_RUNNING = False
+_CLEANUP_THREAD_STOP = threading.Event()
+
+def _start_cleanup_thread():
+    """Запускает фоновый поток для периодической очистки и мониторинга кеша."""
+    global _CLEANUP_THREAD_RUNNING, _CLEANUP_THREAD_STOP
+    
+    if _CLEANUP_THREAD_RUNNING:
+        return
+        
+    _CLEANUP_THREAD_STOP.clear()
+    
+    def cleanup_worker():
+        global _CLEANUP_THREAD_RUNNING
+        _CLEANUP_THREAD_RUNNING = True
+        
+        logger.info("Запущен поток очистки кеша данных")
+        
+        try:
+            while not _CLEANUP_THREAD_STOP.is_set():
+                # Проверяем размер строкового кеша и очищаем при необходимости
+                with _STRING_CACHE_LOCK:
+                    if len(_STRING_CACHE) > _STRING_CACHE_MAX_SIZE * 0.9:
+                        # Удаляем 30% записей для избежания частых очисток
+                        items_to_remove = int(_STRING_CACHE_MAX_SIZE * 0.3)
+                        keys_to_remove = list(_STRING_CACHE.keys())[:items_to_remove]
+                        for k in keys_to_remove:
+                            _STRING_CACHE.pop(k, None)
+                        
+                        logger.info(f"Очищено {items_to_remove} записей из строкового кеша")
+                        
+                    # Логируем статистику использования кеша
+                    if _STRING_CACHE_HITS + _STRING_CACHE_MISSES > 10000:
+                        hit_rate = _STRING_CACHE_HITS / (_STRING_CACHE_HITS + _STRING_CACHE_MISSES) * 100
+                        logger.info(f"Статистика кеша строк: {_STRING_CACHE_HITS} попаданий, "
+                                  f"{_STRING_CACHE_MISSES} промахов, {hit_rate:.1f}% эффективность")
+                
+                # Ждем некоторое время перед следующей проверкой
+                # Используем мелкие интервалы для быстрого реагирования на остановку
+                for _ in range(60):  # 60 * 1 = 60 секунд
+                    if _CLEANUP_THREAD_STOP.is_set():
+                        break
+                    _CLEANUP_THREAD_STOP.wait(1)  # 1 секунда
+                    
+        except Exception as e:
+            logger.error(f"Ошибка в потоке очистки кеша: {e}")
+        finally:
+            _CLEANUP_THREAD_RUNNING = False
+            logger.info("Поток очистки кеша остановлен")
+    
+    # Запускаем поток
+    cleanup_thread = threading.Thread(target=cleanup_worker, daemon=True)
+    cleanup_thread.start()
+    
+    # Регистрируем функцию остановки при выходе
+    import atexit
+    
+    def stop_cleanup_thread():
+        if _CLEANUP_THREAD_RUNNING:
+            logger.info("Останавливаем поток очистки кеша...")
+            _CLEANUP_THREAD_STOP.set()
+            
+    atexit.register(stop_cleanup_thread)
+
+def cached_load_data(path: str, loader_func: Callable, cache_key: str = None) -> List[Dict[str, Any]]:
     """
-    Загружает данные из файла с кэшированием результатов.
+    Загружает данные из файла с кешированием результатов.
+    Отслеживает изменения файла по времени модификации.
     
     Args:
         path: Путь к файлу с данными
         loader_func: Функция загрузки, которая принимает путь к файлу
-        ttl: Время жизни кэша в секундах
+        cache_key: Дополнительный ключ для кеширования (если нужны разные версии)
         
     Returns:
-        Загруженные данные (из кэша или напрямую)
+        Загруженные данные (из кеша или напрямую)
     """
-    global _data_cache, _cache_timestamps, _cache_ttl
+    full_key = f"{cache_key or 'data'}:{path}"
     
-    _cache_ttl = ttl
-    current_time = time.time()
+    # Проверяем наличие файла
+    if not os.path.exists(path):
+        logger.warning(f"Файл {path} не найден")
+        # Возвращаем кешированные данные, если они есть
+        with _CACHE_LOCK:
+            if full_key in _DATA_CACHE:
+                logger.warning(f"Используем кешированные данные для недоступного файла {path}")
+                return _DATA_CACHE[full_key]
+        return []
     
-    # Проверяем, есть ли данные в кэше и не истек ли срок их действия
-    if path in _data_cache and (current_time - _cache_timestamps.get(path, 0)) < _cache_ttl:
-        logger.debug(f"Using cached {path}: {len(_data_cache[path])} items")
-        return _data_cache[path]
-    
-    # Загружаем данные и сохраняем в кэш
-    data = loader_func(path)
-    _data_cache[path] = data
-    _cache_timestamps[path] = current_time
-    
-    logger.info(f"Loaded fresh data from {path}: {len(data)} items")
-    return data
+    with _CACHE_LOCK:
+        # Проверяем время модификации файла
+        current_mtime = os.path.getmtime(path)
+        last_check_time = time.time()
+        
+        # Если данные уже в кеше и файл не изменился, используем кеш
+        if (full_key in _DATA_CACHE and 
+            full_key in _MODIFIED_TIMES and 
+            current_mtime <= _MODIFIED_TIMES[full_key]["mtime"] and
+            last_check_time - _MODIFIED_TIMES[full_key]["checked"] < CHECK_INTERVAL):
+            logger.debug(f"Используем кешированные данные для {path} ({len(_DATA_CACHE[full_key])} записей)")
+            return _DATA_CACHE[full_key]
+        
+        # Если файл изменился или данных нет в кеше, загружаем
+        start_time = time.time()
+        try:
+            logger.info(f"Загрузка данных из {path}...")
+            data = loader_func(path)
+            
+            # Обновляем кеш
+            _DATA_CACHE[full_key] = data
+            _MODIFIED_TIMES[full_key] = {
+                "mtime": current_mtime,
+                "checked": last_check_time
+            }
+            
+            load_time = time.time() - start_time
+            logger.info(f"Загружено {len(data)} записей из {path} за {load_time:.2f}с")
+            return data
+        except Exception as e:
+            logger.error(f"Ошибка при загрузке {path}: {e}")
+            
+            # Используем кешированные данные в случае ошибки, если они есть
+            if full_key in _DATA_CACHE:
+                logger.warning(f"Используем устаревшие кешированные данные для {path}")
+                return _DATA_CACHE[full_key]
+            
+            return []
 
-def clear_cache(path: Optional[str] = None) -> None:
+async def cached_load_data_async(path: str, loader_func: Callable, cache_key: str = None) -> List[Dict[str, Any]]:
     """
-    Очищает кэш загруженных данных.
+    Асинхронная версия загрузки данных из файла с кешированием.
     
     Args:
-        path: Если указан, очищает только кэш для этого пути,
-              иначе очищает весь кэш
+        path: Путь к файлу с данными
+        loader_func: Функция загрузки (может быть асинхронной)
+        cache_key: Дополнительный ключ для кеширования
+        
+    Returns:
+        Загруженные данные
     """
-    global _data_cache, _cache_timestamps
+    full_key = f"{cache_key or 'data'}:{path}"
     
-    if path:
-        if path in _data_cache:
-            del _data_cache[path]
-        if path in _cache_timestamps:
-            del _cache_timestamps[path]
-        logger.debug(f"Cleared cache for {path}")
-    else:
-        _data_cache.clear()
-        _cache_timestamps.clear()
-        logger.debug("Cleared all data cache")
+    # Проверяем наличие файла без блокировки
+    if not os.path.exists(path):
+        logger.warning(f"Файл {path} не найден (async)")
+        # Возвращаем кешированные данные, если они есть
+        with _CACHE_LOCK:
+            if full_key in _DATA_CACHE:
+                logger.warning(f"Используем кешированные данные для недоступного файла {path} (async)")
+                return _DATA_CACHE[full_key]
+        return []
+    
+    # Проверяем кеш
+    with _CACHE_LOCK:
+        # Проверяем время модификации файла
+        current_mtime = os.path.getmtime(path)
+        last_check_time = time.time()
+        
+        # Если данные уже в кеше и файл не изменился, используем кеш
+        if (full_key in _DATA_CACHE and 
+            full_key in _MODIFIED_TIMES and 
+            current_mtime <= _MODIFIED_TIMES[full_key]["mtime"] and
+            last_check_time - _MODIFIED_TIMES[full_key]["checked"] < CHECK_INTERVAL):
+            logger.debug(f"Используем кешированные данные для {path} (async)")
+            return _DATA_CACHE[full_key]
+    
+    # Если файл изменился или данных нет в кеше, загружаем
+    start_time = time.time()
+    try:
+        logger.info(f"Асинхронная загрузка данных из {path}...")
+        
+        # Проверяем, является ли функция загрузки асинхронной
+        if asyncio.iscoroutinefunction(loader_func):
+            data = await loader_func(path)
+        else:
+            # Если функция синхронная, запускаем ее в отдельном потоке
+            loop = asyncio.get_event_loop()
+            data = await loop.run_in_executor(None, lambda: loader_func(path))
+        
+        # Обновляем кеш
+        with _CACHE_LOCK:
+            _DATA_CACHE[full_key] = data
+            _MODIFIED_TIMES[full_key] = {
+                "mtime": current_mtime,
+                "checked": last_check_time
+            }
+        
+        load_time = time.time() - start_time
+        logger.info(f"Асинхронно загружено {len(data)} записей из {path} за {load_time:.2f}с")
+        return data
+    except Exception as e:
+        logger.error(f"Ошибка при асинхронной загрузке {path}: {e}")
+        
+        # Используем кешированные данные в случае ошибки, если они есть
+        with _CACHE_LOCK:
+            if full_key in _DATA_CACHE:
+                logger.warning(f"Используем устаревшие кешированные данные для {path} (async)")
+                return _DATA_CACHE[full_key]
+        
+        return []
+
+def cached_load_products(csv_path: str, loader_func: Callable) -> List[Dict]:
+    """
+    Загружает и кеширует продукты из CSV файла.
+    Проверяет изменения файла и обновляет кеш при необходимости.
+    
+    Args:
+        csv_path: Путь к файлу CSV
+        loader_func: Функция для загрузки данных
+        
+    Returns:
+        Список продуктов
+    """
+    # Запускаем поток очистки, если он еще не запущен
+    if not _CLEANUP_THREAD_RUNNING:
+        _start_cleanup_thread()
+        
+    return cached_load_data(csv_path, loader_func, "products")
+
+def cached_load_suppliers(csv_path: str, loader_func: Callable) -> List[Dict]:
+    """
+    Загружает и кеширует поставщиков из CSV файла.
+    Проверяет изменения файла и обновляет кеш при необходимости.
+    
+    Args:
+        csv_path: Путь к файлу CSV
+        loader_func: Функция для загрузки данных
+        
+    Returns:
+        Список поставщиков
+    """
+    # Запускаем поток очистки, если он еще не запущен
+    if not _CLEANUP_THREAD_RUNNING:
+        _start_cleanup_thread()
+        
+    return cached_load_data(csv_path, loader_func, "suppliers")
 
 def cached_compare_strings(func: Callable) -> Callable:
     """
-    Декоратор для кэширования результатов сравнения строк.
-    
-    Существенно ускоряет работу функций сравнения строк за счет
-    сохранения ранее вычисленных результатов. Особенно эффективен
-    при многократном сравнении одних и тех же строк в процессе
-    поиска соответствий.
+    Улучшенный декоратор для кеширования сравнения строк.
+    Добавляет поддержку сортировки строк для устойчивости ключа.
     
     Args:
-        func: Функция сравнения строк, принимающая две строки
+        func: Функция сравнения строк
         
     Returns:
-        Обернутая функция с кэшированием результатов
+        Обернутая функция с кешированием
     """
     @functools.wraps(func)
     def wrapper(s1: str, s2: str, *args, **kwargs) -> float:
-        global _string_comparison_cache, _string_cache_hits, _string_cache_misses
+        global _STRING_CACHE, _STRING_CACHE_HITS, _STRING_CACHE_MISSES
         
-        # Создаем ключ кэша из нормализованных строк
-        # (нормализация выполняется самой функцией сравнения)
-        cache_key = (s1, s2)
-        reverse_key = (s2, s1)
+        # Сортируем строки для обеспечения того же результата при разном порядке
+        strings = tuple(sorted([s1, s2]))
         
-        # Проверяем кэш
-        if cache_key in _string_comparison_cache:
-            _string_cache_hits += 1
-            return _string_comparison_cache[cache_key]
+        # Создаем ключ, включая дополнительные аргументы
+        args_key = tuple(args)
+        kwargs_key = tuple(sorted([(k, v) for k, v in kwargs.items()]))
+        cache_key = (strings, args_key, kwargs_key)
         
-        if reverse_key in _string_comparison_cache:
-            _string_cache_hits += 1
-            return _string_comparison_cache[reverse_key]
-        
-        # Кэш-промах, вычисляем результат
-        _string_cache_misses += 1
-        result = func(s1, s2, *args, **kwargs)
-        
-        # Сохраняем в кэш
-        _string_comparison_cache[cache_key] = result
-        
-        # Проверяем размер кэша и очищаем при необходимости
-        if len(_string_comparison_cache) > _string_cache_size:
-            # Удаляем 20% наиболее старых записей
-            items_to_remove = int(_string_cache_size * 0.2)
-            for _ in range(items_to_remove):
-                _string_comparison_cache.pop(next(iter(_string_comparison_cache)))
+        with _STRING_CACHE_LOCK:
+            if cache_key in _STRING_CACHE:
+                _STRING_CACHE_HITS += 1
+                return _STRING_CACHE[cache_key]
             
-            # Сбрасываем счетчики для статистики
-            if (_string_cache_hits + _string_cache_misses) > 50000:
-                logger.info(f"String comparison cache stats: {_string_cache_hits} hits, {_string_cache_misses} misses, " +
-                           f"hit rate: {_string_cache_hits/(_string_cache_hits+_string_cache_misses)*100:.1f}%")
-                _string_cache_hits = 0
-                _string_cache_misses = 0
-                
-        return result
+            _STRING_CACHE_MISSES += 1
+            
+            # Получаем результат
+            result = func(s1, s2, *args, **kwargs)
+            
+            # Сохраняем результат
+            _STRING_CACHE[cache_key] = result
+            
+            return result
     
     return wrapper
 
-def get_string_cache_stats() -> Dict[str, Any]:
+def clear_cache(cache_type: Optional[str] = None) -> None:
     """
-    Возвращает статистику использования кэша сравнения строк.
+    Очищает кеш данных.
+    
+    Args:
+        cache_type: Тип кеша для очистки ("products", "suppliers", "strings" или None для всех)
+    """
+    if cache_type in (None, "products", "suppliers", "data"):
+        with _CACHE_LOCK:
+            if cache_type is None:
+                # Очищаем весь кеш данных
+                _DATA_CACHE.clear()
+                _MODIFIED_TIMES.clear()
+                logger.info("Весь кеш данных очищен")
+            else:
+                # Очищаем конкретный тип кеша
+                keys_to_remove = [k for k in _DATA_CACHE if k.startswith(f"{cache_type}:")]
+                for k in keys_to_remove:
+                    _DATA_CACHE.pop(k, None)
+                    _MODIFIED_TIMES.pop(k, None)
+                logger.info(f"Кеш {cache_type} очищен")
+                
+    if cache_type in (None, "strings"):
+        with _STRING_CACHE_LOCK:
+            _STRING_CACHE.clear()
+            _STRING_CACHE_HITS = 0
+            _STRING_CACHE_MISSES = 0
+            logger.info("Кеш сравнения строк очищен")
+
+def get_cache_stats() -> Dict[str, Any]:
+    """
+    Возвращает статистику использования всех типов кеша.
     
     Returns:
-        Словарь со статистикой кэша
+        Словарь со статистикой кеша
     """
-    global _string_comparison_cache, _string_cache_hits, _string_cache_misses
+    stats = {}
     
-    total_queries = _string_cache_hits + _string_cache_misses
-    hit_rate = (_string_cache_hits / total_queries * 100) if total_queries > 0 else 0
+    with _CACHE_LOCK:
+        stats["data_cache"] = {
+            "size": len(_DATA_CACHE),
+            "keys": list(_DATA_CACHE.keys()),
+            "entry_sizes": {k: len(_DATA_CACHE[k]) if hasattr(_DATA_CACHE[k], "__len__") else 1 
+                           for k in _DATA_CACHE},
+            "last_modified": {k: time.ctime(_MODIFIED_TIMES[k]["mtime"]) 
+                             for k in _MODIFIED_TIMES}
+        }
     
-    return {
-        "size": len(_string_comparison_cache),
-        "max_size": _string_cache_size,
-        "hits": _string_cache_hits,
-        "misses": _string_cache_misses,
-        "hit_rate": hit_rate,
-        "memory_usage_approx": len(_string_comparison_cache) * 100  # Примерный размер в байтах
-    }
-
-def cached_load_products(csv_path: str, loader_func: Callable, max_age_seconds: int = 300):
-    """
-    Backward compatibility function for cached loading products.
-    """
-    return cached_load_data(csv_path, loader_func, max_age_seconds)
+    with _STRING_CACHE_LOCK:
+        total_queries = _STRING_CACHE_HITS + _STRING_CACHE_MISSES
+        hit_rate = (_STRING_CACHE_HITS / total_queries * 100) if total_queries > 0 else 0
+        
+        stats["string_cache"] = {
+            "size": len(_STRING_CACHE),
+            "max_size": _STRING_CACHE_MAX_SIZE,
+            "hits": _STRING_CACHE_HITS,
+            "misses": _STRING_CACHE_MISSES,
+            "hit_rate": hit_rate,
+            "memory_usage_approx": len(_STRING_CACHE) * 100  # Примерный размер в байтах
+        }
+    
+    return stats

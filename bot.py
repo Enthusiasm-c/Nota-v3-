@@ -92,7 +92,51 @@ def create_bot_and_dispatcher():
 
 
 async def cmd_start(message: Message):
-    await message.answer("Hi! I'm Nota AI Bot. How can I help you today?")
+    await message.answer("👋 Привет! Я Nota AI Bot - бот для обработки инвойсов.\n\n📱 Просто отправьте фотографию инвойса, и я проанализирую его для вас. Никаких дополнительных кнопок не требуется.")
+
+
+async def global_error_handler(event, exception):
+    """Глобальный обработчик ошибок для предотвращения крашей бота."""
+    # Уникальный ID для трассировки в логах
+    error_id = f"error_{uuid.uuid4().hex[:8]}"
+    
+    # Логируем детали ошибки
+    logger.error(f"[{error_id}] Перехвачена необработанная ошибка: {exception}")
+    logger.error(f"[{error_id}] Тип события: {type(event).__name__}")
+    
+    # Собираем подробную информацию об ошибке
+    import traceback
+    trace = traceback.format_exc()
+    logger.error(f"[{error_id}] Трассировка:\n{trace}")
+    
+    # Пытаемся получить информацию о пользователе
+    try:
+        if hasattr(event, 'from_user') and event.from_user:
+            user_id = event.from_user.id
+        elif hasattr(event, 'chat') and event.chat:
+            user_id = event.chat.id
+        else:
+            user_id = "unknown"
+        
+        logger.error(f"[{error_id}] Ошибка у пользователя: {user_id}")
+    except:
+        logger.error(f"[{error_id}] Не удалось определить пользователя")
+    
+    # Пытаемся отправить сообщение пользователю
+    try:
+        if hasattr(event, 'answer'):
+            await event.answer("Произошла ошибка. Пожалуйста, попробуйте снова.")
+        elif hasattr(event, 'reply'):
+            await event.reply("Произошла ошибка. Пожалуйста, попробуйте снова.")
+        elif hasattr(event, 'message') and hasattr(event.message, 'answer'):
+            await event.message.answer("Произошла ошибка. Пожалуйста, попробуйте снова.")
+        
+        logger.info(f"[{error_id}] Отправлено сообщение об ошибке пользователю")
+    except Exception as e:
+        logger.error(f"[{error_id}] Не удалось отправить сообщение об ошибке: {e}")
+    
+    # Ошибка обработана, бот может продолжать работу
+    return True  # Предотвращаем дальнейшее распространение ошибки
 
 
 def register_handlers(dp, bot=None):
@@ -103,10 +147,14 @@ def register_handlers(dp, bot=None):
         dp: Диспетчер
         bot: Экземпляр бота (опционально)
     """
+    # Регистрируем глобальный обработчик ошибок
+    dp.errors.register(global_error_handler)
+    
     try:
         # Импортируем роутеры
         from app.handlers.edit_flow import router as edit_flow_router
         from app.handlers.incremental_photo_handler import router as photo_router
+        from app.handlers.syrve_handler import router as syrve_router
         
         # Проверяем, не был ли уже добавлен роутер
         if not hasattr(dp, '_registered_routers'):
@@ -115,22 +163,180 @@ def register_handlers(dp, bot=None):
         # ВАЖНО: Регистрируем роутер обработки фотографий ПЕРВЫМ
         # чтобы он имел приоритет над другими обработчиками
         if 'photo_router' not in dp._registered_routers:
-            dp.include_router(photo_router)
-            dp._registered_routers.add('photo_router')
-            logger.info("Зарегистрирован обработчик фотографий")
+
+            # Регистрируем оптимизированный обработчик фотографий
+            from app.handlers.optimized_photo_handler import router as optimized_photo_router
+            dp.include_router(optimized_photo_router)
+            logger.info("Зарегистрирован оптимизированный обработчик фотографий")
             
-        # Регистрируем роутер редактирования
+            # Регистрируем роутер редактирования
         if 'edit_flow_router' not in dp._registered_routers:
             dp.include_router(edit_flow_router)
             dp._registered_routers.add('edit_flow_router')
             logger.info("Зарегистрирован обработчик редактирования")
             
+        # Регистрируем роутер Syrve для обработки отправки накладных
+        if 'syrve_router' not in dp._registered_routers:
+            dp.include_router(syrve_router)
+            dp._registered_routers.add('syrve_router')
+            logger.info("Зарегистрирован обработчик Syrve")
+            
+        # Регистрируем встроенный обработчик для кнопки cancel (исправленная версия)
+        @dp.callback_query(F.data == "cancel:all")
+        async def handle_cancel_all(call, state: FSMContext):
+            """Обработчик кнопки Cancel с улучшенной обработкой ошибок"""
+            # Уникальный ID операции для отслеживания в логах
+            op_id = f"cancel_{call.message.message_id}"
+            logger.info(f"[{op_id}] Processing cancel:all callback")
+            
+            # 1. Immediately answer the callback to prevent timeout
+            try:
+                await call.answer()
+                logger.info(f"[{op_id}] Callback answered successfully")
+            except Exception as e:
+                logger.error(f"[{op_id}] Error answering callback: {e}")
+            
+            # 2. Clear the state first - most important action
+            try:
+                await state.clear()
+                logger.info(f"[{op_id}] State cleared successfully")
+                
+                # Set new state with small delay to ensure proper sequencing
+                await asyncio.sleep(0.1)
+                await state.set_state(NotaStates.main_menu)
+                logger.info(f"[{op_id}] New state set: NotaStates.main_menu")
+            except Exception as e:
+                logger.error(f"[{op_id}] Error clearing state: {e}", exc_info=True)
+            
+            # 3. Try to remove the keyboard
+            try:
+                await call.message.edit_reply_markup(reply_markup=None)
+                logger.info(f"[{op_id}] Keyboard removed successfully")
+            except Exception as e:
+                logger.warning(f"[{op_id}] Could not remove keyboard: {e}")
+            
+            # 4. Send a simple confirmation message without keyboard
+            try:
+                await call.message.answer(
+                    "✅ Operation cancelled. Please send a new photo.",
+                    parse_mode=None  # Explicit no parsing to prevent errors
+                )
+                logger.info(f"[{op_id}] Cancellation message sent")
+            except Exception as e:
+                logger.error(f"[{op_id}] Error sending confirmation message: {e}")
+                # Try a simpler message as fallback
+                try:
+                    await call.message.answer("Operation cancelled.")
+                except Exception:
+                    # Last resort - just log the error
+                    logger.error(f"[{op_id}] Failed to send any confirmation message")
+
+            
+            # 1. Первым делом - отвечаем на callback кратко
+            try:
+                await call.answer("Отмена")
+                logger.info(f"[{op_id}] Успешный вызов call.answer()")
+            except Exception as e:
+                logger.error(f"[{op_id}] Ошибка при вызове call.answer(): {e}")
+                
+            # 2. Сохраняем текущие данные пользователя для отладки
+            try:
+                current_data = await state.get_data()
+                current_state = await state.get_state()
+                logger.info(f"[{op_id}] Текущее состояние пользователя: {current_state}")
+            except Exception as e:
+                logger.error(f"[{op_id}] Ошибка при получении состояния: {e}")
+                current_state = "unknown"
+            
+            # 3. Сбрасываем состояние - самое важное действие
+            try:
+                # Полностью очищаем состояние
+                await state.clear()
+                logger.info(f"[{op_id}] Состояние успешно очищено")
+                
+                # Устанавливаем новое базовое состояние
+                await state.set_state(NotaStates.main_menu)
+                logger.info(f"[{op_id}] Установлено новое состояние: NotaStates.main_menu")
+            except Exception as e:
+                logger.error(f"[{op_id}] Критическая ошибка при сбросе состояния: {e}")
+                # Даже при ошибке пытаемся продолжить
+            
+            # 4. Отправляем простое сообщение
+            try:
+                # Отправляем сообщение без клавиатуры с небольшой задержкой
+                await asyncio.sleep(0.2)  # Небольшая задержка для стабильности
+                result = await call.message.answer(
+                    "✅ Обработка отменена. Пожалуйста, отправьте новое фото.",
+                    parse_mode=None  # Явно указываем отсутствие форматирования
+                )
+                logger.info(f"[{op_id}] Сообщение об отмене успешно отправлено, message_id={result.message_id}")
+            except Exception as e:
+                logger.error(f"[{op_id}] Ошибка при отправке сообщения: {e}")
+                # Пытаемся отправить сообщение альтернативным способом при ошибке
+                try:
+                    await bot.send_message(
+                        chat_id=call.message.chat.id,
+                        text="Операция отменена. Отправьте новое фото.",
+                        parse_mode=None
+                    )
+                    logger.info(f"[{op_id}] Резервное сообщение отправлено")
+                except Exception as e2:
+                    logger.error(f"[{op_id}] Критическая ошибка при отправке резервного сообщения: {e2}")
+            
+            # 5. Удаляем клавиатуру у предыдущего сообщения (не критично)
+            try:
+                await call.message.edit_reply_markup(reply_markup=None)
+                logger.info(f"[{op_id}] Клавиатура успешно удалена")
+            except Exception as e:
+                logger.warning(f"[{op_id}] Не удалось удалить клавиатуру: {e}")
+                # Это некритично - продолжаем
+                
+            logger.info(f"[{op_id}] Обработка 'cancel:all' завершена успешно")
+        
+            
+            
         # Регистрируем команду старт
         dp.message.register(cmd_start, CommandStart())
         
-        # Регистрируем fallback-хендлер ПОСЛЕ всех остальных обработчиков
-        # чтобы он не перехватывал сообщения с фото
-        dp.message.register(text_fallback)
+        # Обработчик для кнопки action:new больше не нужен, так как мы убрали эту кнопку из меню
+        # Оставляем простую заглушку на случай, если какой-то клиент всё же отправит этот callback
+        @dp.callback_query(F.data == "action:new")
+        async def cb_new_invoice(call: CallbackQuery, state: FSMContext):
+            """Заглушка для устаревшей кнопки Upload New Invoice"""
+            # Немедленно отвечаем на callback и сообщаем, что нужно просто отправить фото
+            await call.answer("Просто отправьте новое фото")
+            
+            # Полностью очищаем состояние и устанавливаем новое
+            await state.clear()
+            await state.set_state(NotaStates.awaiting_file)
+            
+            # Отправляем сообщение без кнопок
+            await call.message.answer("📱 Просто отправьте фотографию инвойса для обработки.")
+            
+            logger.info(f"Пользователь {call.from_user.id} использовал устаревшую кнопку upload_new")
+
+                    
+        # Регистрируем обработчик кнопки подтверждения инвойса
+        @dp.callback_query(F.data == "confirm:invoice")
+        async def handle_invoice_confirm(call: CallbackQuery, state: FSMContext):
+            """Обработчик кнопки 'Подтвердить' для отправки в Syrve"""
+            from app.handlers.syrve_handler import handle_invoice_confirm as syrve_handler
+            try:
+                # Сначала изменяем состояние
+                await state.set_state(NotaStates.progress)
+                # Затем вызываем обработчик
+                await syrve_handler(call, state)
+                # В случае успеха устанавливаем состояние главного меню
+                await state.set_state(NotaStates.main_menu)
+            except Exception as e:
+                logger.error(f"Ошибка при обработке подтверждения инвойса: {e}")
+                await call.message.answer("Произошла ошибка при отправке в Syrve. Попробуйте еще раз позже.")
+                # В случае ошибки возвращаемся в режим редактирования
+                await state.set_state(NotaStates.editing)
+        
+        # Регистрируем fallback-хендлер ПОСЛЕ всех остальных обработчиков,
+        # и только для текстовых сообщений, чтобы он не перехватывал фото
+        dp.message.register(text_fallback, F.content_type == 'text')
         
         logger.info("Все обработчики зарегистрированы успешно")
     except Exception as e:
@@ -559,9 +765,15 @@ async def reject_fuzzy_name(callback: CallbackQuery, state: FSMContext):
 
 
 async def text_fallback(message):
+    """Обработчик для любых текстовых сообщений, когда не требуется текст."""
+    # Более подробное сообщение с инструкцией
     await message.answer(
-        "📸 Please send an invoice photo (image only).", parse_mode=None
+        "📸 Пожалуйста, отправьте фотографию инвойса (только изображение).\n\n"
+        "Бот обрабатывает только фотографии, текстовые сообщения не поддерживаются.", 
+        parse_mode=None
     )
+    # Логируем для отладки
+    logger.info(f"Получено текстовое сообщение от {message.from_user.id}: {message.text[:30]}...")
 
 
 # Silence unhandled update logs
@@ -591,6 +803,144 @@ def _graceful_shutdown(signum, frame):
     def alarm_handler(signum, frame):
         logger.warning("Таймаут graceful shutdown превышен, принудительное завершение")
         sys.exit(1)
+    
+    # Установка обработчика сигнала и таймера
+    old_alarm_handler = signal.signal(signal.SIGALRM, alarm_handler)
+    old_alarm_time = signal.alarm(25)  # 25 секунд на все операции
+    
+    try:
+        # 1. Stop background threads first
+        logger.info("Останавливаем фоновые потоки...")
+        try:
+            # Stop the Redis cache cleanup thread
+            from app.utils.redis_cache import _local_cache
+            if hasattr(_local_cache, 'stop_cleanup'):
+                _local_cache.stop_cleanup()
+                logger.info("Поток очистки кэша остановлен")
+            
+            # Очищаем флаги блокировок пользователей
+            from app.utils.processing_guard import clear_all_locks
+            clear_all_locks()
+            logger.info("Флаги блокировок пользователей очищены")
+        except Exception as thread_err:
+            logger.error(f"Ошибка при остановке фоновых потоков: {thread_err}")
+
+        # 2. Close Redis connection if it exists
+        try:
+            from app.utils.redis_cache import get_redis
+            redis_conn = get_redis()
+            if redis_conn:
+                logger.info("Закрываем соединение с Redis...")
+                redis_conn.close()
+                logger.info("Соединение с Redis закрыто")
+        except Exception as redis_err:
+            logger.error(f"Ошибка при закрытии Redis: {redis_err}")
+
+        # 3. Cancel any pending OpenAI requests and shut down thread pool
+        logger.info("Отменяем запросы OpenAI API...")
+        try:
+            # Shutdown thread pool first to prevent new async tasks
+            from app.assistants.thread_pool import shutdown_thread_pool
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                shutdown_task = asyncio.run_coroutine_threadsafe(shutdown_thread_pool(), loop)
+                # Уменьшаем таймаут с 3 до 1.5 сек
+                try:
+                    shutdown_task.result(timeout=1.5)
+                except (asyncio.TimeoutError, concurrent.futures.TimeoutError):
+                    logger.warning("Timeout waiting for thread pool shutdown")
+                except Exception as pool_err:
+                    logger.error(f"Ошибка при остановке thread pool: {pool_err}")
+            
+            # Close the OpenAI client connection
+            try:
+                from app.config import get_chat_client
+                client = get_chat_client()
+                if client and hasattr(client, '_client') and hasattr(client._client, 'http_client'):
+                    client._client.http_client.close()  # Close the underlying HTTP client
+                    logger.info("HTTP клиент OpenAI закрыт")
+            except Exception as client_err:
+                logger.error(f"Ошибка при закрытии HTTP клиента: {client_err}")
+        except Exception as openai_err:
+            logger.error(f"Ошибка при остановке клиента OpenAI: {openai_err}")
+
+        # 4. Stop the bot polling and dispatcher - критически важный шаг
+        if 'dp' in globals() and dp:
+            logger.info("Останавливаем диспетчер бота...")
+            if hasattr(dp, '_polling'):
+                dp._polling = False
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                try:
+                    # Уменьшаем таймаут с 5 до 2 сек
+                    stop_task = asyncio.run_coroutine_threadsafe(dp.stop_polling(), loop)
+                    stop_task.result(timeout=2.0)
+                    logger.info("Опрос Telegram API остановлен")
+                except (asyncio.TimeoutError, concurrent.futures.TimeoutError):
+                    logger.warning("Timeout waiting for polling to stop")
+                except Exception as e:
+                    logger.error(f"Ошибка при остановке опроса: {e}")
+
+        # 5. Close HTTP session for async OCR if exists
+        try:
+            from app.utils.async_ocr import close_http_session
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                close_task = asyncio.run_coroutine_threadsafe(close_http_session(), loop)
+                try:
+                    close_task.result(timeout=1.0)
+                    logger.info("HTTP сессия для OCR закрыта")
+                except Exception:
+                    logger.warning("Не удалось закрыть HTTP сессию OCR")
+        except ImportError:
+            pass  # Модуль может быть не установлен
+
+        # 6. Close event loop properly
+        logger.info("Останавливаем event loop...")
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Collect and close all pending tasks
+                pending = asyncio.all_tasks(loop)
+                if pending:
+                    logger.info(f"Отменяем {len(pending)} незавершенных задач...")
+                    for task in pending:
+                        if not task.done():
+                            task.cancel()
+                    
+                    # Уменьшаем таймаут с 2 до 1 сек
+                    try:
+                        gather_task = asyncio.run_coroutine_threadsafe(
+                            asyncio.gather(*pending, return_exceptions=True), 
+                            loop
+                        )
+                        gather_task.result(timeout=1.0)
+                    except (asyncio.TimeoutError, concurrent.futures.TimeoutError):
+                        logger.warning("Timeout waiting for tasks to cancel")
+                    except Exception as e:
+                        logger.error(f"Ошибка при отмене задач: {e}")
+                        
+                # Now stop the loop
+                loop.stop()
+                logger.info("Event loop остановлен")
+        except Exception as loop_err:
+            logger.error(f"Ошибка при остановке event loop: {loop_err}")
+        
+        # Если loop всё ещё активен, то принудительно останавливаем его
+        if loop and loop.is_running():
+            logger.warning("Event loop всё ещё активен, принудительно останавливаем...")
+            loop.close()
+            logger.info("Event loop принудительно остановлен")
+    except Exception as e:
+        logger.error(f"Ошибка при завершении: {e}")
+    finally:
+        # Восстанавливаем предыдущий обработчик сигнала и таймер
+        signal.signal(signal.SIGALRM, old_alarm_handler)
+        signal.alarm(old_alarm_time)  
+        
+        logger.info("Graceful shutdown завершен")
+        # Гарантированное завершение процесса
+        os._exit(0)
     
     # Установка обработчика сигнала и таймера
     old_alarm_handler = signal.signal(signal.SIGALRM, alarm_handler)
@@ -730,6 +1080,10 @@ if __name__ == "__main__":
         error_monitor = start_error_monitor("logs/bot.log")
         logger.info("AI Action монитор ошибок запущен")
         
+        # Сбрасываем все блокировки пользователей при запуске
+        clear_all_locks()
+        logger.info("Все блокировки пользователей сброшены при запуске")
+        
         # Тестовый режим - просто проверяем зависимости и выходим
         if args.test_mode:
             logger.info("Запущен в тестовом режиме. Проверка зависимостей:")
@@ -741,24 +1095,38 @@ if __name__ == "__main__":
                 logger.error(f"❌ Error importing numpy: {e}")
                 return 1
             
-            try:
-                import cv2
-                logger.info("✅ OpenCV imported successfully")
-            except ImportError as e:
-                logger.error(f"❌ Error importing OpenCV: {e}")
-                return 1
-            
+            # Другие проверки оптимизированы - используем try...except вместо if
             try:
                 from PIL import Image
                 logger.info("✅ Pillow imported successfully")
             except ImportError as e:
                 logger.error(f"❌ Error importing Pillow: {e}")
-                return 1
-            
+                
+            try:
+                from app.utils.async_ocr import async_ocr
+                logger.info("✅ Async OCR module loaded successfully")
+            except ImportError as e:
+                logger.error(f"❌ Error importing async_ocr: {e}")
+                
             logger.info("✅ All dependencies check passed!")
             return 0
         
         # Стандартный запуск бота
+        # Предварительно загружаем данные в кеш асинхронно
+        async def preload_data():
+            try:
+                from app import data_loader
+                logger.info("Предварительная загрузка данных...")
+                products = cached_load_products("data/base_products.csv", data_loader.load_products)
+                logger.info(f"Предварительно загружено {len(products)} продуктов")
+                return True
+            except Exception as e:
+                logger.warning(f"Ошибка при предварительной загрузке данных: {e}")
+                return False
+                
+        # Запускаем предварительную загрузку в фоне
+        preload_task = asyncio.create_task(preload_data())
+        
         # Создаем бота и диспетчер
         bot, dp = create_bot_and_dispatcher()
         
@@ -786,6 +1154,7 @@ if __name__ == "__main__":
         polling_task = asyncio.create_task(dp.start_polling(bot, drop_pending_updates=True))
         
         # Инициализируем пул потоков OpenAI Assistant API в фоновом режиме
+        @async_timed(operation_name="openai_pool_init")
         async def init_openai_pool():
             try:
                 from app.assistants.client import client, initialize_pool
@@ -799,20 +1168,6 @@ if __name__ == "__main__":
         pool_task = asyncio.create_task(init_openai_pool())
         
         # Выводим информацию о включенных оптимизациях
-        logger.info("Performance optimizations enabled:")
-        logger.info("✅ Non-blocking bot startup (immediate response)")
-        logger.info("✅ Background OpenAI Thread pool initialization")
-        logger.info("✅ Asynchronous OCR processing")
-        logger.info("✅ Incremental UI updates for better UX")
-        logger.info("✅ Parallel API processing")
-        logger.info("✅ Fixed i18n formatting issues")
-        logger.info("✅ Improved logging with duplication prevention")
-        logger.info("✅ Conflict resolution for Telegram API sessions")
-        
-        # Запускаем задачу периодической очистки временных файлов
-        asyncio.create_task(periodic_cleanup())
-        
-        # Логируем успешный запуск
         logger.info("Bot is now running and ready to process messages!")
         
         try:
