@@ -31,8 +31,24 @@ logger = logging.getLogger(__name__)
 # Создаем роутер для регистрации обработчика
 router = Router()
 
+# Основной обработчик фотографий с отладочной информацией
 @router.message(F.photo)
 async def photo_handler_incremental(message: Message, state: FSMContext):
+    """Обработчик фотографий с подробным логированием для предотвращения зависаний"""
+    
+    # Уникальный ID запроса для трассировки в логах
+    req_id = uuid.uuid4().hex[:8]
+    logger.info(f"[{req_id}] Получена фотография от пользователя {message.from_user.id}")
+    
+    # Убедимся, что у сообщения есть фотографии
+    if not message.photo or len(message.photo) == 0:
+        logger.warning(f"[{req_id}] Сообщение не содержит фотографий")
+        await message.answer("Ошибка: фотография не найдена. Попробуйте отправить еще раз.")
+        return
+    
+    # Берем фото с наивысшим качеством (последнее в массиве)
+    photo_id = message.photo[-1].file_id
+    logger.debug(f"[{req_id}] ID фотографии: {photo_id}")
     """
     Processes uploaded invoice photos with progressive UI updates.
     
@@ -47,24 +63,21 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         state: User's FSM context
     """
     # Get user language preference
-    data = await state.get_data()
-    lang = data.get("lang", "en")
+    try:
+        data = await state.get_data()
+        lang = data.get("lang", "en")
+    except Exception as e:
+        logger.error(f"[{req_id}] Ошибка при получении данных состояния: {e}")
+        lang = "en"  # Default language
     
     # Debug data
     user_id = message.from_user.id
-    photo_id = message.photo[-1].file_id if message.photo else None
-    req_id = uuid.uuid4().hex[:8]  # Unique request ID for logging
     
-    # Check if already processing a photo
-    if data.get("processing_photo"):
-        logger.warning(f"Already processing a photo for user {user_id}, ignoring new photo")
-        await message.answer(
-            t("status.wait_for_processing", lang=lang) or "Please wait while I finish processing your current photo.",
-            parse_mode=None
-        )
-        return
+    # Всегда сбрасываем флаг обработки при получении нового фото
+    # Это устраняет возможность застрять в состоянии processing_photo=True
+    await state.update_data(processing_photo=False)
     
-    # Set processing flag
+    # Устанавливаем флаг обработки для текущего фото
     await state.update_data(processing_photo=True)
     
     logger.info(f"[{req_id}] Received new photo from user {user_id}")
@@ -75,8 +88,8 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
     
     try:
         # Step 1: Download photo
-        # Get file information
-        file = await message.bot.get_file(message.photo[-1].file_id)
+        # Get file information using provided photo_id
+        file = await message.bot.get_file(photo_id)
         
         # Animate loading process
         await ui.start_spinner()
@@ -91,11 +104,37 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         logger.info(f"[{req_id}] Downloaded photo, size {len(img_bytes)} bytes")
         
         # Step 2: OCR image
-        await ui.append(t("status.recognizing_text", lang=lang) or "🔍 Recognizing text (OCR)...")
+        await ui.append(t("status.recognizing_text", lang=lang) or "🔍 Recognizing...")
         await ui.start_spinner()
         
-        # Run OCR without await since it's not an async function
-        ocr_result = ocr.call_openai_ocr(img_bytes)
+        # Запускаем OCR асинхронно в отдельном потоке с таймаутом
+        try:
+            # Явно указываем таймаут в 25 секунд для OCR
+            logger.info(f"[{req_id}] Starting OCR processing with timeout 25s")
+            
+            # Обновляем UI, чтобы пользователь видел, что обработка идет
+            await ui.update("🔍 Распознавание текста (может занять до 30 секунд)...")
+            
+            # Используем to_thread для выполнения OCR без блокировки основного потока
+            ocr_result = await asyncio.to_thread(ocr.call_openai_ocr, img_bytes, timeout=25)
+            
+            logger.info(f"[{req_id}] OCR completed successfully")
+        except asyncio.TimeoutError as e:
+            logger.error(f"[{req_id}] OCR processing timed out: {e}")
+            # В случае таймаута очищаем флаг обработки
+            await state.update_data(processing_photo=False)
+            # Сообщаем пользователю о таймауте
+            await ui.update("⏱️ Время обработки фото превышено. Пожалуйста, попробуйте снова с другим фото.")
+            # Прекращаем обработку
+            return
+        except Exception as e:
+            logger.error(f"[{req_id}] Error in OCR processing: {e}")
+            # В случае ошибки очищаем флаг обработки
+            await state.update_data(processing_photo=False)
+            # Сообщаем об ошибке
+            await ui.update("❌ Ошибка при распознавании текста. Попробуйте другое фото или сделайте снимок более четким.")
+            # Прекращаем обработку
+            return
         
         ui.stop_spinner()
         positions_count = len(ocr_result.positions) if ocr_result.positions else 0
@@ -111,9 +150,14 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         from app.utils.cached_loader import cached_load_products
         products = cached_load_products("data/base_products.csv", data_loader.load_products)
         
-        # Match positions
-        match_results = matcher.match_positions(ocr_result.positions, products)
-        
+        # Match positions - тоже запускаем в to_thread для предотвращения блокировки
+        try:
+            match_results = await asyncio.to_thread(matcher.match_positions, ocr_result.positions, products)
+        except Exception as e:
+            logger.error(f"[{req_id}] Error in matching: {e}")
+            await ui.update("❌ Error matching products. Please try again.")
+            return
+            
         # Calculate matching statistics
         ok_count = sum(1 for item in match_results if item.get("status") == "ok")
         unknown_count = sum(1 for item in match_results if item.get("status") == "unknown")
@@ -179,9 +223,10 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
             # Try to send without HTML formatting as fallback
             try:
                 clean_report = clean_html(report_text)
-                result = await message.answer(clean_report, reply_markup=inline_kb)
+                result = await message.answer(clean_report[:4000], reply_markup=inline_kb)
                 new_key = (user_id, result.message_id)
-                user_matches[new_key] = user_matches.pop((user_id, 0))
+                if (user_id, 0) in user_matches:
+                    user_matches[new_key] = user_matches.pop((user_id, 0))
                 await state.update_data(invoice_msg_id=result.message_id)
                 logger.info(f"[{req_id}] Report sent with fallback formatting")
             except Exception as final_err:
@@ -202,6 +247,13 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         await state.set_state(NotaStates.main_menu)
     finally:
         # Clear processing flag
-        await state.update_data(processing_photo=False)
+        try:
+            await state.update_data(processing_photo=False)
+        except Exception as e:
+            logger.error(f"Failed to reset processing flag: {e}")
+            
         # Останавливаем спиннер, если он все еще активен
-        ui.stop_spinner()
+        try:
+            ui.stop_spinner()
+        except:
+            pass

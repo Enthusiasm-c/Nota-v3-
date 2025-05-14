@@ -102,7 +102,11 @@ def calculate_string_similarity(s1: str, s2: str) -> float:
     if cached is not None:
         return cached
     
-    if not s1 or not s2:
+    # Если обе строки пустые или равны друг другу, это считается полным совпадением
+    if (not s1 and not s2) or s1 == s2:
+        return 1.0
+    # Если только одна строка пустая, совпадения нет
+    elif not s1 or not s2:
         return 0.0
     
     # Нормализация

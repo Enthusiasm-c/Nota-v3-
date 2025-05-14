@@ -300,4 +300,8 @@ def clear_all_locks():
     _sending_to_syrve_users.clear()
     _user_request_timestamps.clear()
     
-    logger.info("All user locks and flags cleared")
+    # Более подробное логирование для отладки
+    logger.info(f"All user locks and flags cleared: active_users={len(_active_users)}, photo_users={len(_processing_photo_users)}, syrve_users={len(_sending_to_syrve_users)}, request_timestamps={len(_user_request_timestamps)}")
+    print(f"[GUARD] Cleared all locks: active_users={len(_active_users)}, photo_users={len(_processing_photo_users)}, syrve_users={len(_sending_to_syrve_users)}")
+    
+    return True

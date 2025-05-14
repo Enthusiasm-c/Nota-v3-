@@ -181,117 +181,115 @@ def register_handlers(dp, bot=None):
             dp._registered_routers.add('syrve_router')
             logger.info("Зарегистрирован обработчик Syrve")
             
-        # Регистрируем встроенный обработчик для кнопки cancel (исправленная версия)
+        # Регистрируем встроенный обработчик для кнопки cancel (еще более надежная версия)
         @dp.callback_query(F.data == "cancel:all")
         async def handle_cancel_all(call, state: FSMContext):
-            """Обработчик кнопки Cancel с улучшенной обработкой ошибок"""
-            # Уникальный ID операции для отслеживания в логах
-            op_id = f"cancel_{call.message.message_id}"
-            logger.info(f"[{op_id}] Processing cancel:all callback")
+            """Обработчик кнопки Cancel с максимальным уровнем надежности и изоляцией операций"""
+            # Используем более уникальный ID для трассировки в логах
+            op_id = f"cancel_{call.message.message_id}_{int(time.time() * 1000)}"
             
-            # 1. Immediately answer the callback to prevent timeout
+            # Критично важно: быстро ответить на callback, чтобы Telegram не ждал
+            # Это САМЫЙ важный шаг для предотвращения зависания интерфейса
             try:
-                await call.answer()
-                logger.info(f"[{op_id}] Callback answered successfully")
+                # Первым делом отвечаем на callback - это предотвращает зависание интерфейса
+                # Устанавливаем минимальный cache_time
+                await call.answer("Отмена", cache_time=1)
+                print(f"[{op_id}] CRITICAL: Successfully answered callback")
+                logger.info(f"[{op_id}] CRITICAL: Successfully answered callback")
             except Exception as e:
-                logger.error(f"[{op_id}] Error answering callback: {e}")
-            
-            # 2. Clear the state first - most important action
-            try:
-                await state.clear()
-                logger.info(f"[{op_id}] State cleared successfully")
+                # Если даже это не получилось - серьезная проблема, но продолжаем
+                print(f"[{op_id}] CRITICAL ERROR: Failed to answer callback: {str(e)}")
+                logger.error(f"[{op_id}] CRITICAL ERROR: Failed to answer callback: {str(e)}")
                 
-                # Set new state with small delay to ensure proper sequencing
-                await asyncio.sleep(0.1)
-                await state.set_state(NotaStates.main_menu)
-                logger.info(f"[{op_id}] New state set: NotaStates.main_menu")
-            except Exception as e:
-                logger.error(f"[{op_id}] Error clearing state: {e}", exc_info=True)
-            
-            # 3. Try to remove the keyboard
-            try:
-                await call.message.edit_reply_markup(reply_markup=None)
-                logger.info(f"[{op_id}] Keyboard removed successfully")
-            except Exception as e:
-                logger.warning(f"[{op_id}] Could not remove keyboard: {e}")
-            
-            # 4. Send a simple confirmation message without keyboard
-            try:
-                await call.message.answer(
-                    "✅ Operation cancelled. Please send a new photo.",
-                    parse_mode=None  # Explicit no parsing to prevent errors
-                )
-                logger.info(f"[{op_id}] Cancellation message sent")
-            except Exception as e:
-                logger.error(f"[{op_id}] Error sending confirmation message: {e}")
-                # Try a simpler message as fallback
+            # Создаем отдельную задачу для выполнения всех остальных операций
+            # Это гарантирует, что даже если что-то зависнет, callback уже будет обработан
+            async def perform_cancellation():
                 try:
-                    await call.message.answer("Operation cancelled.")
-                except Exception:
-                    # Last resort - just log the error
-                    logger.error(f"[{op_id}] Failed to send any confirmation message")
-
+                    logger.info(f"[{op_id}] START: начато выполнение операций отмены")
+                    
+                    # Шаг 1: Очищаем все блокировки пользователя
+                    user_id = call.from_user.id
+                    try:
+                        # Импортируем напрямую для надежности
+                        from app.utils.processing_guard import clear_all_locks, set_processing_photo, set_sending_to_syrve
+                        
+                        # Сбрасываем все возможные флаги
+                        await set_processing_photo(user_id, False)
+                        await set_sending_to_syrve(user_id, False)
+                        # Для надежности вызываем также общий сброс
+                        clear_all_locks()
+                        
+                        logger.info(f"[{op_id}] STEP1: все флаги блокировок пользователя сброшены")
+                    except Exception as e:
+                        logger.error(f"[{op_id}] STEP1 ERROR: {str(e)}")
+                    
+                    # Шаг 2: Сбрасываем состояние
+                    try:
+                        # Напрямую очищаем, чтобы гарантировать сброс
+                        await state.clear()
+                        logger.info(f"[{op_id}] STEP2: состояние полностью очищено")
+                        
+                        # Устанавливаем новое базовое состояние с коротким таймаутом
+                        await asyncio.wait_for(
+                            state.set_state(NotaStates.main_menu),
+                            timeout=1.0
+                        )
+                        logger.info(f"[{op_id}] STEP2: установлено новое состояние: NotaStates.main_menu")
+                    except Exception as e:
+                        logger.error(f"[{op_id}] STEP2 ERROR: ошибка при работе с состоянием: {str(e)}")
+                    
+                    # Шаг 3: Удаляем клавиатуру (некритично)
+                    try:
+                        # Устанавливаем таймаут для этой операции
+                        await asyncio.wait_for(
+                            call.message.edit_reply_markup(reply_markup=None),
+                            timeout=1.0
+                        )
+                        logger.info(f"[{op_id}] STEP3: клавиатура удалена")
+                    except Exception as e:
+                        logger.warning(f"[{op_id}] STEP3 WARNING: не удалось удалить клавиатуру: {str(e)}")
+                    
+                    # Шаг 4: Отправляем подтверждение
+                    try:
+                        # Самое простое сообщение без форматирования для максимальной надежности
+                        result = await asyncio.wait_for(
+                            bot.send_message(
+                                chat_id=call.message.chat.id,
+                                text="✅ Операция отменена.",
+                                parse_mode=None  # Явно отключаем парсинг разметки
+                            ),
+                            timeout=1.0
+                        )
+                        logger.info(f"[{op_id}] STEP4: сообщение отправлено, message_id={result.message_id}")
+                    except Exception as e:
+                        logger.error(f"[{op_id}] STEP4 ERROR: не удалось отправить сообщение: {str(e)}")
+                        
+                    logger.info(f"[{op_id}] COMPLETE: операции отмены выполнены")
+                except Exception as e:
+                    logger.error(f"[{op_id}] GENERAL ERROR: необработанное исключение в задаче отмены: {str(e)}")
             
-            # 1. Первым делом - отвечаем на callback кратко
-            try:
-                await call.answer("Отмена")
-                logger.info(f"[{op_id}] Успешный вызов call.answer()")
-            except Exception as e:
-                logger.error(f"[{op_id}] Ошибка при вызове call.answer(): {e}")
+            # Создаем задачу и сохраняем ссылку на нее в глобальной переменной,
+            # чтобы предотвратить ее сборку сборщиком мусора
+            global _cancel_tasks
+            if not '_cancel_tasks' in globals():
+                _cancel_tasks = []
                 
-            # 2. Сохраняем текущие данные пользователя для отладки
-            try:
-                current_data = await state.get_data()
-                current_state = await state.get_state()
-                logger.info(f"[{op_id}] Текущее состояние пользователя: {current_state}")
-            except Exception as e:
-                logger.error(f"[{op_id}] Ошибка при получении состояния: {e}")
-                current_state = "unknown"
+            # Запускаем задачу и сохраняем ссылку на нее
+            cancel_task = asyncio.create_task(perform_cancellation())
+            _cancel_tasks.append(cancel_task)
             
-            # 3. Сбрасываем состояние - самое важное действие
-            try:
-                # Полностью очищаем состояние
-                await state.clear()
-                logger.info(f"[{op_id}] Состояние успешно очищено")
-                
-                # Устанавливаем новое базовое состояние
-                await state.set_state(NotaStates.main_menu)
-                logger.info(f"[{op_id}] Установлено новое состояние: NotaStates.main_menu")
-            except Exception as e:
-                logger.error(f"[{op_id}] Критическая ошибка при сбросе состояния: {e}")
-                # Даже при ошибке пытаемся продолжить
-            
-            # 4. Отправляем простое сообщение
-            try:
-                # Отправляем сообщение без клавиатуры с небольшой задержкой
-                await asyncio.sleep(0.2)  # Небольшая задержка для стабильности
-                result = await call.message.answer(
-                    "✅ Обработка отменена. Пожалуйста, отправьте новое фото.",
-                    parse_mode=None  # Явно указываем отсутствие форматирования
-                )
-                logger.info(f"[{op_id}] Сообщение об отмене успешно отправлено, message_id={result.message_id}")
-            except Exception as e:
-                logger.error(f"[{op_id}] Ошибка при отправке сообщения: {e}")
-                # Пытаемся отправить сообщение альтернативным способом при ошибке
+            # Регистрируем обработчик для удаления завершенных задач
+            @cancel_task.add_done_callback
+            def cleanup_task(task):
                 try:
-                    await bot.send_message(
-                        chat_id=call.message.chat.id,
-                        text="Операция отменена. Отправьте новое фото.",
-                        parse_mode=None
-                    )
-                    logger.info(f"[{op_id}] Резервное сообщение отправлено")
-                except Exception as e2:
-                    logger.error(f"[{op_id}] Критическая ошибка при отправке резервного сообщения: {e2}")
+                    if task in _cancel_tasks:
+                        _cancel_tasks.remove(task)
+                        logger.debug(f"[{op_id}] Задача отмены удалена из списка, осталось {len(_cancel_tasks)}")
+                except Exception as e:
+                    logger.error(f"[{op_id}] Ошибка при очистке задачи: {str(e)}")
             
-            # 5. Удаляем клавиатуру у предыдущего сообщения (не критично)
-            try:
-                await call.message.edit_reply_markup(reply_markup=None)
-                logger.info(f"[{op_id}] Клавиатура успешно удалена")
-            except Exception as e:
-                logger.warning(f"[{op_id}] Не удалось удалить клавиатуру: {e}")
-                # Это некритично - продолжаем
-                
-            logger.info(f"[{op_id}] Обработка 'cancel:all' завершена успешно")
+            # Возвращаем успешный результат для предотвращения дальнейшей обработки
+            return True
         
             
             
@@ -347,6 +345,10 @@ def register_handlers(dp, bot=None):
 # Глобальные bot и dp убраны для тестируемости.
 bot = None
 dp = None
+# Хранилище глобальных задач для предотвращения сборки мусора
+_preload_task = None
+_pool_task = None
+_polling_task = None
 # Глобальный кэш для отредактированных сообщений
 _edit_cache: Dict[str, Dict[str, Any]] = {}
 # assistant_thread_id убран из глобальных переменных и перенесен в FSMContext
@@ -941,125 +943,6 @@ def _graceful_shutdown(signum, frame):
         logger.info("Graceful shutdown завершен")
         # Гарантированное завершение процесса
         os._exit(0)
-    
-    # Установка обработчика сигнала и таймера
-    old_alarm_handler = signal.signal(signal.SIGALRM, alarm_handler)
-    old_alarm_time = signal.alarm(25)  # 25 секунд на все операции
-    
-    try:
-        # 1. Stop background threads first
-        logger.info("Останавливаем фоновые потоки...")
-        try:
-            # Stop the Redis cache cleanup thread
-            from app.utils.redis_cache import _local_cache
-            if hasattr(_local_cache, 'stop_cleanup'):
-                _local_cache.stop_cleanup()
-                logger.info("Поток очистки кэша остановлен")
-        except Exception as thread_err:
-            logger.error(f"Ошибка при остановке фоновых потоков: {thread_err}")
-
-        # 2. Close Redis connection if it exists
-        try:
-            from app.utils.redis_cache import get_redis
-            redis_conn = get_redis()
-            if redis_conn:
-                logger.info("Закрываем соединение с Redis...")
-                redis_conn.close()
-                logger.info("Соединение с Redis закрыто")
-        except Exception as redis_err:
-            logger.error(f"Ошибка при закрытии Redis: {redis_err}")
-
-        # 3. Cancel any pending OpenAI requests and shut down thread pool
-        logger.info("Отменяем запросы OpenAI API...")
-        try:
-            # Shutdown thread pool first to prevent new async tasks
-            from app.assistants.thread_pool import shutdown_thread_pool
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                shutdown_task = asyncio.run_coroutine_threadsafe(shutdown_thread_pool(), loop)
-                # Уменьшаем таймаут с 3 до 1.5 сек
-                try:
-                    shutdown_task.result(timeout=1.5)
-                except (asyncio.TimeoutError, concurrent.futures.TimeoutError):
-                    logger.warning("Timeout waiting for thread pool shutdown")
-                except Exception as pool_err:
-                    logger.error(f"Ошибка при остановке thread pool: {pool_err}")
-            
-            # Close the OpenAI client connection
-            try:
-                from app.config import get_chat_client
-                client = get_chat_client()
-                if client and hasattr(client, '_client') and hasattr(client._client, 'http_client'):
-                    client._client.http_client.close()  # Close the underlying HTTP client
-                    logger.info("HTTP клиент OpenAI закрыт")
-            except Exception as client_err:
-                logger.error(f"Ошибка при закрытии HTTP клиента: {client_err}")
-        except Exception as openai_err:
-            logger.error(f"Ошибка при остановке клиента OpenAI: {openai_err}")
-
-        # 4. Stop the bot polling and dispatcher - критически важный шаг
-        if 'dp' in globals() and dp:
-            logger.info("Останавливаем диспетчер бота...")
-            if hasattr(dp, '_polling'):
-                dp._polling = False
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                try:
-                    # Уменьшаем таймаут с 5 до 2 сек
-                    stop_task = asyncio.run_coroutine_threadsafe(dp.stop_polling(), loop)
-                    stop_task.result(timeout=2.0)
-                    logger.info("Опрос Telegram API остановлен")
-                except (asyncio.TimeoutError, concurrent.futures.TimeoutError):
-                    logger.warning("Timeout waiting for polling to stop")
-                except Exception as e:
-                    logger.error(f"Ошибка при остановке опроса: {e}")
-
-        # 5. Close event loop properly
-        logger.info("Останавливаем event loop...")
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # Collect and close all pending tasks
-                pending = asyncio.all_tasks(loop)
-                if pending:
-                    logger.info(f"Отменяем {len(pending)} незавершенных задач...")
-                    for task in pending:
-                        if not task.done():
-                            task.cancel()
-                    
-                    # Уменьшаем таймаут с 2 до 1 сек
-                    try:
-                        gather_task = asyncio.run_coroutine_threadsafe(
-                            asyncio.gather(*pending, return_exceptions=True), 
-                            loop
-                        )
-                        gather_task.result(timeout=1.0)
-                    except (asyncio.TimeoutError, concurrent.futures.TimeoutError):
-                        logger.warning("Timeout waiting for tasks to cancel")
-                    except Exception as e:
-                        logger.error(f"Ошибка при отмене задач: {e}")
-                        
-                # Now stop the loop
-                loop.stop()
-                logger.info("Event loop остановлен")
-        except Exception as loop_err:
-            logger.error(f"Ошибка при остановке event loop: {loop_err}")
-        
-        # Если loop всё ещё активен, то принудительно останавливаем его
-        if loop.is_running():
-            logger.warning("Event loop всё ещё активен, принудительно останавливаем...")
-            loop.close()
-            logger.info("Event loop принудительно остановлен")
-    except Exception as e:
-        logger.error(f"Ошибка при завершении: {e}")
-    finally:
-        # Восстанавливаем предыдущий обработчик сигнала и таймер
-        signal.signal(signal.SIGALRM, old_alarm_handler)
-        signal.alarm(old_alarm_time)  
-        
-        logger.info("Graceful shutdown завершен")
-        # Гарантированное завершение процесса
-        os._exit(0)
 
 if __name__ == "__main__":
     signal.signal(signal.SIGTERM, _graceful_shutdown)
@@ -1081,6 +964,7 @@ if __name__ == "__main__":
         logger.info("AI Action монитор ошибок запущен")
         
         # Сбрасываем все блокировки пользователей при запуске
+        from app.utils.processing_guard import clear_all_locks
         clear_all_locks()
         logger.info("Все блокировки пользователей сброшены при запуске")
         
@@ -1116,6 +1000,7 @@ if __name__ == "__main__":
         async def preload_data():
             try:
                 from app import data_loader
+                from app.utils.cached_loader import cached_load_products
                 logger.info("Предварительная загрузка данных...")
                 products = cached_load_products("data/base_products.csv", data_loader.load_products)
                 logger.info(f"Предварительно загружено {len(products)} продуктов")
@@ -1125,7 +1010,9 @@ if __name__ == "__main__":
                 return False
                 
         # Запускаем предварительную загрузку в фоне
-        preload_task = asyncio.create_task(preload_data())
+        # Сохраняем ссылку на задачу, чтобы она не была собрана сборщиком мусора
+        global _preload_task
+        _preload_task = asyncio.create_task(preload_data())
         
         # Создаем бота и диспетчер
         bot, dp = create_bot_and_dispatcher()
@@ -1151,9 +1038,11 @@ if __name__ == "__main__":
         
         # Запускаем бота сразу, не дожидаясь инициализации пула
         logger.info("Starting bot polling...")
-        polling_task = asyncio.create_task(dp.start_polling(bot, drop_pending_updates=True))
+        global _polling_task
+        _polling_task = asyncio.create_task(dp.start_polling(bot, drop_pending_updates=True))
         
         # Инициализируем пул потоков OpenAI Assistant API в фоновом режиме
+        from app.utils.timing_logger import async_timed
         @async_timed(operation_name="openai_pool_init")
         async def init_openai_pool():
             try:
@@ -1165,16 +1054,19 @@ if __name__ == "__main__":
                 logger.error(f"Error initializing OpenAI pool: {e}")
         
         # Запускаем инициализацию пула в фоновом режиме
-        pool_task = asyncio.create_task(init_openai_pool())
+        # Сохраняем ссылку на задачу, чтобы она не была собрана сборщиком мусора
+        global _pool_task
+        _pool_task = asyncio.create_task(init_openai_pool())
         
         # Выводим информацию о включенных оптимизациях
         logger.info("Bot is now running and ready to process messages!")
         
         try:
-            # Ожидаем завершения поллинга (не должно произойти до остановки бота)
-            await polling_task
+            # Запускаем поллинг напрямую, без создания отдельной задачи
+            logger.info("Запускаем поллинг напрямую...")
+            await dp.start_polling(bot, drop_pending_updates=True)
         except Exception as e:
-            logger.error(f"Error in polling task: {e}")
+            logger.error(f"Error in polling: {e}")
             # Критическая ошибка, завершаем все задачи
             _graceful_shutdown(None, None)
 
