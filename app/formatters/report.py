@@ -97,12 +97,12 @@ def build_table(rows):
     num_pos = 0
     name_pos = 2  # Смещено на 2 знака влево от исходного положения (было 4)
     qty_pos = name_pos + name_width  # Смещено на 2 знака влево от исходного положения (было -3, изменили на -2)
-    unit_pos = qty_pos + qty_width - 1   # Смещено на 4 знака влево от исходного положения
-    price_pos = unit_pos + unit_width - 1  # Смещено на 4 знака влево от исходного положения (было -5, изменили на -4)
+    unit_pos = qty_pos + qty_width    # Смещено на 3 знака влево от исходного положения (вместо -4 сдвигаем на -3)
+    price_pos = unit_pos + unit_width + 1  # Смещено на 2 знака влево от исходного положения (вместо -4 сдвигаем на -2)
     status_pos = price_pos + price_width + 1
 
     # Формируем заголовок с точным расположением названий столбцов
-    header = " " * num_pos + "#" + " " * (name_pos - num_pos - 1) + "NAME" + " " * (qty_pos - name_pos - 4) + "QTY" + " " * (unit_pos - qty_pos - 3) + "UNIT" + " " * (price_pos - unit_pos - 4) + "PRICE"
+    header = " " * num_pos + "#" + " " * (name_pos - num_pos - 1) + "NAME" + " " * (qty_pos - name_pos - 4) + "QTY" + " " * (unit_pos - qty_pos - 3) + "UNIT" + " " * (price_pos - unit_pos - 4 - 1) + "PRICE"
 
     table_rows = []
     for idx, row in enumerate(rows, 1):
