@@ -186,7 +186,7 @@ class OCRPipeline:
         
         try:
             response = client.chat.completions.create(
-                model="gpt-4o",
+                model=settings.OPENAI_MODEL,
                 messages=[
                     {"role": "system", "content": "Извлеки только текст, видимый на изображении."},
                     {
@@ -197,7 +197,7 @@ class OCRPipeline:
                         ]
                     }
                 ],
-                max_tokens=100,
+                max_tokens=1024,
                 temperature=0.0
             )
             
