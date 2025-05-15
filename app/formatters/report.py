@@ -68,7 +68,7 @@ def build_table(rows):
     header = f"#  {'NAME'.ljust(name_width)}{'QTY'.ljust(qty_width)}{'UNIT'.ljust(unit_width)}{'PRICE'.ljust(price_width)}! "
 
     table_rows = []
-    for row in rows:
+    for idx, row in enumerate(rows, 1):
         display_name = row.get("matched_name", row.get("name", ""))
         name = html_escape(str(display_name))
         # Обрезаем длинные имена с многоточием
@@ -84,7 +84,7 @@ def build_table(rows):
             unit = f"<b>{unit}</b>"
             price = f"<b>{price}</b>"
         table_row = (
-            f"{pad_with_html(name, name_width)}"
+            f"{idx} {pad_with_html(name, name_width)}"
             f"{pad_with_html(qty, qty_width)}"
             f"{pad_with_html(unit, unit_width)}"
             f"{pad_with_html(price, price_width)}"
