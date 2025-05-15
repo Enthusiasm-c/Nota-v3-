@@ -34,26 +34,26 @@ load_dotenv()
 
 # Тестовые данные накладной
 TEST_INVOICE_DATA = {
-    "supplier": "Redhot Trading",
-    "supplier_id": "598d46cf-e2fe-c9ea-0158-9c914bff9e27",  # ID реального поставщика из Syrve
+    "supplier": "Bali Buda",  # Имя поставщика из полученного списка
+    "supplier_id": "61c65f89-d940-4153-8c07-488188e16d50",  # ID поставщика из списка
     "date": datetime.now().strftime("%Y-%m-%d"),
     "number": f"TEST-{datetime.now().strftime('%Y%m%d')}-001",
     "positions": [
         {
-            "name": "Chicken Breast",  # Должно соответствовать товару в Syrve
+            "name": "Chicken Breast",  # Реальный товар из Syrve
             "qty": 2.5,
             "unit": "kg",
-            "price": 120000,
-            "amount": 300000,
-            "product_id": "ae9cd179-5037-8af0-0193-799561626edd"  # ID продукта из base_products.csv
+            "price": 120.0,  # Цена в рублях
+            "amount": 300.0,
+            "product_id": "61aa6384-2fe2-4d0c-aad8-73c5d5dc79c5"  # Корректный ID продукта из Syrve
         },
         {
-            "name": "Ribeye Steak",  # Должно соответствовать товару в Syrve
+            "name": "Tenderloin Beef",  # Реальный товар из Syrve
             "qty": 1.5,
             "unit": "kg",
-            "price": 250000,
-            "amount": 375000,
-            "product_id": "e4ce95c7-dd89-a700-0194-ef09ea1e3d8e"  # ID продукта из base_products.csv
+            "price": 250.0,  # Цена в рублях
+            "amount": 375.0,
+            "product_id": "6c576c27-928b-45c0-95c4-2df6a98ecae8"  # Корректный ID продукта из Syrve
         }
     ]
 }
@@ -62,28 +62,27 @@ TEST_INVOICE_DATA = {
 async def get_store_id(client, auth_token):
     """Получение ID склада из Syrve API"""
     try:
-        # Используем известный ID склада из продакшена
-        # Это необходимо, т.к. API не возвращает список складов
-        store_id = "5974f501-1e33-d3f9-0158-f142d6b788ff"  # ID склада Syrve
-        logger.info(f"Используем стандартный ID склада: {store_id}")
+        # Используем правильный ID склада
+        store_id = "1239d270-1bbe-f64f-b7ea-5f00518ef508"  # Корректный ID склада
+        logger.info(f"Используем корректный ID склада: {store_id}")
         return store_id
         
-        # Попытка получить склады через API (может не работать)
+        # Для справки сохраняем код попытки получить список складов через API
         # url = f"{client.api_url}/resto/api/corporation/stores"
+        # logger.info(f"Запрашиваем список складов: {url}")
         # async with httpx.AsyncClient(timeout=60.0, verify=False) as http_client:
         #     response = await http_client.get(url, params={"key": auth_token})
-        #     response.raise_for_status()
-        #     stores = response.json()
-        #     if stores and len(stores) > 0:
-        #         store_id = stores[0].get("id")
-        #         logger.info(f"Получен ID склада: {store_id}")
-        #         return store_id
-        #     else:
-        #         logger.warning("Список складов пуст")
-        #         return None
+        #     if response.status_code == 200:
+        #         stores = response.json()
+        #         if stores and len(stores) > 0:
+        #             store_id = stores[0].get("id")
+        #             logger.info(f"Получен ID склада: {store_id}")
+        #             logger.info(f"Все доступные склады: {json.dumps(stores, indent=2)}")
+        #             return store_id
     except Exception as e:
         logger.error(f"Ошибка при получении складов: {str(e)}")
-        return "5974f501-1e33-d3f9-0158-f142d6b788ff"  # Запасной ID склада
+        # Возвращаем корректный ID в случае ошибки
+        return "1239d270-1bbe-f64f-b7ea-5f00518ef508"
 
 
 async def get_conception_id(client, auth_token):
@@ -138,57 +137,6 @@ def generate_xml(invoice_data):
         xml += f'  <dateIncoming>{invoice_data["invoice_date"]}T08:00:00</dateIncoming>\n'
     xml += '</document>'
     return xml
-
-    """Генерация минимального XML для Syrve"""
-    # Точно воспроизводим минимальный пример из документации
-    root = Element('document')
-    
-    # Только три обязательных элемента:
-    # 1. Позиции
-    items = SubElement(root, 'items')
-    
-    # Добавляем только одну позицию для простоты
-    item = SubElement(items, 'item')
-    
-    # Номер позиции (обязательное поле)
-    num = SubElement(item, 'num')
-    num.text = "1"
-    
-    # Товар (обязательное поле)
-    product = SubElement(item, 'product')
-    product.text = invoice_data.get("items", [])[0].get("product_id", "")
-    
-    # Количество - точно в таком формате, как в примере
-    amount = SubElement(item, 'amount')
-    amount.text = "1"
-    
-    # Цена
-    price = SubElement(item, 'price')
-    price.text = "100"
-    
-    # Сумма (обязательное поле)
-    item_sum = SubElement(item, 'sum')
-    item_sum.text = "100"
-    
-    # Склад
-    store = SubElement(item, 'store')
-    store.text = invoice_data.get("store_id", "")
-    
-    # 2. Поставщик (обязательное поле)
-    supplier = SubElement(root, 'supplier')
-    supplier.text = invoice_data.get("supplier_id", "")
-    
-    # 3. Склад по умолчанию (обязательное поле)
-    default_store = SubElement(root, 'defaultStore')
-    default_store.text = invoice_data.get("store_id", "")
-    
-    # Преобразуем XML в строку
-    rough_string = tostring(root, 'utf-8')
-    reparsed = parseString(rough_string)
-    xml_declaration = '<?xml version="1.0" encoding="UTF-8"?>'
-    xml_content = reparsed.documentElement.toxml()
-    
-    return f"{xml_declaration}\n{xml_content}"
 
 
 def prepare_invoice_data(invoice, store_id, conception_id):
@@ -264,11 +212,16 @@ def prepare_invoice_data(invoice, store_id, conception_id):
 async def main():
     """Основная функция для тестирования отправки накладной в Syrve"""
     
-    # Создаем клиента Syrve с пользователем, имеющим максимальные права
-    api_url = os.getenv("SYRVE_SERVER_URL", "https://eggstra-cafe.syrve.online:443")
-    login = os.getenv("SYRVE_LOGIN", "Spotandchoosbali")
-    password = os.getenv("SYRVE_PASSWORD", "Redriver1993")
+    # Создаем клиента Syrve с данными из переменных окружения
+    api_url = os.getenv("SYRVE_SERVER_URL")
+    login = os.getenv("SYRVE_LOGIN")
+    password = os.getenv("SYRVE_PASSWORD")
     
+    if not api_url or not login or not password:
+        logger.error("Не заданы обязательные переменные окружения SYRVE_SERVER_URL, SYRVE_LOGIN или SYRVE_PASSWORD")
+        return
+    
+    logger.info(f"Подключение к Syrve API: {api_url}, пользователь: {login}")
     syrve_client = SyrveClient(api_url, login, password)
     
     try:
