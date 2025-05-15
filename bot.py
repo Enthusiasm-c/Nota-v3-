@@ -160,20 +160,25 @@ def register_handlers(dp, bot=None):
         if not hasattr(dp, '_registered_routers'):
             dp._registered_routers = set()
             
-        # ВАЖНО: Регистрируем роутер обработки фотографий ПЕРВЫМ
-        # чтобы он имел приоритет над другими обработчиками
-        if 'photo_router' not in dp._registered_routers:
-
-            # Регистрируем оптимизированный обработчик фотографий
-            from app.handlers.optimized_photo_handler import router as optimized_photo_router
-            dp.include_router(optimized_photo_router)
-            logger.info("Зарегистрирован оптимизированный обработчик фотографий")
-            
-            # Регистрируем роутер редактирования
+        # ВАЖНО: Сначала регистрируем роутер редактирования,
+        # чтобы он имел приоритет над обработчиком фотографий
         if 'edit_flow_router' not in dp._registered_routers:
             dp.include_router(edit_flow_router)
             dp._registered_routers.add('edit_flow_router')
             logger.info("Зарегистрирован обработчик редактирования")
+            
+        # Затем регистрируем роутер обработки фотографий
+        if 'photo_router' not in dp._registered_routers:
+            # Регистрируем оптимизированный обработчик фотографий
+            from app.handlers.optimized_photo_handler import router as optimized_photo_router
+            dp.include_router(optimized_photo_router)
+            dp._registered_routers.add('photo_router')  # Добавляем флаг для предотвращения повторной регистрации
+            logger.info("Зарегистрирован оптимизированный обработчик фотографий")
+            
+            # Явная регистрация обработчика фото для диагностики проблемы
+            from app.handlers.optimized_photo_handler import optimized_photo_handler
+            logger.info("Добавляем прямую регистрацию фото-обработчика")
+            dp.message.register(optimized_photo_handler, F.photo)
             
         # Регистрируем роутер Syrve для обработки отправки накладных
         if 'syrve_router' not in dp._registered_routers:
@@ -766,8 +771,17 @@ async def reject_fuzzy_name(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-async def text_fallback(message):
+async def text_fallback(message, state: FSMContext):
     """Обработчик для любых текстовых сообщений, когда не требуется текст."""
+    # Получаем текущее состояние чтобы не отвечать в режиме редактирования
+    current_state = await state.get_state()
+    
+    # Не отвечаем, если пользователь находится в режиме редактирования
+    edit_states = ["EditFree:awaiting_input", "NotaStates:editing", "EditFree:awaiting_free_edit"]
+    if current_state in edit_states:
+        logger.info(f"Игнорируем fallback для текстового сообщения в режиме редактирования ({current_state})")
+        return
+    
     # Более подробное сообщение с инструкцией
     await message.answer(
         "📸 Пожалуйста, отправьте фотографию инвойса (только изображение).\n\n"
@@ -775,7 +789,7 @@ async def text_fallback(message):
         parse_mode=None
     )
     # Логируем для отладки
-    logger.info(f"Получено текстовое сообщение от {message.from_user.id}: {message.text[:30]}...")
+    logger.info(f"Получено текстовое сообщение от {message.from_user.id} в состоянии {current_state}: {message.text[:30]}...")
 
 
 # Silence unhandled update logs

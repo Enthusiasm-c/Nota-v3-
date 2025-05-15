@@ -36,8 +36,13 @@ logger = logging.getLogger(__name__)
 # Создаем роутер для регистрации обработчика
 router = Router()
 
-@router.message(F.photo)
-@require_user_free(context_name="photo_processing", max_age=300)  # 5 минут максимальное время блокировки
+# Импортируем нужные состояния
+from app.fsm.states import EditFree, NotaStates
+
+@router.message(
+    F.photo,
+    require_user_free(context_name="photo_processing", max_age=300)  # 5 минут максимальное время блокировки
+)
 @async_timed(operation_name="photo_processing")
 async def optimized_photo_handler(message: Message, state: FSMContext):
     """
@@ -57,6 +62,17 @@ async def optimized_photo_handler(message: Message, state: FSMContext):
     # Уникальный ID запроса для трассировки в логах
     req_id = f"photo_{uuid.uuid4().hex[:8]}"
     user_id = message.from_user.id
+    
+    # Получаем текущее состояние
+    current_state = await state.get_state()
+    
+    # Если пользователь в режиме редактирования, не обрабатываем фотографию
+    # Отключаем эту проверку временно для диагностики проблемы с фото. Позже можно вернуть эту логику.
+    # Note: Commenting out this condition as it might be preventing photo processing
+    # if current_state == "EditFree:awaiting_input":
+    #     logger.info(f"[{req_id}] Пользователь {user_id} отправил фото в режиме редактирования, игнорируем")
+    #     return
+    logger.info(f"[{req_id}] Пользователь {user_id} отправил фото в состоянии {current_state}, продолжаем обработку")
     
     # Проверяем, не обрабатывает ли пользователь уже фотографию
     if await is_processing_photo(user_id):
@@ -112,7 +128,14 @@ async def optimized_photo_handler(message: Message, state: FSMContext):
                 # Запускаем асинхронный OCR с таймаутом
                 await ui.update("🔍 Распознавание текста (может занять до 30 секунд)...")
                 ocr_result = await async_ocr(img_bytes, req_id=req_id, use_cache=True, timeout=30)
-                timer.add_metadata("positions_count", len(ocr_result.positions) if ocr_result.positions else 0)
+                
+                # Handle both dict and ParsedData object types
+                if isinstance(ocr_result, dict) and "positions" in ocr_result:
+                    positions_count = len(ocr_result["positions"])
+                else:
+                    positions_count = len(ocr_result.positions) if hasattr(ocr_result, "positions") and ocr_result.positions else 0
+                
+                timer.add_metadata("positions_count", positions_count)
             except asyncio.TimeoutError:
                 logger.error(f"[{req_id}] OCR processing timed out")
                 await ui.error("⏱️ Время обработки фото превышено. Пожалуйста, попробуйте снова с другим фото.")
@@ -123,7 +146,7 @@ async def optimized_photo_handler(message: Message, state: FSMContext):
                 return
             
             # Успешное завершение OCR
-            positions_count = len(ocr_result.positions) if ocr_result.positions else 0
+            # Variable positions_count is already defined above
             timer.checkpoint("ocr_complete")
             
             ui.stop_spinner()
@@ -143,19 +166,87 @@ async def optimized_photo_handler(message: Message, state: FSMContext):
             
             # Асинхронное сопоставление позиций
             try:
-                match_results = await async_match_positions(
-                    ocr_result.positions, 
-                    products
-                )
+                # Добавляем детальное логирование
+                logger.info(f"[{req_id}] OCR result type: {type(ocr_result)}")
+                
+                # Обеспечиваем правильный доступ к позициям независимо от типа ocr_result
+                positions = []  # Default safe value
+                
+                try:
+                    # Try object-style access first (for Pydantic models)
+                    if hasattr(ocr_result, 'positions'):
+                        positions = ocr_result.positions
+                        logger.info(f"[{req_id}] Positions accessed via attribute, type: {type(positions)}")
+                    # Try dict-style access
+                    elif isinstance(ocr_result, dict) and 'positions' in ocr_result:
+                        positions = ocr_result['positions']
+                        logger.info(f"[{req_id}] Positions accessed via dict key, type: {type(positions)}")
+                    # Try converting ParsedData TypedDict to standard dict
+                    elif hasattr(ocr_result, '__getitem__'):
+                        try:
+                            positions = ocr_result['positions']
+                            logger.info(f"[{req_id}] Positions accessed via getitem, type: {type(positions)}")
+                        except (KeyError, TypeError):
+                            logger.warning(f"[{req_id}] Could not access positions with __getitem__, using empty list")
+                    # Last resort - log more details about the ocr_result
+                    else:
+                        logger.warning(f"[{req_id}] Could not find positions in OCR result of type {type(ocr_result)}, keys: {dir(ocr_result) if hasattr(ocr_result, '__dict__') else 'no dir'}")
+                except Exception as e:
+                    logger.error(f"[{req_id}] Error accessing positions: {str(e)}")
+                    
+                # Ensure positions is a list
+                if not isinstance(positions, list):
+                    logger.warning(f"[{req_id}] Positions is not a list: {type(positions)}, converting...")
+                    try:
+                        # Try to convert to list if it's iterable
+                        positions = list(positions) if hasattr(positions, '__iter__') else []
+                    except Exception as e:
+                        logger.error(f"[{req_id}] Error converting positions to list: {str(e)}")
+                        positions = []
+                
+                logger.info(f"[{req_id}] Matching {len(positions)} positions...")
+                
+                # Handle empty positions case gracefully
+                if not positions or len(positions) == 0:
+                    logger.warning(f"[{req_id}] Empty positions list, returning empty match results")
+                    match_results = []
+                else:
+                    # Debug log the positions to help diagnose issues
+                    try:
+                        if isinstance(positions[0], dict):
+                            logger.info(f"[{req_id}] First position example: {positions[0]}")
+                        else:
+                            logger.info(f"[{req_id}] First position type: {type(positions[0])}")
+                    except Exception as debug_error:
+                        logger.error(f"[{req_id}] Error logging position info: {debug_error}")
+                
+                    # Try to match positions
+                    match_results = await async_match_positions(
+                        positions, 
+                        products
+                    )
+                    
                 timer.checkpoint("matching_complete")
+            except ValueError as ve:
+                # More specific error for value errors which are likely input validation issues
+                logger.error(f"[{req_id}] Value error in matching: {ve}")
+                # Handle the error more gracefully for the user
+                await ui.error(f"❌ Не удалось обработать список товаров. Пожалуйста, попробуйте другое фото.")
+                return
             except Exception as e:
-                logger.error(f"[{req_id}] Error in matching: {e}")
-                await ui.error("❌ Error matching products. Please try again.")
+                logger.error(f"[{req_id}] Error in matching: {e}", exc_info=True)
+                # Send a more friendly message to the user
+                await ui.error("❌ Ошибка при сопоставлении товаров. Пожалуйста, попробуйте другое фото.")
                 return
             
             # Статистика сопоставления
             ok_count = sum(1 for item in match_results if item.get("status") == "ok")
             unknown_count = sum(1 for item in match_results if item.get("status") == "unknown")
+            # Позиции могут быть в двух форматах - из словаря или из объекта
+            if isinstance(positions, list):
+                positions_count = len(positions)
+            else:
+                positions_count = len(positions) if hasattr(positions, '__len__') else 0
             partial_count = positions_count - ok_count - unknown_count
             
             timer.add_metadata("match_stats", {
@@ -263,8 +354,19 @@ async def optimized_photo_handler(message: Message, state: FSMContext):
                         "Error generating report. Please try again or contact support."
                     )
             
-            # Устанавливаем состояние редактирования
-            await state.set_state(NotaStates.editing)
+            # Устанавливаем состояние редактирования 
+            # Проверяем, что мы не находимся уже в режиме редактирования (например, после команды редактирования)
+            current_state = await state.get_state()
+            if current_state != "EditFree:awaiting_input":
+                # Устанавливаем состояние только если мы не в режиме редактирования EditFree
+                # Используем NotaStates.editing для совместимости с существующим кодом
+                # В edit_flow.py добавлены обработчики для обоих состояний (NotaStates.editing и EditFree.awaiting_input)
+                await state.set_state(NotaStates.editing)
+                logger.info(f"[{req_id}] Set state to NotaStates.editing after photo processing")
+                # Добавляем лог для диагностики
+                logger.info(f"[edit_flow] Successfully set state to NotaStates.editing from {current_state}")
+            else:
+                logger.info(f"[{req_id}] Maintaining EditFree.awaiting_input state (already in edit mode)")
             
     except Exception as e:
         logger.error(f"[{req_id}] Unexpected error processing photo: {str(e)}", exc_info=True)
