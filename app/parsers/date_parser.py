@@ -10,6 +10,88 @@ from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
+# Регулярные выражения для распознавания различных форматов даты
+DATE_PATTERNS = [
+    # Форматы вида DD.MM.YYYY или DD/MM/YYYY
+    r'(\d{1,2})[\.\/](\d{1,2})[\.\/](\d{4})',
+    # Формат вида YYYY-MM-DD (ISO)
+    r'(\d{4})-(\d{1,2})-(\d{1,2})',
+]
+
+# Ключевые слова для команд изменения даты
+RU_CHANGE_PATTERNS = [
+    r'(?:изменить|измени|поменять|поменяй|установить|установи|смени|смената) '
+    r'(?:дату|дата) (?:на|в|во)?',
+    r'(?:дату|дата) (?:установить|поставь|ставь|поставить) (?:на|в|во)?',
+]
+
+EN_CHANGE_PATTERNS = [
+    r'(?:change|set|update|modify) (?:date|the date) (?:to|at|as)?',
+    r'(?:date) (?:set|change|update|modify) (?:to|at|as)?',
+]
+
+# Прямые команды даты
+DIRECT_DATE_COMMANDS = [
+    r'^(?:date|дата)\s+'
+]
+
+def parse_date_str(date_str: str) -> Optional[dict]:
+    """
+    Парсит строку с датой в различных форматах.
+    
+    Args:
+        date_str: Строка с датой в одном из поддерживаемых форматов
+        
+    Returns:
+        dict: Словарь с компонентами даты или None, если парсинг не удался
+    """
+    for pattern in DATE_PATTERNS:
+        match = re.search(pattern, date_str)
+        if not match:
+            continue
+            
+        groups = match.groups()
+        
+        try:
+            if len(groups[0]) == 4:  # Формат YYYY-MM-DD
+                year, month, day = int(groups[0]), int(groups[1]), int(groups[2])
+            else:  # Формат DD.MM.YYYY
+                day, month, year = int(groups[0]), int(groups[1]), int(groups[2])
+                
+            # Проверка корректности даты
+            if not (1 <= day <= 31 and 1 <= month <= 12 and 1000 <= year <= 3000):
+                continue
+                
+            # Форматируем дату в стандартный вид
+            date_obj = datetime(year, month, day)
+            formatted_date = date_obj.strftime('%Y-%m-%d')
+            
+            return {
+                'day': day,
+                'month': month,
+                'year': year,
+                'date': formatted_date
+            }
+        except (ValueError, TypeError):
+            continue
+            
+    return None
+
+def find_date_in_text(text: str) -> Optional[str]:
+    """
+    Ищет дату в тексте и возвращает ее как строку.
+    
+    Args:
+        text: Текст для поиска даты
+        
+    Returns:
+        str: Найденная дата в формате YYYY-MM-DD или None
+    """
+    date_info = parse_date_str(text)
+    if date_info:
+        return date_info['date']
+    return None
+
 def parse_date_command(text: str) -> Optional[Dict[str, Any]]:
     """
     Парсит команду изменения даты и возвращает интент в формате, совместимом с OpenAI Assistant.
@@ -28,87 +110,52 @@ def parse_date_command(text: str) -> Optional[Dict[str, Any]]:
         
     Returns:
         Dict или None: Распознанный интент в формате {"action": "set_date", "value": "YYYY-MM-DD"}
-                       или None, если команда не распознана
     """
-    text = text.strip().lower()
-    logger.info(f"Парсинг команды даты: {text}")
+    # Приводим к нижнему регистру для упрощения сопоставления
+    text_lower = text.lower().strip()
     
-    # 1. Проверяем, содержит ли команда ключевые слова для даты
-    is_date_command = any(word in text for word in ['дата', 'date', 'дату'])
-    if not is_date_command:
+    # Поиск даты в тексте
+    date_str = find_date_in_text(text_lower)
+    if not date_str:
+        logger.debug(f"Парсер даты: дата не найдена в тексте '{text_lower}'")
         return None
     
-    # 2. Пытаемся извлечь дату из различных форматов
-    date_formats = [
-        # DD.MM.YYYY или DD/MM/YYYY или DD-MM-YYYY
-        r'(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})',
-        # DD месяц YYYY (русский)
-        r'(\d{1,2})\s+(января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)\s+(\d{4}|\d{2})',
-        # DD месяц YYYY (английский)
-        r'(\d{1,2})\s+(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{4}|\d{2})'
-    ]
+    # Проверка прямых команд изменения даты
+    for pattern in DIRECT_DATE_COMMANDS:
+        if re.match(pattern, text_lower):
+            logger.debug(f"Парсер даты: распознана прямая команда '{text_lower}' -> {date_str}")
+            return {
+                "action": "set_date",
+                "value": date_str
+            }
     
-    # Словари для преобразования названий месяцев в номера
-    ru_months = {
-        'января': 1, 'февраля': 2, 'марта': 3, 'апреля': 4, 'мая': 5, 'июня': 6,
-        'июля': 7, 'августа': 8, 'сентября': 9, 'октября': 10, 'ноября': 11, 'декабря': 12
-    }
+    # Проверка русских команд изменения даты
+    for pattern in RU_CHANGE_PATTERNS:
+        if re.search(pattern, text_lower):
+            logger.debug(f"Парсер даты: распознана русская команда '{text_lower}' -> {date_str}")
+            return {
+                "action": "set_date",
+                "value": date_str
+            }
     
-    en_months = {
-        'january': 1, 'february': 2, 'march': 3, 'april': 4, 'may': 5, 'june': 6, 
-        'july': 7, 'august': 8, 'september': 9, 'october': 10, 'november': 11, 'december': 12,
-        'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'jun': 6, 'jul': 7, 
-        'aug': 8, 'sep': 9, 'sept': 9, 'oct': 10, 'nov': 11, 'dec': 12
-    }
+    # Проверка английских команд изменения даты
+    for pattern in EN_CHANGE_PATTERNS:
+        if re.search(pattern, text_lower):
+            logger.debug(f"Парсер даты: распознана английская команда '{text_lower}' -> {date_str}")
+            return {
+                "action": "set_date",
+                "value": date_str
+            }
     
-    for pattern in date_formats:
-        match = re.search(pattern, text)
-        if match:
-            try:
-                groups = match.groups()
-                if len(groups) == 3:
-                    day, month, year = groups
-                    
-                    # Обработка текстовых названий месяцев
-                    if isinstance(month, str) and month in ru_months:
-                        month = ru_months[month]
-                    elif isinstance(month, str) and month in en_months:
-                        month = en_months[month]
-                    
-                    # Преобразуем в числа
-                    day = int(day)
-                    month = int(month)
-                    
-                    # Обработка двузначного года
-                    if len(str(year)) == 2:
-                        # Если год двузначный, предполагаем, что это 20xx
-                        year = 2000 + int(year)
-                    else:
-                        year = int(year)
-                    
-                    # Проверяем валидность даты
-                    if 1 <= day <= 31 and 1 <= month <= 12 and year >= 2000:
-                        # Формируем ISO-формат (YYYY-MM-DD)
-                        iso_date = f"{year:04d}-{month:02d}-{day:02d}"
-                        
-                        # Дополнительная проверка валидности через datetime
-                        try:
-                            # Пытаемся создать объект datetime для проверки
-                            datetime.strptime(iso_date, "%Y-%m-%d")
-                            
-                            # Возвращаем интент в формате OpenAI Assistant
-                            logger.info(f"Распознана дата: {iso_date}")
-                            return {
-                                "action": "set_date",
-                                "value": iso_date
-                            }
-                        except ValueError:
-                            logger.warning(f"Невалидная дата: {iso_date}")
-                            continue
-            except Exception as e:
-                logger.error(f"Ошибка при парсинге даты: {e}")
-                continue
-    
-    # Если дата не распознана, но команда похожа на дату
-    logger.warning(f"Команда похожа на дату, но не удалось распознать формат: {text}")
+    # Если текст содержит дату, но не соответствует форматам команд,
+    # смотрим, есть ли в нём ключевые слова, указывающие на изменение даты
+    keywords = ['дат', 'date', 'число', 'день', 'day']
+    if any(keyword in text_lower for keyword in keywords):
+        logger.debug(f"Парсер даты: текст содержит ключевые слова даты '{text_lower}' -> {date_str}")
+        return {
+            "action": "set_date",
+            "value": date_str
+        }
+        
+    logger.debug(f"Парсер даты: команда не распознана для текста '{text_lower}'")
     return None 

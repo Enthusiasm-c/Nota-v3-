@@ -5,6 +5,7 @@
 import logging
 from typing import Dict, Any, Optional
 import time
+import asyncio
 
 from app.parsers.date_parser import parse_date_command
 
@@ -24,27 +25,22 @@ def parse_command(text: str) -> Optional[Dict[str, Any]]:
     logger.info(f"Запуск локального парсера для команды: '{text}'")
     
     # Попытка парсинга команды даты
-    date_intent = parse_date_command(text)
-    if date_intent:
-        elapsed = (time.time() - start_time) * 1000
-        logger.info(f"Локальный парсер распознал дату за {elapsed:.1f} мс: {date_intent}")
-        return date_intent
+    date_result = parse_date_command(text)
+    if date_result:
+        elapsed_ms = (time.time() - start_time) * 1000
+        logger.info(f"Локальный парсер обработал команду даты за {elapsed_ms:.1f} мс: {date_result}")
+        return date_result
     
-    # Здесь можно добавить вызовы других парсеров по мере их реализации
-    # Например:
-    # line_intent = parse_line_command(text)
-    # if line_intent:
-    #     return line_intent
+    # Здесь можно добавить другие типы парсеров
     
-    # Команда не распознана ни одним из локальных парсеров
-    elapsed = (time.time() - start_time) * 1000
-    logger.info(f"Локальный парсер не смог распознать команду за {elapsed:.1f} мс: '{text}'")
+    # Если ни один парсер не сработал
+    elapsed_ms = (time.time() - start_time) * 1000
+    logger.info(f"Локальный парсер не смог распознать команду за {elapsed_ms:.1f} мс")
     return None
 
 async def parse_command_async(text: str) -> Optional[Dict[str, Any]]:
     """
-    Асинхронная обертка для парсинга команд. 
-    Имеет тот же интерфейс, что и OpenAI парсер для облегчения замены.
+    Асинхронная версия метода парсинга для использования в асинхронных контекстах.
     
     Args:
         text: Текст команды пользователя
@@ -52,4 +48,6 @@ async def parse_command_async(text: str) -> Optional[Dict[str, Any]]:
     Returns:
         Dict или None: Распознанный интент или None, если команда не распознана
     """
-    return parse_command(text) 
+    # Запускаем синхронную функцию в отдельном потоке, чтобы не блокировать event loop
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, parse_command, text) 
