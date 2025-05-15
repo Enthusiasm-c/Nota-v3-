@@ -281,3 +281,69 @@ Nota-v3-
 Для безопасной остановки бота рекомендуется использовать скрипт `stop_service.sh`. 
 В случае проблем с остановкой можно использовать `kill_all_nota_processes.sh`.
 Скрипт `emergency_stop.sh` следует использовать только в экстренных случаях, когда все другие методы не работают.
+
+## Модуль интеграции с Syrve API
+
+Для отправки приходных накладных в систему Syrve (iiko) используется модуль `app/services/syrve_invoice_sender.py`.
+
+### Настройка подключения
+
+1. Скопируйте файл `.env.syrve.example` в `.env` и заполните его реальными значениями:
+   ```
+   SYRVE_BASE_URL=https://your-server.syrve.online
+   SYRVE_LOGIN=your_username
+   SYRVE_PASS_SHA1=sha1_hash_of_your_password
+   ```
+
+2. Для генерации SHA1-хеша пароля можно использовать команду:
+   ```
+   echo -n "your_password" | shasum
+   ```
+
+### Использование
+
+```python
+from app.services.syrve_invoice_sender import SyrveClient, Invoice, InvoiceItem
+from decimal import Decimal
+from datetime import date
+
+# Создаем элементы накладной
+items = [
+    InvoiceItem(
+        num=1,
+        product_id="12345678-1234-1234-1234-123456789abc",  # GUID товара в Syrve
+        amount=Decimal("10.5"),
+        price=Decimal("100.00"),
+        sum=Decimal("1050.00")
+    )
+]
+
+# Создаем накладную
+invoice = Invoice(
+    items=items,
+    supplier_id="87654321-4321-4321-4321-cba987654321",  # GUID поставщика
+    default_store_id="11111111-2222-3333-4444-555555555555",  # GUID склада
+    date_incoming=date.today()
+)
+
+# Инициализируем клиент из переменных окружения
+client = SyrveClient.from_env()
+
+# Отправляем накладную
+try:
+    result = client.send_invoice(invoice)
+    if result:
+        print("Накладная успешно импортирована в Syrve")
+except Exception as e:
+    print(f"Ошибка при отправке накладной: {e}")
+```
+
+### Обработка ошибок
+
+Модуль предоставляет специализированные исключения для различных типов ошибок:
+
+- `InvoiceValidationError` - ошибки валидации (неизвестный GUID товара, неверная сумма и т.д.)
+- `InvoiceHTTPError` - ошибки HTTP при взаимодействии с API
+- `InvoiceAuthError` - ошибки аутентификации
+
+Рекомендуется обрабатывать эти исключения, чтобы предоставить пользователю понятное сообщение об ошибке.
