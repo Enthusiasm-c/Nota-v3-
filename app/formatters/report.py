@@ -80,27 +80,9 @@ def build_table(rows):
         display_name = row.get("matched_name", row.get("name", ""))
         name = html_escape(str(display_name))
         
-        # Обработка длинных названий с переносом строки
-        if len(name) > 10:
-            words = name.split()
-            name_parts = []
-            current_part = ""
-            for word in words:
-                if len(current_part) + len(word) + 1 <= 10:
-                    if current_part:
-                        current_part += " " + word
-                    else:
-                        current_part = word
-                else:
-                    name_parts.append(current_part)
-                    current_part = word
-            if current_part:
-                name_parts.append(current_part)
-            name = "\n".join(name_parts)
-        else:
-            # Обрезаем длинные имена с многоточием для отображения в одну строку
-            if len(name) > name_width - 1:
-                name = name[:name_width - 2] + "…"
+        # Обрезаем длинные имена с многоточием
+        if len(name) > name_width - 1:
+            name = name[:name_width - 2] + "…"
                 
         qty = format_quantity(row.get("qty", ""))
         unit = html_escape(str(row.get("unit", "")))

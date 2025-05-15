@@ -80,22 +80,9 @@ def text_to_markdown_table(text: str) -> str:
             
         name, qty, unit, price = parse_table_line(line)
         if name and qty:  # Проверяем, что строка содержит данные
-            # Обработка длинных названий с переносом строки
+            # Обрезаем длинные имена с многоточием
             if len(name) > 10:
-                name_parts = []
-                current_part = ""
-                for word in name.split():
-                    if len(current_part) + len(word) + 1 <= 10:
-                        if current_part:
-                            current_part += " " + word
-                        else:
-                            current_part = word
-                    else:
-                        name_parts.append(current_part)
-                        current_part = word
-                if current_part:
-                    name_parts.append(current_part)
-                name = "<br>".join(name_parts)
+                name = name[:9] + "…"
             
             # Форматируем строку таблицы без восклицательных знаков
             row = f"|{current_row}|{name}|{qty}|{unit}|{price}|\n"
