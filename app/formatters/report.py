@@ -6,10 +6,18 @@ from app.utils.formatters import format_price, format_quantity
 import re
 
 def format_idr(val):
-    """Format number with narrow space and no currency for table."""
+    """Format number with k for thousands and no currency for table."""
     try:
-        # Используем унифицированную функцию из общего модуля
-        return format_price(val, currency="", decimal_places=0)
+        # Преобразуем в число
+        if isinstance(val, str):
+            val = ''.join(c for c in val if c.isdigit())
+        
+        num_val = int(float(val))
+        
+        # Форматируем с 'k' для тысяч
+        if num_val >= 1000:
+            return f"{num_val // 1000}k"
+        return str(num_val)
     except Exception:
         return "—"
 
@@ -39,11 +47,11 @@ def build_header(supplier, date):
 def build_table(rows):
     """
     Формирует текстовую таблицу с позициями инвойса.
-    Столбцы QTY, UNIT, PRICE выровнены по левому краю, TOTAL заменён на PRICE.
+    Столбцы QTY, UNIT, PRICE выровнены по левому краю.
     Проблемные значения выделяются жирным шрифтом.
     """
     from html import escape as html_escape
-    from app.utils.formatters import format_price, format_quantity
+    from app.utils.formatters import format_quantity
     import re
 
     status_map = {"ok": "✓", "unknown": "❗", "unit_mismatch": "❗", "error": "❗", "manual": ""}
@@ -56,7 +64,7 @@ def build_table(rows):
 
     # Если позиций нет, возвращаем только заголовок и строку-заглушку
     if not rows:
-        header = f"#  {'NAME'.ljust(14)}{'QTY'.ljust(5)}{'UNIT'.ljust(5)}{'PRICE'.ljust(6)}! "
+        header = f"# NAME QTY UNIT PRICE"
         return header + "\n—"
 
     # Жёстко задаём ширины для теста layout
@@ -65,30 +73,69 @@ def build_table(rows):
     unit_width = 5
     price_width = 6
 
-    header = f"#  {'NAME'.ljust(name_width)}{'QTY'.ljust(qty_width)}{'UNIT'.ljust(unit_width)}{'PRICE'.ljust(price_width)}! "
+    header = f"# NAME QTY UNIT PRICE"
 
     table_rows = []
     for idx, row in enumerate(rows, 1):
         display_name = row.get("matched_name", row.get("name", ""))
         name = html_escape(str(display_name))
-        # Обрезаем длинные имена с многоточием
-        if len(name) > name_width - 1:
-            name = name[:name_width - 2] + "…"
+        
+        # Обработка длинных названий с переносом строки
+        if len(name) > 10:
+            words = name.split()
+            name_parts = []
+            current_part = ""
+            for word in words:
+                if len(current_part) + len(word) + 1 <= 10:
+                    if current_part:
+                        current_part += " " + word
+                    else:
+                        current_part = word
+                else:
+                    name_parts.append(current_part)
+                    current_part = word
+            if current_part:
+                name_parts.append(current_part)
+            name = "\n".join(name_parts)
+        else:
+            # Обрезаем длинные имена с многоточием для отображения в одну строку
+            if len(name) > name_width - 1:
+                name = name[:name_width - 2] + "…"
+                
         qty = format_quantity(row.get("qty", ""))
         unit = html_escape(str(row.get("unit", "")))
-        price = format_price(row.get("price", ""))
+        
+        # Новый формат цены с k для тысяч
+        try:
+            price_val = row.get("price", "")
+            if isinstance(price_val, str):
+                price_val = ''.join(c for c in price_val if c.isdigit())
+            
+            if price_val:
+                price_num = int(float(price_val))
+                if price_num >= 1000:
+                    price = f"{price_num // 1000}k"
+                else:
+                    price = str(price_num)
+            else:
+                price = "—"
+        except Exception:
+            price = format_idr(row.get("price", ""))
+            
         status = status_map.get(row.get("status", ""), "")
         if row.get("status") in ["unknown", "unit_mismatch", "error"]:
             name = f"<b>{name}</b>"
             qty = f"<b>{qty}</b>"
             unit = f"<b>{unit}</b>"
             price = f"<b>{price}</b>"
+            
+        # Форматируем строку таблицы без восклицательных знаков
         table_row = (
             f"{idx} {pad_with_html(name, name_width)}"
             f"{pad_with_html(qty, qty_width)}"
             f"{pad_with_html(unit, unit_width)}"
             f"{pad_with_html(price, price_width)}"
-            f"! {status}"
+            f" {status}"
         )
         table_rows.append(table_row)
     return header + "\n" + "\n".join(table_rows)

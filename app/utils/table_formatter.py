@@ -3,11 +3,22 @@ from typing import List, Dict, Tuple
 
 def format_price(price_str: str) -> str:
     """
-    Форматирует строку цены, удаляя пробелы и 'IDR'.
+    Форматирует строку цены, удаляя пробелы и 'IDR',
+    конвертирует в формат с 'k' для тысяч.
     """
     # Удаляем все нечисловые символы, кроме цифр
     price = ''.join(c for c in price_str if c.isdigit())
-    return price
+    
+    try:
+        # Преобразуем в число
+        price_num = int(price)
+        
+        # Форматируем с 'k' для тысяч
+        if price_num >= 1000:
+            return f"{price_num // 1000}k"
+        return str(price_num)
+    except ValueError:
+        return price
 
 def parse_table_line(line: str) -> Tuple[str, str, str, str]:
     """
@@ -54,9 +65,9 @@ def text_to_markdown_table(text: str) -> str:
     """
     Преобразует текстовый блок в Markdown таблицу.
     """
-    # Заголовок таблицы с смещенными на 3 символа влево QTY, UNIT и PRICE
-    header = "| # | Name | QTY | Unit | Price (IDR) |\n"
-    separator = "|---|------|-----|------|------------|\n"
+    # Заголовок таблицы со смещением на один знак влево
+    header = "|# |Name|QTY|Unit|Price|\n"
+    separator = "|--|----|----|----|----|--|\n"
     
     lines = text.split('\n')
     rows = []
@@ -69,8 +80,25 @@ def text_to_markdown_table(text: str) -> str:
             
         name, qty, unit, price = parse_table_line(line)
         if name and qty:  # Проверяем, что строка содержит данные
-            # Форматируем строку таблицы, добавляем пробел после номера
-            row = f"| {current_row} | {name} | {qty} | {unit} | {price} |\n"
+            # Обработка длинных названий с переносом строки
+            if len(name) > 10:
+                name_parts = []
+                current_part = ""
+                for word in name.split():
+                    if len(current_part) + len(word) + 1 <= 10:
+                        if current_part:
+                            current_part += " " + word
+                        else:
+                            current_part = word
+                    else:
+                        name_parts.append(current_part)
+                        current_part = word
+                if current_part:
+                    name_parts.append(current_part)
+                name = "<br>".join(name_parts)
+            
+            # Форматируем строку таблицы без восклицательных знаков
+            row = f"|{current_row}|{name}|{qty}|{unit}|{price}|\n"
             rows.append(row)
             current_row += 1
     
