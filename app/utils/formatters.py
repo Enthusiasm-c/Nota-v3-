@@ -17,16 +17,26 @@ __all__ = ["clean_num", "format_price", "format_quantity", "parse_date"]
 
 def format_price(value: Optional[Union[str, float, int]], currency: str = "", decimal_places: int = 2) -> str:
     """
-    Форматирует ценовое значение: разделитель тысяч — обычный пробел, decimal_places знаков после запятой, опционально валюта.
+    Форматирует ценовое значение: разделитель тысяч — обычный пробел, без знаков после запятой, опционально валюта.
+    Примеры: 240 000, 5 000, 13 200
     """
     cleaned = clean_num(value)
     if cleaned is None:
         return "—"
-    if decimal_places == 0:
-        formatted = f"{int(round(cleaned)):,}".replace(",", " ")
-    else:
-        formatted = f"{cleaned:,.{decimal_places}f}".replace(",", " ")
-        formatted = formatted.replace(".", ",")
+    
+    # Форматируем число как целое, без десятичных знаков
+    int_value = int(round(cleaned))
+    formatted = str(int_value)
+    
+    # Форматируем с пробелами между тысячами
+    if len(formatted) > 3:
+        # Разделяем число на группы по 3 цифры справа налево и соединяем пробелами
+        groups = []
+        for i in range(len(formatted), 0, -3):
+            start = max(0, i - 3)
+            groups.insert(0, formatted[start:i])
+        formatted = ' '.join(groups)
+    
     if currency:
         return f"{formatted} {currency}"
     return formatted

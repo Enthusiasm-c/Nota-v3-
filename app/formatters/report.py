@@ -6,18 +6,10 @@ from app.utils.formatters import format_price, format_quantity
 import re
 
 def format_idr(val):
-    """Format number with k for thousands and no currency for table."""
+    """Format number with narrow space and no currency for table."""
     try:
-        # Преобразуем в число
-        if isinstance(val, str):
-            val = ''.join(c for c in val if c.isdigit())
-        
-        num_val = int(float(val))
-        
-        # Форматируем с 'k' для тысяч
-        if num_val >= 1000:
-            return f"{num_val // 1000}k"
-        return str(num_val)
+        # Используем унифицированную функцию из общего модуля
+        return format_price(val, currency="", decimal_places=0)
     except Exception:
         return "—"
 
@@ -47,11 +39,11 @@ def build_header(supplier, date):
 def build_table(rows):
     """
     Формирует текстовую таблицу с позициями инвойса.
-    Столбцы QTY, UNIT, PRICE выровнены по левому краю.
+    Столбцы QTY, UNIT, PRICE выровнены по левому краю, TOTAL заменён на PRICE.
     Проблемные значения выделяются жирным шрифтом.
     """
     from html import escape as html_escape
-    from app.utils.formatters import format_quantity
+    from app.utils.formatters import format_price, format_quantity
     import re
 
     status_map = {"ok": "✓", "unknown": "❗", "unit_mismatch": "❗", "error": "❗", "manual": ""}
@@ -61,10 +53,28 @@ def build_table(rows):
         visible_len = len(visible_text)
         padding = max(0, width - visible_len)
         return str(text) + " " * padding
+        
+    def format_price_with_spaces(price_str):
+        """Форматирует цену с пробелами между тысячами: 240 000, 5 000, 13 200"""
+        if not price_str or price_str == "—":
+            return "—"
+        # Очищаем от всех нечисловых символов
+        clean_price = ''.join(c for c in price_str if c.isdigit())
+        if not clean_price:
+            return "—"
+        # Форматируем с пробелами между тысячами
+        if len(clean_price) > 3:
+            # Разделяем число на группы по 3 цифры справа налево и соединяем пробелами
+            groups = []
+            for i in range(len(clean_price), 0, -3):
+                start = max(0, i - 3)
+                groups.insert(0, clean_price[start:i])
+            return ' '.join(groups)
+        return clean_price
 
     # Если позиций нет, возвращаем только заголовок и строку-заглушку
     if not rows:
-        header = f"# NAME QTY UNIT PRICE"
+        header = f"# NAME QTY UNIT PRICE "
         return header + "\n—"
 
     # Жёстко задаём ширины для теста layout
@@ -73,45 +83,24 @@ def build_table(rows):
     unit_width = 5
     price_width = 6
 
-    header = f"# NAME QTY UNIT PRICE"
+    header = f"# NAME QTY UNIT PRICE "
 
     table_rows = []
     for idx, row in enumerate(rows, 1):
         display_name = row.get("matched_name", row.get("name", ""))
         name = html_escape(str(display_name))
-        
         # Обрезаем длинные имена с многоточием
         if len(name) > name_width - 1:
             name = name[:name_width - 2] + "…"
-                
         qty = format_quantity(row.get("qty", ""))
         unit = html_escape(str(row.get("unit", "")))
-        
-        # Новый формат цены с k для тысяч
-        try:
-            price_val = row.get("price", "")
-            if isinstance(price_val, str):
-                price_val = ''.join(c for c in price_val if c.isdigit())
-            
-            if price_val:
-                price_num = int(float(price_val))
-                if price_num >= 1000:
-                    price = f"{price_num // 1000}k"
-                else:
-                    price = str(price_num)
-            else:
-                price = "—"
-        except Exception:
-            price = format_idr(row.get("price", ""))
-            
+        price = format_price_with_spaces(row.get("price", ""))
         status = status_map.get(row.get("status", ""), "")
         if row.get("status") in ["unknown", "unit_mismatch", "error"]:
             name = f"<b>{name}</b>"
             qty = f"<b>{qty}</b>"
             unit = f"<b>{unit}</b>"
             price = f"<b>{price}</b>"
-            
-        # Форматируем строку таблицы без восклицательных знаков
         table_row = (
             f"{idx} {pad_with_html(name, name_width)}"
             f"{pad_with_html(qty, qty_width)}"

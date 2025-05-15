@@ -3,22 +3,19 @@ from typing import List, Dict, Tuple
 
 def format_price(price_str: str) -> str:
     """
-    Форматирует строку цены, удаляя пробелы и 'IDR',
-    конвертирует в формат с 'k' для тысяч.
+    Форматирует строку цены, удаляя пробелы и 'IDR'.
     """
     # Удаляем все нечисловые символы, кроме цифр
     price = ''.join(c for c in price_str if c.isdigit())
-    
-    try:
-        # Преобразуем в число
-        price_num = int(price)
-        
-        # Форматируем с 'k' для тысяч
-        if price_num >= 1000:
-            return f"{price_num // 1000}k"
-        return str(price_num)
-    except ValueError:
-        return price
+    # Форматируем цену с пробелами между тысячами
+    if len(price) > 3:
+        # Разделяем число на группы по 3 цифры справа налево и соединяем пробелами
+        groups = []
+        for i in range(len(price), 0, -3):
+            start = max(0, i - 3)
+            groups.insert(0, price[start:i])
+        price = ' '.join(groups)
+    return price
 
 def parse_table_line(line: str) -> Tuple[str, str, str, str]:
     """
@@ -65,9 +62,9 @@ def text_to_markdown_table(text: str) -> str:
     """
     Преобразует текстовый блок в Markdown таблицу.
     """
-    # Заголовок таблицы со смещением на один знак влево
-    header = "|# |Name|QTY|Unit|Price|\n"
-    separator = "|--|----|----|----|----|--|\n"
+    # Заголовок таблицы со смещенными на 1 символ влево наименованиями столбцов
+    header = "| # |Name |QTY |Unit |Price (IDR) |\n"
+    separator = "|---|-----|----|----|------------|\n"
     
     lines = text.split('\n')
     rows = []
@@ -80,12 +77,8 @@ def text_to_markdown_table(text: str) -> str:
             
         name, qty, unit, price = parse_table_line(line)
         if name and qty:  # Проверяем, что строка содержит данные
-            # Обрезаем длинные имена с многоточием
-            if len(name) > 10:
-                name = name[:9] + "…"
-            
-            # Форматируем строку таблицы без восклицательных знаков
-            row = f"|{current_row}|{name}|{qty}|{unit}|{price}|\n"
+            # Форматируем строку таблицы, добавляем пробел после номера
+            row = f"| {current_row} |{name} |{qty} |{unit} |{price} |\n"
             rows.append(row)
             current_row += 1
     
