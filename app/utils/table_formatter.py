@@ -62,9 +62,9 @@ def text_to_markdown_table(text: str) -> str:
     """
     Преобразует текстовый блок в Markdown таблицу.
     """
-    # Заголовок таблицы со смещенными на 1 символ влево наименованиями столбцов
-    header = "| # |Name |QTY |Unit |Price (IDR) |\n"
-    separator = "|---|-----|----|----|------------|\n"
+    # Заголовок таблицы с выровненными столбцами
+    header = "| # | Name | QTY | Unit | Price (IDR) |\n"
+    separator = "|---|------|-----|------|------------|\n"
     
     lines = text.split('\n')
     rows = []
@@ -78,7 +78,7 @@ def text_to_markdown_table(text: str) -> str:
         name, qty, unit, price = parse_table_line(line)
         if name and qty:  # Проверяем, что строка содержит данные
             # Форматируем строку таблицы, добавляем пробел после номера
-            row = f"| {current_row} |{name} |{qty} |{unit} |{price} |\n"
+            row = f"| {current_row} | {name} | {qty} | {unit} | {price} |\n"
             rows.append(row)
             current_row += 1
     
