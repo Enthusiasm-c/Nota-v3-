@@ -83,7 +83,7 @@ def build_table(rows):
 
     # Если позиций нет, возвращаем только заголовок и строку-заглушку
     if not rows:
-        header = f"#   NAME             QTY   UNIT  PRICE "
+        header = f"# NAME           QTY  UNIT PRICE "
         return header + "\n—"
 
     # Жёстко задаём ширины для теста layout
@@ -92,12 +92,13 @@ def build_table(rows):
     unit_width = 5
     price_width = 6
     
-    # Определяем положение каждого столбца в заголовке
+    # Определяем положение каждого столбца в заголовке с учетом смещений:
+    # NAME влево на 2 знака, QTY влево на 3 знака, UNIT влево на 4 знака, PRICE влево на 5 знаков
     num_pos = 0
-    name_pos = 4  # Позиция после номера строки и пробела
-    qty_pos = name_pos + name_width + 1  # +1 для пробела
-    unit_pos = qty_pos + qty_width + 1
-    price_pos = unit_pos + unit_width + 1
+    name_pos = 2  # Смещено на 2 знака влево от исходного положения (было 4)
+    qty_pos = name_pos + name_width - 1  # Смещено на 3 знака влево от исходного положения
+    unit_pos = qty_pos + qty_width - 1   # Смещено на 4 знака влево от исходного положения
+    price_pos = unit_pos + unit_width - 2  # Смещено на 5 знаков влево от исходного положения
     status_pos = price_pos + price_width + 1
 
     # Формируем заголовок с точным расположением названий столбцов
