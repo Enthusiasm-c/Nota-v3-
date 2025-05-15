@@ -36,5 +36,10 @@ class TracingLogMiddleware(BaseMiddleware):
             logging.info("User input: %s", json.dumps(log_entry, default=_default, ensure_ascii=False))
         except Exception as e:
             logging.info("User input (fallback)", extra={"trace_id": trace_id, "data": {"user_text": str(user_text), "error": str(e)}})
+        # Логируем весь объект event для диагностики
+        try:
+            logging.warning(f"ДИАГНОСТИКА: RAW update: {str(event)[:500]}...")
+        except Exception as e:
+            logging.warning(f"ДИАГНОСТИКА: Не удалось залогировать RAW update: {e}")
         data["trace_id"] = trace_id
         return await handler(event, data)

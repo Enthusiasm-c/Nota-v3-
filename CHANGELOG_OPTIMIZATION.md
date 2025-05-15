@@ -2,6 +2,34 @@
 
 В этом документе перечислены все оптимизации, внесенные в проект Nota-v3 для повышения стабильности, производительности и упрощения деплоя.
 
+## Май 2025 - Оптимизация OCR-пайплайна
+
+### 1. Внедрение оптимизированного OCR-пайплайна
+
+- **Новая реализация OCRPipelineOptimized**: Полностью оптимизированный пайплайн в `app/ocr_pipeline_optimized.py`
+- **Параллельная обработка ячеек**: Разделение на пакеты для оптимального использования ресурсов
+- **Многоуровневое кеширование**: Интеграция с Redis и локальным кешем для максимальной производительности
+- **Умное использование GPT-4o**: Стратегическое применение GPT-4o только для сложных случаев
+- **Подробные метрики производительности**: Детальное отслеживание времени выполнения каждого этапа
+
+### 2. Улучшения в обработке изображений
+
+- **Оптимизация предварительной обработки**: Более эффективная подготовка изображений для OCR
+- **Оптимизированный рендеринг ячеек**: Лучшая обработка сложных ячеек таблицы
+- **Адаптивная обработка**: Учет размера и сложности ячеек для оптимального распознавания
+
+### 3. Улучшенная обработка ошибок
+
+- **Каскадное восстановление**: Прогрессивное применение запасных вариантов при ошибках
+- **Мониторинг ресурсов**: Отслеживание использования памяти и процессора во время обработки
+- **Автоматические повторные попытки**: Интеллектуальные повторы при временных ошибках
+
+### 4. Инструменты тестирования и сравнения
+
+- **Улучшенный инструмент тестирования**: Обновленный `tools/ocr_pipeline_tool.py` для сравнения реализаций
+- **Детальное сравнение производительности**: Автоматическое измерение ускорения и точности
+- **Подробная документация**: Новый файл `OCR_OPTIMIZATION.md` с описанием всех оптимизаций
+
 ## Май 2025 - Общая оптимизация и стабилизация
 
 ### 1. Оптимизация предобработки изображений 
@@ -50,97 +78,94 @@
 
 ## Технические детали
 
-### Оптимизация обработки изображений
+### Новая параллельная обработка ячеек
 
 ```python
-def resize_image(image_bytes: bytes, max_size: int = 1600, quality: int = 90) -> bytes:
-    """
-    Изменяет размер изображения, если оно превышает максимальный размер.
-    """
-    try:
-        img = Image.open(io.BytesIO(image_bytes))
+async def _process_cells(self, cells: List[Dict[str, Any]], lang: List[str]) -> List[Dict[str, Any]]:
+    """Обрабатывает ячейки в параллельных пакетах для лучшего использования ресурсов."""
+    # Проверяем наличие ячеек для обработки
+    if not cells:
+        logger.warning("Не обнаружено ячеек для OCR")
+        return []
+    
+    # Разделяем на оптимальные пакеты для параллельной обработки
+    chunk_size = min(MAX_PARALLEL_CELLS, max(1, len(cells) // 4))
+    ocr_results = []
+    
+    for i in range(0, len(cells), chunk_size):
+        chunk = cells[i:i+chunk_size]
         
-        # Если изображение меньше максимального размера, возвращаем как есть
-        if max(img.size) <= max_size and len(image_bytes) <= 1.5 * 1024 * 1024:
-            return image_bytes
+        # Параллельная обработка пакета ячеек
+        chunk_results = await asyncio.gather(*(self._ocr_cell(cell) for cell in chunk))
+        ocr_results.extend(chunk_results)
+        
+        # Логируем прогресс для долгих процессов
+        if len(cells) > 20:
+            progress = min(100, int((i + len(chunk)) / len(cells) * 100))
+            logger.debug(f"OCR прогресс: {progress}% ({i + len(chunk)}/{len(cells)} ячеек)")
             
-        # Изменяем размер с сохранением соотношения сторон
-        if max(img.size) > max_size:
-            ratio = max_size / max(img.size)
-            new_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
-            img = img.resize(new_size, Image.LANCZOS)
-            
-        # Сохраняем с оптимизацией качества
-        output = io.BytesIO()
-        img.save(output, format='JPEG', quality=quality, optimize=True)
-        return output.getvalue()
-    except Exception:
-        # При любой ошибке возвращаем исходное изображение
-        return image_bytes
+    return ocr_results
 ```
 
-### Кеширование результатов OCR
+### Умное использование GPT-4o
 
 ```python
-def get_from_cache(image_bytes: bytes) -> Optional[ParsedData]:
-    """
-    Проверяет, есть ли результат OCR в кеше для данного изображения.
-    """
-    img_hash = get_image_hash(image_bytes)
+async def _ocr_cell(self, cell: Dict[str, Any]) -> Dict[str, Any]:
+    """Обработка одной ячейки с OCR и опциональным GPT-4o для сложных случаев."""
+    # Подготовка изображения ячейки
+    np_img = prepare_cell_image(cell['image'])
+    if np_img is None:
+        return {**cell, 'text': '', 'confidence': 0.0, 'used_gpt4o': False, 'error': 'too_small'}
     
-    # Проверяем наличие в кеше
-    if img_hash in OCR_CACHE:
-        data, timestamp = OCR_CACHE[img_hash]
-        
-        # Проверяем TTL
-        if time.time() - timestamp <= CACHE_TTL:
-            logger.info(f"OCR Cache hit for image hash {img_hash[:8]}")
-            return data
-        else:
-            # Удаляем устаревшую запись
-            logger.info(f"OCR Cache expired for image hash {img_hash[:8]}")
-            OCR_CACHE.pop(img_hash)
+    # Обнаружение качества и сложности изображения
+    img_height, img_width = np_img.shape[:2]
+    is_small_cell = img_width < SMALL_CELL_SIZE_THRESHOLD or img_height < SMALL_CELL_SIZE_THRESHOLD
     
-    return None
+    # Для очень маленьких ячеек сразу используем GPT-4o
+    if not is_small_cell:
+        try:
+            # Сначала попробуем PaddleOCR
+            result = self.paddle_ocr.ocr(np_img, cls=True)
+            if result and result[0]:
+                text, conf = result[0][0][1][0], result[0][0][1][1]
+                if conf >= self.low_conf_threshold:
+                    return {**cell, 'text': text, 'confidence': conf, 'used_gpt4o': False}
+        except Exception as e:
+            logger.warning(f"Ошибка PaddleOCR: {e}")
+    
+    # Если PaddleOCR не справился, используем GPT-4o
+    try:
+        gpt_text, gpt_conf = await process_cell_with_gpt4o(cell['image'])
+        return {**cell, 'text': gpt_text, 'confidence': gpt_conf, 'used_gpt4o': True}
+    except Exception as e:
+        logger.warning(f"Ошибка GPT-4o: {e}")
+        return {**cell, 'text': '', 'confidence': 0.0, 'used_gpt4o': False, 'error': str(e)}
 ```
 
-### Улучшение валидации данных
+### Оптимизация кеширования
 
 ```python
-def clean_num(val, default=None) -> Optional[float]:
-    """
-    Очистка и конвертация числовых значений из разных форматов.
-    """
-    # Проверка на None и пустые значения
-    if val in (None, "", "null", "—", "-", "n/a", "NA", "N/A"):
-        return default
+# Проверка кеша для изображения
+if use_cache:
+    image_hash = hashlib.md5(image_bytes).hexdigest()
+    cache_key = f"ocr_pipeline:{image_hash}"
+    cached_result = cache_get(cache_key)
     
-    # Конвертация в строку и нижний регистр
-    s = str(val).lower().strip()
-    
-    # Предварительная очистка от распространённых валютных символов и текста
-    currency_patterns = [
-        r'(?i)(?:rp|rupiah|idr|руб|рубл[яей]|usd|\$|€|евро|р\.|руб\.|₽)',
-        r'(?i)total:?',
-        r'(?i)price:?'
-    ]
-    for pattern in currency_patterns:
-        s = re.sub(pattern, '', s)
-    
-    # Обработка суффиксов кратности
-    mult = 1
-    # Тысячи: k, к, тыс
-    if re.search(r'(?i)[kк]$|тыс\.?$', s):
-        mult = 1000
-        s = re.sub(r'(?i)[kк]$|тыс\.?$', '', s)
-        
-    # [Дополнительная логика обработки разных форматов...]
-    
-    # Попытка конвертации в float
+    if cached_result:
+        logger.info(f"Попадание в кеш для изображения {image_hash[:8]}")
+        self._metrics["cache_hits"] += 1
+        return cached_result
+
+# [... обработка изображения ...]
+
+# Сохранение успешного результата в кеш
+if use_cache and image_hash:
     try:
-        return float(s) * mult
-    except ValueError:
-        return default
+        cache_key = f"ocr_pipeline:{image_hash}"
+        cache_set(cache_key, validated_result, ex=CACHE_TTL)
+        logger.debug(f"Сохранен результат OCR для {image_hash[:8]}")
+    except Exception as cache_e:
+        logger.warning(f"Ошибка кеширования: {cache_e}")
 ```
 
 ## Результаты оптимизации
@@ -152,6 +177,23 @@ def clean_num(val, default=None) -> Optional[float]:
 - **Повышение стабильности**: Снижение количества критических ошибок на 90%
 
 ## Рекомендации по настройке
+
+### Настройка оптимизированного OCR-пайплайна
+
+```
+# .env
+# Включение/отключение оптимизированного OCR-пайплайна
+USE_OPTIMIZED_OCR=1
+
+# Максимальное количество параллельных ячеек
+MAX_PARALLEL_CELLS=10
+
+# Порог уверенности для использования GPT-4o
+GPT4O_CONFIDENCE_THRESHOLD=0.75
+
+# Время жизни кеша OCR в секундах (24 часа)
+OCR_CACHE_TTL=86400
+```
 
 ### Настройка предобработки изображений
 

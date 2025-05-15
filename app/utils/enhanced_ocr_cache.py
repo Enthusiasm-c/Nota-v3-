@@ -50,12 +50,29 @@ def _serialize_parsed_data(data: ParsedData) -> str:
         Сериализованные данные в формате JSON
     """
     try:
+        # Создаем JSON-совместимый словарь
         if hasattr(data, "model_dump"):
             # Pydantic v2
-            return json.dumps(data.model_dump())
+            data_dict = data.model_dump()
         else:
             # Pydantic v1 fallback
-            return json.dumps(data.dict())
+            data_dict = data.dict()
+        
+        # Обработка типов данных, которые не сериализуются в JSON
+        def preprocess_date(obj):
+            if isinstance(obj, dict):
+                return {k: preprocess_date(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [preprocess_date(item) for item in obj]
+            elif hasattr(obj, 'isoformat'):  # Для объектов date/datetime
+                return obj.isoformat()
+            return obj
+        
+        # Предобработка словаря для корректной сериализации
+        data_dict = preprocess_date(data_dict)
+        
+        # Сериализуем в JSON
+        return json.dumps(data_dict)
     except Exception as e:
         logger.error(f"Ошибка сериализации данных: {e}")
         # Используем pickle как запасной вариант
@@ -67,22 +84,38 @@ def _deserialize_parsed_data(data_str: str) -> Optional[ParsedData]:
     Десериализует данные из кеша.
     
     Args:
-        data_str: Сериализованные данные
+        data_str: Сериализованные данные (строка или байты)
         
     Returns:
         Объект ParsedData или None в случае ошибки
     """
     try:
-        # Пробуем десериализовать как JSON
+        # Проверяем, что data_str - строка или байты
+        if isinstance(data_str, bytes):
+            # Если это байты, сначала пробуем как pickle
+            try:
+                return pickle.loads(data_str)
+            except Exception as e:
+                # Если не pickle, конвертируем в строку и пробуем как JSON
+                try:
+                    data_str = data_str.decode('utf-8')
+                except Exception:
+                    logger.error(f"Ошибка декодирования байтов в строку: {e}")
+                    return None
+        
+        # Теперь data_str - строка, пробуем десериализовать как JSON
         data_dict = json.loads(data_str)
         return ParsedData.model_validate(data_dict)
     except json.JSONDecodeError:
-        # Если не JSON, пробуем как pickle
-        try:
-            return pickle.loads(data_str)
-        except Exception as e:
-            logger.error(f"Ошибка десериализации данных: {e}")
-            return None
+        # Если не JSON, пробуем как pickle только если это строка
+        if isinstance(data_str, str):
+            try:
+                # Конвертируем строку в байты перед обработкой pickle
+                return pickle.loads(data_str.encode('utf-8'))
+            except Exception as e:
+                logger.error(f"Ошибка десериализации данных через pickle: {e}")
+                return None
+        return None
     except Exception as e:
         logger.error(f"Ошибка десериализации данных: {e}")
         return None

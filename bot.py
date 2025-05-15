@@ -337,9 +337,8 @@ def register_handlers(dp, bot=None):
                 # В случае ошибки возвращаемся в режим редактирования
                 await state.set_state(NotaStates.editing)
         
-        # Регистрируем fallback-хендлер ПОСЛЕ всех остальных обработчиков,
-        # и только для текстовых сообщений, чтобы он не перехватывал фото
-        dp.message.register(text_fallback, F.content_type == 'text')
+        # Регистрируем fallback-хендлер для всех сообщений (после всех остальных)
+        dp.message.register(all_messages_fallback)
         
         logger.info("Все обработчики зарегистрированы успешно")
     except Exception as e:
@@ -771,25 +770,187 @@ async def reject_fuzzy_name(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-async def text_fallback(message, state: FSMContext):
-    """Обработчик для любых текстовых сообщений, когда не требуется текст."""
-    # Получаем текущее состояние чтобы не отвечать в режиме редактирования
-    current_state = await state.get_state()
-    
-    # Не отвечаем, если пользователь находится в режиме редактирования
-    edit_states = ["EditFree:awaiting_input", "NotaStates:editing", "EditFree:awaiting_free_edit"]
-    if current_state in edit_states:
-        logger.info(f"Игнорируем fallback для текстового сообщения в режиме редактирования ({current_state})")
+async def all_messages_fallback(message, state: FSMContext):
+    """Универсальный fallback для любых сообщений, даже если не сработал обычный text_fallback."""
+    # Изолируем всю функцию в try-except для защиты от любых ошибок
+    try:
+        import re
+        import traceback
+        # Импортируем нужные классы состояний вначале функции
+        from app.fsm.states import EditFree, NotaStates
+        
+        logger.critical(f"СТАРТ: all_messages_fallback вызван, тип={type(message).__name__}")
+        
+        # Получаем и проверяем текст сообщения
+        try:
+            text = getattr(message, 'text', None) or ""
+            user_id = getattr(message.from_user, 'id', 'unknown')
+            logger.critical(f"СТАРТ: Текст сообщения: '{text}', user_id={user_id}")
+        except Exception as e:
+            logger.critical(f"ОШИБКА при получении текста: {e}")
+            return
+        
+        # Проверяем на команду даты или редактирования строки максимально просто и надежно
+        try:
+            is_date_command = False
+            is_line_edit_command = False
+            text_lower = text.lower().strip()
+            
+            # Проверка на команду даты
+            if text_lower.startswith("date ") or text_lower.startswith("дата "):
+                is_date_command = True
+            # Дополнительная проверка на формат даты без префикса (например, "25.06.2024")
+            elif re.match(r"^\d{1,2}[./-]\d{1,2}[./-]\d{2,4}$", text_lower):
+                is_date_command = True
+                # Добавляем префикс для правильной обработки
+                text = f"date {text}"
+            # Распознавание команды на естественном языке для изменения даты
+            elif "дату на" in text_lower or "дата на" in text_lower or "изменить дату" in text_lower or "измени дату" in text_lower or "change date" in text_lower or "set date" in text_lower:
+                is_date_command = True
+                # Пытаемся извлечь дату из команды
+                date_match = re.search(r"(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})", text)
+                if date_match:
+                    extracted_date = date_match.group(1)
+                    logger.critical(f"СТАРТ: Извлечена дата '{extracted_date}' из команды на естественном языке")
+                    # Переформатируем в стандартную команду даты
+                    text = f"date {extracted_date}"
+                else:
+                    # Если дата не найдена, пропускаем команду напрямую в GPT-парсер
+                    logger.critical(f"СТАРТ: Отправляем команду изменения даты на естественном языке в GPT-парсер: '{text}'")
+            
+            # Проверка на команду редактирования строки
+            elif re.match(r"^line\s+\d+", text_lower) or re.match(r"^строка\s+\d+", text_lower):
+                is_line_edit_command = True
+                logger.critical(f"СТАРТ: Обнаружена команда редактирования строки: '{text}'")
+            # Распознавание других команд редактирования на естественном языке
+            elif any(phrase in text_lower for phrase in ["измени", "изменить", "поменяй", "поменять", "установи", "установить", "change", "edit", "update", "set", "modify"]):
+                # Проверка на наличие слова "дату" для исключения дублирования с командами даты
+                if not any(date_word in text_lower for date_word in ["дату", "дата", "date"]):
+                    # Проверяем наличие указания на строку
+                    line_match = re.search(r"строк[аеиу]\s*(\d+)", text_lower)
+                    if not line_match:
+                        # Проверка на английское "line X" или "row X"
+                        line_match = re.search(r"(?:line|row)\s*(\d+)", text_lower)
+                    
+                    if line_match:
+                        line_num = line_match.group(1)
+                        is_line_edit_command = True
+                        logger.critical(f"СТАРТ: Обнаружена команда редактирования строки на естественном языке: '{text}', строка {line_num}")
+                    else:
+                        # Общая команда редактирования
+                        is_line_edit_command = True
+                        logger.critical(f"СТАРТ: Обнаружена общая команда редактирования на естественном языке: '{text}'")
+            
+            if is_date_command:
+                logger.critical(f"СТАРТ: Обнаружена команда даты: '{text}'")
+            elif is_line_edit_command:
+                logger.critical(f"СТАРТ: Обнаружена команда редактирования строки: '{text}'")
+            else:
+                # Проверяем, находится ли пользователь в режиме редактирования
+                current_state = await state.get_state()
+                data = await state.get_data()
+                invoice = data.get("invoice")
+                
+                # Если пользователь в режиме редактирования и есть инвойс, 
+                # то перенаправляем любой текст на GPT-парсер
+                if current_state in [str(EditFree.awaiting_input), str(NotaStates.editing)] and invoice:
+                    logger.critical(f"СТАРТ: Перенаправляем неизвестную команду на GPT-парсер: '{text}'")
+                    is_line_edit_command = True  # Устанавливаем флаг для перенаправления
+                else:
+                    logger.critical(f"СТАРТ: Не распознана команда: '{text}'")
+                    return
+        except Exception as e:
+            logger.critical(f"ОШИБКА при проверке на команду: {e}")
+            return
+        
+        # Если это команда даты или редактирования строки, проверяем состояние
+        if is_date_command or is_line_edit_command:
+            try:
+                current_state = await state.get_state()
+                logger.critical(f"СТАРТ: Текущее состояние: {current_state}")
+            except Exception as e:
+                logger.critical(f"ОШИБКА при получении состояния: {e}")
+                return
+            
+            # Получаем данные инвойса
+            try:
+                data = await state.get_data()
+                invoice = data.get("invoice")
+                logger.critical(f"СТАРТ: Инвойс найден: {bool(invoice)}")
+            except Exception as e:
+                logger.critical(f"ОШИБКА при получении данных: {e}")
+                return
+            
+            # Проверяем наличие инвойса
+            if not invoice:
+                try:
+                    await message.answer("Не найден инвойс для редактирования. Отправьте фото или нажмите Edit снова.")
+                    logger.critical(f"СТАРТ: Инвойс отсутствует, отправлено сообщение пользователю")
+                    return
+                except Exception as e:
+                    logger.critical(f"ОШИБКА при отправке сообщения: {e}")
+                    return
+            
+            # Поддерживаем оба состояния: EditFree.awaiting_input и NotaStates.editing
+            if current_state not in [str(EditFree.awaiting_input), str(NotaStates.editing)]:
+                try:
+                    logger.critical(f"СТАРТ: Устанавливаем состояние EditFree.awaiting_input из {current_state}")
+                    await state.set_state(EditFree.awaiting_input)
+                except Exception as e:
+                    logger.critical(f"ОШИБКА при установке состояния: {e}")
+                    return
+            
+            # Если все в порядке, передаем управление обработчику редактирования
+            try:
+                # Перед вызовом обработчика импортируем все зависимости
+                import importlib
+                from app.fsm.states import EditFree, NotaStates
+                
+                # Пробуем использовать инкрементальный обработчик сначала
+                try:
+                    logger.critical(f"СТАРТ: Пробуем использовать incremental_edit_flow.py")
+                    inc_edit_flow = importlib.import_module("app.handlers.incremental_edit_flow")
+                    await inc_edit_flow.handle_free_edit_text(message, state)
+                    logger.critical(f"СТАРТ: incremental_edit_flow.handle_free_edit_text выполнен успешно")
+                    return
+                except ImportError:
+                    logger.critical(f"СТАРТ: incremental_edit_flow не найден, пробуем обычный edit_flow")
+                except Exception as e:
+                    logger.critical(f"ОШИБКА при вызове incremental_edit_flow: {e}")
+                    logger.critical(traceback.format_exc())
+                
+                # Если не сработал инкрементальный - пробуем обычный
+                try:
+                    logger.critical(f"СТАРТ: Используем edit_flow.py")
+                    edit_flow = importlib.import_module("app.handlers.edit_flow")
+                    await edit_flow.handle_free_edit_text(message, state)
+                    logger.critical(f"СТАРТ: edit_flow.handle_free_edit_text выполнен успешно")
+                    return
+                except Exception as e:
+                    logger.critical(f"ОШИБКА при вызове edit_flow: {e}")
+                    logger.critical(traceback.format_exc())
+                    
+                # Если все обработчики не сработали, показываем ошибку
+                await message.answer("Произошла ошибка при обработке команды. Пожалуйста, повторите.")
+                return
+            except Exception as e:
+                import traceback
+                logger.critical(f"ОШИБКА при вызове обработчиков: {e}")
+                logger.critical(traceback.format_exc())
+                try:
+                    await message.answer(f"Произошла ошибка при обработке команды. Пожалуйста, повторите.")
+                except:
+                    pass
+                return
+    except Exception as e:
+        import traceback
+        logger.critical(f"ГЛОБАЛЬНАЯ ОШИБКА: {e}")
+        logger.critical(traceback.format_exc())
+        try:
+            await message.answer("Произошла системная ошибка. Пожалуйста, повторите.")
+        except:
+            pass
         return
-    
-    # Более подробное сообщение с инструкцией
-    await message.answer(
-        "📸 Пожалуйста, отправьте фотографию инвойса (только изображение).\n\n"
-        "Бот обрабатывает только фотографии, текстовые сообщения не поддерживаются.", 
-        parse_mode=None
-    )
-    # Логируем для отладки
-    logger.info(f"Получено текстовое сообщение от {message.from_user.id} в состоянии {current_state}: {message.text[:30]}...")
 
 
 # Silence unhandled update logs
@@ -1061,6 +1222,12 @@ if __name__ == "__main__":
         async def init_openai_pool():
             try:
                 from app.assistants.client import client, initialize_pool
+                # Логируем ключевые параметры OpenAI
+                from app.config import settings
+                logger.info(f"OPENAI_ASSISTANT_ID: {settings.OPENAI_ASSISTANT_ID}")
+                logger.info(f"OPENAI_CHAT_KEY: {settings.OPENAI_CHAT_KEY}")
+                logger.info(f"OPENAI_API_KEY: {settings.OPENAI_API_KEY}")
+                logger.info(f"client: {client}")
                 logger.info("Initializing OpenAI thread pool in background...")
                 await initialize_pool(client)
                 logger.info("OpenAI thread pool initialized successfully")

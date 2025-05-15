@@ -101,7 +101,22 @@ def clean_num(val, default=None) -> Optional[float]:
 
 # Автозамена названий по словарю (расстояние Левенштейна <= 2)
 def autocorrect_name(name: str, allowed_names: List[str]) -> str:
+    """
+    Автокоррекция названий товаров на основе списка разрешенных названий.
+    
+    Args:
+        name: Исходное название
+        allowed_names: Список разрешенных названий
+        
+    Returns:
+        Исправленное или исходное название
+    """
     from rapidfuzz.distance import Levenshtein
+    
+    # Проверка на None
+    if name is None:
+        return name
+        
     name = name.strip()
     best = name
     min_dist = 3
@@ -377,10 +392,10 @@ def postprocess_parsed_data(parsed: ParsedData, req_id: str = "unknown") -> Pars
                 logging.info(f"Вычислена общая сумма: {parsed.total_price}")
         
         # Логируем итоговые данные
-        log_indonesian_invoice(req_id, parsed.dict(), phase="postprocessing")
+        log_indonesian_invoice(req_id, parsed.model_dump(), phase="postprocessing")
         
         return parsed
     except Exception as e:
         # В случае любой ошибки логируем и возвращаем исходные данные
         logging.error(f"Ошибка при постобработке данных: {e}")
-        return parsed 
+        return parsed

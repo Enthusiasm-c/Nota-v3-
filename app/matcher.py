@@ -19,7 +19,11 @@ try:
         score_cutoff: Union[float, None] = None,
     ) -> float:
         # Используем rapidfuzz.fuzz.ratio для вычисления сходства
-        return ratio(s1, s2, processor=processor, score_cutoff=score_cutoff)
+        # Конвертируем score_cutoff в диапазон 0-100 для rapidfuzz
+        rf_score_cutoff = score_cutoff * 100 if score_cutoff is not None else None
+        result = ratio(s1, s2, processor=processor, score_cutoff=rf_score_cutoff)
+        # Нормализуем результат к диапазону 0.0-1.0 (ratio возвращает 0-100)
+        return result / 100.0 if result is not None else 0.0
 
     def levenshtein_distance(
         s1: Sequence[Hashable],
@@ -384,7 +388,7 @@ def match_positions(
         has_color_descriptor = False  # Флаг для цветовых модификаторов
 
         # Проверка на цветовые модификаторы (green, red, yellow, etc.)
-        normalized_name = name.lower().strip()
+        normalized_name = name.lower().strip() if name else ""
         color_prefixes = ["green", "red", "yellow", "black", "white", "blue", "purple", "brown"]
         base_name = None
         

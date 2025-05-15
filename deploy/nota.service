@@ -1,0 +1,36 @@
+[Unit]
+Description=Nota-AI Telegram Bot
+After=network.target redis-server.service
+Wants=redis-server.service
+
+[Service]
+User=root
+Group=root
+WorkingDirectory=/opt/nota-ai
+Environment="PYTHONPATH=/opt/nota-ai"
+Environment="PYTHONUNBUFFERED=1"
+Environment="ENV=production"
+Environment="LOG_LEVEL=INFO"
+
+ExecStart=/opt/nota-ai/venv/bin/python /opt/nota-ai/bot.py
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+TimeoutSec=60
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nota-bot
+
+# Security settings
+PrivateTmp=true
+ProtectSystem=full
+NoNewPrivileges=true
+
+# Resource constraints for small VPS (1 vCPU, 1 GB RAM)
+MemoryMax=768M
+CPUQuota=90%
+TasksMax=50
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target

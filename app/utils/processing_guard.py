@@ -23,6 +23,16 @@ _sending_to_syrve_users: Set[int] = set()
 # Множество пользователей для отслеживания частых запросов
 _user_request_timestamps: Dict[int, Dict[str, float]] = {}
 
+# Словари для хранения блокировок
+_processing_photo: Dict[int, bool] = {}
+_sending_to_syrve: Dict[int, bool] = {}
+_processing_edit: Dict[int, bool] = {}
+
+# Таймауты для автоматического снятия блокировок
+PHOTO_TIMEOUT = 60  # 60 секунд
+SYRVE_TIMEOUT = 30  # 30 секунд
+EDIT_TIMEOUT = 15   # 15 секунд
+
 async def check_user_busy(user_id: int, context_name: str = "default") -> bool:
     """
     Проверяет, занят ли пользователь обработкой другого запроса.
@@ -98,23 +108,18 @@ async def is_processing_photo(user_id: int) -> bool:
     Returns:
         True, если пользователь обрабатывает фото, False в противном случае
     """
-    return user_id in _processing_photo_users
+    return _processing_photo.get(user_id, False)
 
-async def set_processing_photo(user_id: int, processing: bool = True) -> None:
-    """
-    Устанавливает флаг обработки фотографии для пользователя.
-    
-    Args:
-        user_id: ID пользователя Telegram
-        processing: True для установки флага, False для снятия
-    """
-    if processing:
-        _processing_photo_users.add(user_id)
-        logger.debug(f"User {user_id} marked as processing photo")
-    else:
-        if user_id in _processing_photo_users:
-            _processing_photo_users.remove(user_id)
-            logger.debug(f"User {user_id} unmarked as processing photo")
+async def set_processing_photo(user_id: int, state: bool) -> None:
+    """Установить флаг обработки фото для пользователя."""
+    _processing_photo[user_id] = state
+    if state:
+        asyncio.create_task(_auto_clear_photo(user_id))
+
+async def _auto_clear_photo(user_id: int) -> None:
+    """Автоматически снять блокировку обработки фото через таймаут."""
+    await asyncio.sleep(PHOTO_TIMEOUT)
+    _processing_photo.pop(user_id, None)
 
 # --- Функции для отправки в Syrve ---
 
@@ -128,23 +133,54 @@ async def is_sending_to_syrve(user_id: int) -> bool:
     Returns:
         True, если пользователь отправляет данные в Syrve
     """
-    return user_id in _sending_to_syrve_users
+    return _sending_to_syrve.get(user_id, False)
 
-async def set_sending_to_syrve(user_id: int, sending: bool = True) -> None:
+async def set_sending_to_syrve(user_id: int, state: bool) -> None:
+    """Установить флаг отправки в Syrve для пользователя."""
+    _sending_to_syrve[user_id] = state
+    if state:
+        asyncio.create_task(_auto_clear_syrve(user_id))
+
+async def _auto_clear_syrve(user_id: int) -> None:
+    """Автоматически снять блокировку отправки в Syrve через таймаут."""
+    await asyncio.sleep(SYRVE_TIMEOUT)
+    _sending_to_syrve.pop(user_id, None)
+
+# --- Функции для редактирования инвойса ---
+
+async def is_processing_edit(user_id: int) -> bool:
     """
-    Устанавливает флаг отправки в Syrve для пользователя.
+    Проверяет, редактирует ли пользователь инвойс в данный момент.
     
     Args:
         user_id: ID пользователя Telegram
-        sending: True для установки флага, False для снятия
+        
+    Returns:
+        True, если пользователь редактирует инвойс
     """
-    if sending:
-        _sending_to_syrve_users.add(user_id)
-        logger.debug(f"User {user_id} marked as sending to Syrve")
-    else:
-        if user_id in _sending_to_syrve_users:
-            _sending_to_syrve_users.remove(user_id)
-            logger.debug(f"User {user_id} unmarked as sending to Syrve")
+    return _processing_edit.get(user_id, False)
+
+async def set_processing_edit(user_id: int, state: bool) -> None:
+    """
+    Установить флаг редактирования для пользователя.
+    
+    Args:
+        user_id: ID пользователя Telegram
+        state: True для установки флага, False для снятия
+    """
+    logger.debug(f"set_processing_edit: user_id={user_id}, state={state}")
+    _processing_edit[user_id] = state
+    if state:
+        # Запускаем задачу автоматической очистки флага через EDIT_TIMEOUT секунд
+        asyncio.create_task(_auto_clear_edit(user_id))
+
+async def _auto_clear_edit(user_id: int) -> None:
+    """Автоматически снять блокировку редактирования через таймаут."""
+    await asyncio.sleep(EDIT_TIMEOUT)
+    if user_id in _processing_edit:
+        prev_state = _processing_edit.get(user_id)
+        _processing_edit.pop(user_id, None)
+        logger.debug(f"Автоочистка блокировки редактирования для user_id={user_id}, prev_state={prev_state}")
 
 # --- Защита от частых запросов ---
 
@@ -303,5 +339,9 @@ def clear_all_locks():
     # Более подробное логирование для отладки
     logger.info(f"All user locks and flags cleared: active_users={len(_active_users)}, photo_users={len(_processing_photo_users)}, syrve_users={len(_sending_to_syrve_users)}, request_timestamps={len(_user_request_timestamps)}")
     print(f"[GUARD] Cleared all locks: active_users={len(_active_users)}, photo_users={len(_processing_photo_users)}, syrve_users={len(_sending_to_syrve_users)}")
+    
+    _processing_photo.clear()
+    _sending_to_syrve.clear()
+    _processing_edit.clear()
     
     return True

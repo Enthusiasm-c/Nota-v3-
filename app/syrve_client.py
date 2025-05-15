@@ -66,6 +66,11 @@ class SyrveClient:
         pass_hash = self._get_sha1_password()
         params = {"login": self.login, "pass": pass_hash}
         try:
+            # Используем verify=False для работы с самоподписанными сертификатами
+            # и отключаем предупреждения о незащищенных запросах
+            import urllib3
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            
             async with httpx.AsyncClient(timeout=self.timeout, verify=False) as client:
                 response = await client.get(auth_url, params=params)
                 response.raise_for_status()
@@ -87,6 +92,10 @@ class SyrveClient:
         
         # Try POST /resto/api/auth with Content-Type: application/x-www-form-urlencoded
         try:
+            # Повторно отключаем предупреждения о SSL для этого запроса
+            import urllib3
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            
             async with httpx.AsyncClient(timeout=self.timeout, verify=False) as client:
                 response = await client.post(
                     auth_url,
@@ -180,6 +189,14 @@ class SyrveClient:
         """
         import_url = f"{self.api_url}/resto/api/documents/import/incomingInvoice"
         try:
+            # Отключаем предупреждения о SSL
+            import urllib3
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            
+            # Логируем для отладки
+            logger.info(f"Sending invoice to Syrve: {import_url}")
+            logger.debug(f"Invoice XML: {xml[:100]}...")
+            
             async with httpx.AsyncClient(timeout=self.timeout, verify=False) as client:
                 response = await client.post(
                     import_url,
@@ -189,9 +206,26 @@ class SyrveClient:
                         "Content-Type": "application/xml"
                     }
                 )
-                response.raise_for_status()
-                # Ответ всегда XML, возвращаем как строку или парсим при необходимости
-                return {"response": response.text, "valid": response.status_code == 200}
+                
+                # Проверяем ответ
+                if response.status_code == 200:
+                    logger.info("Invoice successfully imported to Syrve")
+                    return {"response": response.text, "valid": True}
+                else:
+                    logger.warning(f"Syrve returned non-200 status: {response.status_code}")
+                    logger.warning(f"Response body: {response.text}")
+                    return {
+                        "valid": False,
+                        "status": response.status_code,
+                        "errorMessage": f"Syrve API Error: {response.text}"
+                    }
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error during invoice import: {e.response.status_code} - {e.response.text}")
+            return {
+                "valid": False,
+                "status": e.response.status_code,
+                "errorMessage": f"HTTP error: {e.response.text}"
+            }
         except Exception as e:
             logger.error(f"Invoice import failed: {str(e)}")
             return {
@@ -227,8 +261,16 @@ async def generate_invoice_xml(invoice_data: Dict[str, Any], openai_client) -> s
                 logger.error(f"Error loading Syrve prompt: {e}")
                 _syrve_prompt_cache = "Generate a valid Syrve XML document for the provided invoice data."
         
-        # Convert invoice data to JSON string
-        invoice_json = json.dumps(invoice_data, indent=2)
+        # Convert invoice data to JSON string with custom serialization for date objects
+        def json_serial(obj):
+            """Custom serializer for objects not serializable by default json module"""
+            if hasattr(obj, 'isoformat'):
+                # Handle date, datetime, and time objects
+                return obj.isoformat()
+            raise TypeError(f"Type {type(obj)} not serializable")
+        
+        # Use custom serializer for invoice data
+        invoice_json = json.dumps(invoice_data, indent=2, default=json_serial)
         
         # Create messages for the API call
         messages = [

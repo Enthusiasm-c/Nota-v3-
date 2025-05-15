@@ -1,19 +1,21 @@
-from app.detectors.table.interface import TableDetector
-from app.detectors.table.paddle_detector import PaddleTableDetector
-import logging
+"""
+Factory for creating table detectors.
+"""
+from typing import Dict, Any
 
-def get_detector(method="paddle") -> TableDetector:
+
+def get_detector(method="paddle"):
     """
-    Фабрика для создания детектора таблиц.
+    Factory method to get table detector by method name.
     
     Args:
-        method: Метод детекции таблиц ('paddle' или будущие реализации)
+        method: The detector method to use
         
     Returns:
-        TableDetector: Экземпляр детектора таблиц
+        Table detector instance
     """
     if method == "paddle":
-        return PaddleTableDetector()
+        from . import paddle_detector
+        return paddle_detector.PaddleTableDetector()
     else:
-        logging.warning(f"Неизвестный метод детекции таблиц: {method}. Используется PaddleTableDetector.")
-        return PaddleTableDetector()
+        raise ValueError(f"Unknown table detector method: {method}")

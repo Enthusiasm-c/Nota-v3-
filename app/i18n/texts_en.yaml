@@ -1,6 +1,6 @@
 status:
-  welcome: "👋 Welcome to Nota AI Bot! I'm here to help you process your invoices."
-  send_photo: "Please send a photo of your invoice."
+  welcome: "👋 Добро пожаловать в Nota AI Bot! Я помогу вам обработать ваши инвойсы."
+  send_photo: "Пожалуйста, отправьте фотографию инвойса."
   receiving_image: "📸 Receiving image..."
   image_received: ""
   preprocessing_image: "🖼️ Preprocessing image..."
@@ -26,7 +26,7 @@ status:
   syrve_success: "✅ Invoice #{id} successfully uploaded to Syrve!"
 
 main:
-  ready_to_work: "Ready to work. Send me a photo of an invoice to process."
+  ready_to_work: "Готов к работе. Отправьте фото инвойса для обработки."
 
 edit:
   row_canceled: "Editing for row {line} cancelled."
@@ -53,13 +53,13 @@ example:
   edit_field_success: "✅ Field '{field}' updated to '{value}'. Line {line} changed."
 
 buttons:
-  edit: "Edit"
-  confirm: "Confirm"
-  cancel: "Cancel"
-  back: "Back"
-  help: "Help"
-  upload_new: "Upload New Invoice"
-  set_supplier: "Set Supplier"
+  edit: "Редактировать"
+  confirm: "Подтвердить"
+  cancel: "Отмена"
+  back: "Назад"
+  help: "Помощь"
+  upload_new: "Загрузить новый инвойс"
+  set_supplier: "Установить поставщика"
 
 suggestion:
   no_similar_items: "No similar items found in the database."

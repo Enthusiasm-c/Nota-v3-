@@ -12,6 +12,7 @@ import asyncio
 import logging
 from datetime import datetime
 from dotenv import load_dotenv
+import httpx
 
 # Добавляем корневую директорию проекта в PYTHONPATH
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -186,12 +187,9 @@ def generate_manual_xml(invoice_data):
     xml_declaration = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
     pretty_xml = reparsed.toprettyxml(indent='  ')
     # Удаляем первую строку (стандартный заголовок minidom)
-    xml_content = '
-'.join(pretty_xml.split('
-')[1:])
+    xml_content = '\n'.join(pretty_xml.split('\n')[1:])
     # Собираем итоговый XML с нашим заголовком
-    formatted_xml = xml_declaration + '
-' + xml_content
+    formatted_xml = xml_declaration + '\n' + xml_content
     
     return formatted_xml
 

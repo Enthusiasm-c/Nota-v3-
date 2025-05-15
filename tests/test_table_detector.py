@@ -88,3 +88,65 @@ class TestTableDetectorWithFixtures:
             assert 'bbox' in result['tables'][0]
             assert 'cells' in result['tables'][0]
             assert len(result['tables'][0]['cells']) == 2 
+
+def test_detect_tables_success():
+    fake_ppstructure = MagicMock()
+    fake_ppstructure.return_value = [
+        {"type": "table", "bbox": [0, 0, 10, 10], "res": [{"bbox": [0, 0, 5, 5], "text": "cell1"}]},
+        {"type": "other", "bbox": [0, 0, 10, 10], "res": []},
+    ]
+    detector = PaddleTableDetector()
+    detector.structure_engine = fake_ppstructure
+    image_bytes = b"fake_image"
+    with patch("PIL.Image.open") as mock_open:
+        mock_img = MagicMock()
+        mock_img.convert.return_value = mock_img
+        mock_img.width = 10
+        mock_img.height = 10
+        mock_img.crop.return_value = mock_img
+        mock_open.return_value = mock_img
+        result = detector.detect(image_bytes)
+        assert "tables" in result
+        assert len(result["tables"]) == 1
+        assert result["tables"][0]["bbox"] == [0, 0, 10, 10]
+        assert isinstance(result["tables"][0]["cells"], list)
+
+
+def test_detect_tables_incorrect_result():
+    fake_ppstructure = MagicMock(return_value="not_a_list")
+    detector = PaddleTableDetector()
+    detector.structure_engine = fake_ppstructure
+    image_bytes = b"fake_image"
+    with patch("PIL.Image.open") as mock_open:
+        mock_img = MagicMock()
+        mock_img.convert.return_value = mock_img
+        mock_open.return_value = mock_img
+        result = detector.detect(image_bytes)
+        assert result == {"tables": []}
+
+
+def test_detect_no_structure_engine():
+    detector = PaddleTableDetector()
+    detector.structure_engine = None
+    with pytest.raises(RuntimeError):
+        detector.detect(b"fake_image")
+
+
+def test_extract_cells_incorrect_result():
+    fake_ppstructure = MagicMock(return_value="not_a_list")
+    detector = PaddleTableDetector()
+    detector.structure_engine = fake_ppstructure
+    image_bytes = b"fake_image"
+    with patch("PIL.Image.open") as mock_open:
+        mock_img = MagicMock()
+        mock_img.convert.return_value = mock_img
+        mock_open.return_value = mock_img
+        result = detector.extract_cells(image_bytes)
+        assert result == []
+
+
+def test_extract_no_structure_engine():
+    detector = PaddleTableDetector()
+    detector.structure_engine = None
+    with pytest.raises(RuntimeError):
+        detector.extract_cells(b"fake_image") 

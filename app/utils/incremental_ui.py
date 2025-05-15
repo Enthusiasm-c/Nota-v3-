@@ -160,6 +160,27 @@ class IncrementalUI:
             except Exception as e2:
                 logger.error(f"Fallback edit also failed: {e2}")
     
+    async def complete_with_keyboard(self, final_text: str, has_errors: bool = False, lang: str = "ru") -> None:
+        """
+        Завершает последовательность обновлений с добавлением стандартной клавиатуры в зависимости от наличия ошибок.
+        
+        Args:
+            final_text: Финальный текст для отображения
+            has_errors: Флаг наличия ошибок, влияет на отображение кнопки "Подтвердить"
+            lang: Язык для интернационализации
+        """
+        from app.keyboards import build_main_kb
+        
+        # Добавляем подробное логирование для диагностики
+        logger.info(f"complete_with_keyboard: создаем клавиатуру с has_errors={has_errors}")
+        
+        # Явно передаем has_errors в build_main_kb
+        keyboard = build_main_kb(has_errors=has_errors, lang=lang)
+        
+        # Используем стандартный метод complete с явной передачей клавиатуры
+        await self.complete(final_text, kb=keyboard)
+        logger.info(f"UI completed with keyboard, has_errors={has_errors}")
+    
     async def error(self, error_text: str, show_timing: bool = False) -> None:
         """
         Показывает сообщение об ошибке.

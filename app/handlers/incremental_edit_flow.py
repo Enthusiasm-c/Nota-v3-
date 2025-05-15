@@ -11,8 +11,9 @@ from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from rapidfuzz import process as fuzzy_process
+import re
 
-from app.fsm.states import EditFree
+from app.fsm.states import EditFree, NotaStates
 from app.assistants.client import run_thread_safe_async
 from app.edit.apply_intent import apply_intent
 from app.formatters import report
@@ -29,6 +30,7 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 @router.message(EditFree.awaiting_input)
+@router.message(NotaStates.editing)
 async def handle_free_edit_text(message: Message, state: FSMContext):
     """
     Улучшенный обработчик свободного ввода пользователя для редактирования инвойса через ядро edit_core.
@@ -58,6 +60,8 @@ async def handle_free_edit_text(message: Message, state: FSMContext):
             return
             
         processing_started = False
+        
+        # Обработчик для отправки текста обработки
         async def send_processing(text):
             nonlocal processing_started
             if not processing_started:
@@ -65,18 +69,28 @@ async def handle_free_edit_text(message: Message, state: FSMContext):
                 processing_started = True
             else:
                 await ui.update(text)
+        
+        # Обработчик для отправки результата с клавиатурой
+        result_ui = None
+        has_errors_result = True
+        
         async def send_result(text):
-            await ui.complete(text)
+            nonlocal result_ui, has_errors_result
+            result_ui = text
+        
         async def send_error(text):
             await ui.error(text)
+        
         async def fuzzy_suggester(message, state, name, idx, lang):
             # Здесь можно реализовать кастомный UI для fuzzy
             from app.handlers.name_picker import show_fuzzy_suggestions
             return await show_fuzzy_suggestions(message, state, name, idx, lang)
+        
         async def edit_state():
             await state.set_state(EditFree.awaiting_input)
 
-        await process_user_edit(
+        # Отправляем сразу на OpenAI для парсинга интента
+        result = await process_user_edit(
             message=message,
             state=state,
             user_text=user_text,
@@ -85,8 +99,30 @@ async def handle_free_edit_text(message: Message, state: FSMContext):
             send_result=send_result,
             send_error=send_error,
             fuzzy_suggester=fuzzy_suggester,
-            edit_state=edit_state
+            edit_state=edit_state,
+            # Не передаем локальный парсер, чтобы использовался GPT по умолчанию
+            run_openai_intent=None
         )
+        
+        # Проверяем, что результат был получен успешно и содержит has_errors
+        if result and isinstance(result, tuple) and len(result) >= 3:
+            _, _, has_errors_result = result
+            logger.info(f"[incremental_edit_flow] Process result: has_errors={has_errors_result}")
+            
+            # Отображаем финальный результат с клавиатурой
+            if result_ui:
+                await ui.complete_with_keyboard(result_ui, has_errors=has_errors_result, lang=lang)
+                logger.info(f"[incremental_edit_flow] UI completed with keyboard, has_errors={has_errors_result}")
+            else:
+                logger.warning("[incremental_edit_flow] No result_ui to display")
+        else:
+            # Если результат не содержит has_errors, используем стандартный метод complete
+            if result_ui:
+                await ui.complete(result_ui)
+                logger.info("[incremental_edit_flow] UI completed without keyboard")
+            else:
+                logger.warning("[incremental_edit_flow] No result_ui to display")
+                
         await state.set_state(EditFree.awaiting_input)
         
     except Exception as e:
@@ -128,6 +164,7 @@ async def handle_edit_free(call: CallbackQuery, state: FSMContext):
     await ui.append("• <i>строка 2 цена 95000</i>")
     await ui.append("• <i>строка 1 название Apple</i>")
     await ui.append("• <i>строка 3 количество 10</i>")
+    await ui.append("• <i>строка 3 единица шт</i>")
     
     # Завершаем UI с инструкцией по отмене
     await ui.complete("Введите команду или <i>отмена</i> для возврата.")

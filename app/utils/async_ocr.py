@@ -175,12 +175,16 @@ async def async_ocr(image_bytes: bytes, req_id: Optional[str] = None,
     
     # Создаем задачу с таймаутом
     try:
-        # Используем защищенную сессию с повторными попытками
+        # Используем защищенную сессию с повторными попытками и таймаутом
         session = await get_http_session()
         api_start_time = time.time()
         
-        async with asyncio.timeout(timeout):
-            async with session.post(api_url, json=payload, headers=headers) as response:
+        # Создаем сессию с таймаутом для этого конкретного запроса
+        request_timeout = aiohttp.ClientTimeout(total=timeout)
+        
+        # Выполняем запрос с таймаутом
+        try:
+            async with session.post(api_url, json=payload, headers=headers, timeout=request_timeout) as response:
                 if response.status != 200:
                     error_text = await response.text()
                     logger.error(f"[{req_id}] API вернул ошибку: {response.status} {error_text}")
@@ -190,6 +194,9 @@ async def async_ocr(image_bytes: bytes, req_id: Optional[str] = None,
                 api_response = await response.json()
                 api_duration = time.time() - api_start_time
                 logger.info(f"[{req_id}] OCR API вызов выполнен за {api_duration:.2f}с")
+        except asyncio.TimeoutError:
+            logger.error(f"[{req_id}] OCR API вызов превысил таймаут {timeout}с")
+            raise asyncio.TimeoutError(f"OCR операция превысила таймаут {timeout}с")
                 
         # Проверяем наличие ответа
         if not api_response.get("choices"):

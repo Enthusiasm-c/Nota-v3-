@@ -45,10 +45,16 @@ class ErrorAnalyzer:
             if match := re.match(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3})", line):
                 timestamp = datetime.strptime(match.group(1), "%Y-%m-%d %H:%M:%S,%f")
             
-            # Поиск типа ошибки и сообщения
-            if "Exception" in line or "Error" in line:
-                parts = line.split(": ", 1)
-                if len(parts) == 2:
+            # Поиск типа ошибки и сообщения (улучшено)
+            # Пример: '2024-05-13 12:00:00,123 ERROR: AttributeError: ...'
+            if re.search(r"(Exception|Error)", line):
+                # Ищем последний ':' — после него сообщение
+                parts = line.split(": ", 2)
+                if len(parts) == 3:
+                    # parts[1] — тип ошибки (например, 'AttributeError')
+                    error_type = parts[1].strip()
+                    error_message = parts[2].strip()
+                elif len(parts) == 2:
                     error_type = parts[0].strip()
                     error_message = parts[1].strip()
             
@@ -124,7 +130,7 @@ class ErrorAnalyzer:
                 logger.warning(f"Лог-файл {self.log_file} не найден")
                 return None
             
-            with open(self.log_file, 'r') as f:
+            with open(self.log_file, 'r', encoding='utf-8', errors='ignore') as f:
                 # Переходим к последней известной позиции
                 f.seek(self.last_position)
                 

@@ -1,81 +1,59 @@
-import asyncio
+"""
+OCR utility functions for invoice processing.
+"""
 import base64
-import io
-import json
 import logging
-import re
 import time
-from typing import Any, Dict, List, Optional, Union
-from pathlib import Path
-from uuid import uuid4
-import openai
-from io import BytesIO
+from typing import Dict, Any, Optional
 
 from app.models import ParsedData
-from app.config import settings, get_ocr_client
-from app.utils.monitor import increment_counter, ocr_monitor
-from app.utils.api_decorators import with_async_retry_backoff, with_retry_backoff, ErrorType
-from app.utils.debug_logger import log_ocr_call, log_ocr_performance, ocr_logger, create_memory_monitor
-from app.ocr_prompt import build_prompt
-from app.postprocessing import postprocess_parsed_data, clean_num
-from app.utils.enhanced_logger import log_indonesian_invoice, log_format_issues, PerformanceTimer
+from app.postprocessing import postprocess_parsed_data
+from app.ocr_prompt import OCR_SYSTEM_PROMPT
+from app.config import settings
 from app.utils.ocr_cache import get_from_cache, save_to_cache
+from app.imgprep.prepare import prepare_for_ocr
 
-# --- Импорт оптимизации изображений ---
-try:
-    from app.imgprep import prepare_for_ocr
-    IMG_PREP_AVAILABLE = True
-except ImportError:
-    # Если модуль недоступен, определяем заглушку для обеспечения совместимости
-    def prepare_for_ocr(image_bytes, **kwargs):
-        return image_bytes
-    IMG_PREP_AVAILABLE = False
 
-# Схема для функции получения данных инвойса
+# Schema for the function call in OpenAI API
 INVOICE_FUNCTION_SCHEMA = {
     "name": "get_parsed_invoice",
-    "description": "Извлекает структурированные данные из накладной, включая список ВСЕХ товаров, поставщика, дату и суммы",
+    "description": "Parse structured data from invoice image",
     "parameters": {
         "type": "object",
         "properties": {
             "supplier": {
-                "type": "string", 
-                "description": "Название поставщика из накладной или null",
-                "nullable": True
+                "type": "string",
+                "description": "Supplier name from the invoice"
             },
             "date": {
                 "type": "string",
-                "description": "Дата накладной в формате YYYY-MM-DD",
-                "nullable": True
+                "description": "Invoice date in YYYY-MM-DD format"
             },
             "positions": {
                 "type": "array",
-                "description": "Список ВСЕХ позиций (товаров) в накладной без исключения",
+                "description": "List of invoice positions",
                 "items": {
                     "type": "object",
                     "properties": {
                         "name": {
                             "type": "string",
-                            "description": "Название товара точно как указано в накладной"
+                            "description": "Product name"
                         },
                         "qty": {
                             "type": "number",
-                            "description": "Количество товара (может быть дробным)"
+                            "description": "Quantity"
                         },
                         "unit": {
                             "type": "string",
-                            "description": "Единица измерения (кг, гр, л, мл, шт, упак)",
-                            "nullable": True
+                            "description": "Unit of measurement"
                         },
                         "price": {
                             "type": "number",
-                            "description": "Цена за единицу товара (целое число)",
-                            "nullable": True
+                            "description": "Price per unit"
                         },
                         "total_price": {
                             "type": "number",
-                            "description": "Общая стоимость позиции (цена * количество)",
-                            "nullable": True
+                            "description": "Total price for this position"
                         }
                     },
                     "required": ["name", "qty"]
@@ -83,181 +61,238 @@ INVOICE_FUNCTION_SCHEMA = {
             },
             "total_price": {
                 "type": "number",
-                "description": "Общая сумма накладной",
-                "nullable": True
+                "description": "Total invoice amount"
             }
         },
         "required": ["positions"]
     }
 }
 
-@log_ocr_call
-@with_retry_backoff(max_retries=1, initial_backoff=0.5, backoff_factor=2.0)
-def call_openai_ocr(image_bytes: bytes, _req_id=None, use_cache: bool = True) -> ParsedData:
+
+def get_ocr_client():
+    """Get OpenAI client instance for OCR."""
+    try:
+        import openai
+        # Use OPENAI_OCR_KEY instead of OPENAI_API_KEY
+        client = openai.OpenAI(api_key=settings.OPENAI_OCR_KEY)
+        return client
+    except (ImportError, Exception) as e:
+        logging.error(f"Failed to initialize OpenAI client: {e}")
+        return None
+
+
+def call_openai_ocr(image_bytes: bytes, _req_id=None, use_cache: bool = True, timeout: int = 20) -> ParsedData:
     """
-    Прямой вызов OpenAI Vision API (gpt-4o) для распознавания инвойса с использованием function calling.
-    Включает кеширование результатов и оптимизацию изображений.
+    Call OpenAI Vision API to extract data from an invoice image.
     
     Args:
-        image_bytes: Байты изображения для обработки
-        _req_id: Идентификатор запроса для логирования
-        use_cache: Использовать ли кеширование результатов
+        image_bytes: Raw image bytes
+        _req_id: Optional request ID for tracking
+        use_cache: Whether to use cache
+        timeout: Timeout in seconds for the API call (default 20)
         
     Returns:
-        ParsedData: Структурированные данные инвойса
-        
-    Raises:
-        RuntimeError: При ошибках API или парсинга данных
+        ParsedData model with extracted information
     """
-    t0 = time.time()
-    req_id = _req_id or f"ocr_{int(t0)}"
-    ocr_logger.info(f"[{req_id}] Начинаю OCR-обработку изображения размером {len(image_bytes)} байт (Vision API)")
-    
-    # Проверяем кеш, если разрешено
+    # Try to get from cache first (fastest path)
     if use_cache:
-        cached_result = get_from_cache(image_bytes)
-        if cached_result:
-            ocr_logger.info(f"[{req_id}] Используем кешированный результат OCR")
-            elapsed = time.time() - t0
-            ocr_logger.info(f"[{req_id}] OCR из кеша завершен за {elapsed:.2f} сек")
-            
-            # Добавляем метрику для мониторинга кеша
-            increment_counter("nota_ocr_cache_hits")
-            
-            return cached_result
+        try:
+            cached_data = get_from_cache(image_bytes)
+            if cached_data:
+                logging.info("Using cached OCR result")
+                return cached_data
+        except Exception as e:
+            logging.warning(f"Cache read error: {e}")
     
-    # Если результата нет в кеше, продолжаем обработку
+    # Start timer for overall processing
+    start_time = time.time()
+    
+    # Prepare image - optimize for OCR
+    try:
+        optimized_image = prepare_for_ocr(image_bytes)
+        logging.debug("Image optimized for OCR")
+    except Exception as e:
+        logging.warning(f"Image optimization error: {e}, using original image")
+        optimized_image = image_bytes
+    
+    # Get OpenAI client with validation
     client = get_ocr_client()
     if not client:
-        logging.error("OCR unavailable: no OpenAI OCR client")
-        raise RuntimeError("OCR unavailable: Please check your OPENAI_OCR_KEY")
-
-    # Мониторинг памяти
+        raise RuntimeError("OpenAI client not available")
+    
+    # Ensure client has chat attribute
+    if not hasattr(client, 'chat'):
+        raise RuntimeError("Invalid OpenAI client (no chat attribute)")
+    
+    # Convert image to base64 - required for API
+    base64_image = base64.b64encode(optimized_image).decode("utf-8")
+    
+    # Log start of API call
+    api_start_time = time.time()
+    logging.info(f"Starting OCR API call with timeout {timeout}s")
+    
+    # Call OpenAI Vision with timeout
+    import concurrent.futures
+    from concurrent.futures import ThreadPoolExecutor
+    
     try:
-        memory_monitor = create_memory_monitor()(req_id)
-        memory_monitor.start()
-        ocr_logger.debug(f"[{req_id}] Запущен мониторинг памяти")
-    except Exception as mon_err:
-        ocr_logger.warning(f"[{req_id}] Не удалось запустить мониторинг памяти: {str(mon_err)}")
-
-    t_step = log_ocr_performance(t0, "Initialization", req_id)
-    prompt = build_prompt()
-
-    # Автоматическая оптимизация изображения
-    try:
-        # Оптимизируем размер изображения без сохранения во временный файл
-        original_size = len(image_bytes)
-        image_bytes = prepare_for_ocr(image_bytes, use_preprocessing=True)
-        new_size = len(image_bytes)
-        
-        if new_size < original_size:
-            ocr_logger.info(f"[{req_id}] Изображение оптимизировано для Vision API, размер: {new_size} байт (сжатие {(1 - new_size/original_size)*100:.1f}%)")
-        else:
-            ocr_logger.info(f"[{req_id}] Изображение не требует оптимизации, размер: {new_size} байт")
-    except Exception as prep_err:
-        ocr_logger.warning(f"[{req_id}] Ошибка оптимизации изображения: {prep_err}. Использую оригинал.")
-
-    # Формируем base64 изображение
-    b64_image = base64.b64encode(image_bytes).decode("utf-8")
-    messages = [
-        {"role": "system", "content": prompt},
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "Распознай только товары, которые явно видны на накладной. Никогда не добавляй товары, которых нет на изображении. Не галлюцинируй! Я предпочту получить меньше позиций, но точно распознанных, чем много случайных."},
-                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_image}", "detail": "high"}}
-            ]
-        }
-    ]
-
-    try:
-        ocr_logger.info(f"[{req_id}] Отправляю запрос в gpt-4o с использованием function calling")
-        with PerformanceTimer(req_id, "openai_vision_api_call"):
-            response = client.chat.completions.create(
+        # Create thread pool for timeout management
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            # Submit API call to thread pool
+            future = executor.submit(
+                client.chat.completions.create,
                 model="gpt-4o",
-                messages=messages,
-                max_tokens=4096,
+                max_tokens=2048,
                 temperature=0.0,
-                top_p=0.95,
                 tools=[{"type": "function", "function": INVOICE_FUNCTION_SCHEMA}],
                 tool_choice={"type": "function", "function": {"name": "get_parsed_invoice"}},
-                timeout=180
+                messages=[
+                    {"role": "system", "content": OCR_SYSTEM_PROMPT},
+                    {"role": "user", "content": [
+                        {"type": "image_url", "image_url": {
+                            "url": f"data:image/jpeg;base64,{base64_image}",
+                            "detail": "high"
+                        }}
+                    ]}
+                ]
             )
-        t_step = log_ocr_performance(t_step, "Vision API call", req_id)
-        ocr_logger.info(f"[{req_id}] Получен ответ от Vision API")
-        # Логируем полный ответ Vision API
-        try:
-            import json as _json
-            ocr_logger.debug(f"[{req_id}] RAW Vision API response: {_json.dumps(response.model_dump() if hasattr(response, 'model_dump') else str(response), ensure_ascii=False)[:2000]}")
-        except Exception as log_raw_err:
-            ocr_logger.warning(f"[{req_id}] Не удалось залогировать сырой ответ Vision API: {log_raw_err}")
-
-        # Извлекаем данные из ответа с function calling
-        function_call = response.choices[0].message.tool_calls[0]
-        if function_call.function.name != "get_parsed_invoice":
-            raise RuntimeError(f"Неожиданное имя функции в ответе: {function_call.function.name}")
+            
+            # Wait for result with timeout
+            try:
+                response = future.result(timeout=timeout)
+                # Measure time
+                api_duration = time.time() - api_start_time
+                logging.info(f"OCR API call completed successfully in {api_duration:.2f}s")
+            except concurrent.futures.TimeoutError:
+                # Cancel the future if possible
+                future.cancel()
+                logging.error(f"OCR API call timed out after {timeout}s")
+                raise TimeoutError(f"OCR API call timed out after {timeout}s")
         
-        # Извлекаем аргументы функции (JSON с данными инвойса)
-        try:
-            data = json.loads(function_call.function.arguments)
-            ocr_logger.debug(f"[{req_id}] Получены структурированные данные через function calling")
-            # Логируем результат для индонезийских накладных
-            log_indonesian_invoice(req_id, data, phase="ocr_result")
-        except Exception as e:
-            raise RuntimeError(f"Не удалось распарсить JSON из аргументов функции: {e}")
-
-        # Постобработка данных
-        for p in data.get("positions", []):
-            p["price"] = clean_num(p.get("price"))
-            p["price_per_unit"] = clean_num(p.get("price_per_unit"))
-            p["total_price"] = clean_num(p.get("total_price"))
-        data["price"] = clean_num(data.get("price"))
-        data["price_per_unit"] = clean_num(data.get("price_per_unit"))
-        data["total_price"] = clean_num(data.get("total_price"))
-        supplier = data.get("supplier")
-        if supplier and supplier.strip() in settings.OWN_COMPANY_ALIASES:
-            data["supplier"] = None
-            data["supplier_status"] = "unknown"
-
-        try:
-            parsed_data = ParsedData.model_validate(data)
-            parsed_data = postprocess_parsed_data(parsed_data, req_id)
-            elapsed = time.time() - t0
-            logging.info(f"OCR successful after {elapsed:.1f}s with {len(parsed_data.positions)} positions")
-            t_step = log_ocr_performance(t_step, "Validation completed", req_id)
-            ocr_logger.info(f"[{req_id}] OCR успешно завершен за {elapsed:.2f} сек, найдено {len(parsed_data.positions)} позиций")
-            
-            # Сохраняем результат в кеш, если разрешено
-            if use_cache and len(parsed_data.positions) > 0:
-                try:
-                    save_to_cache(image_bytes, parsed_data)
-                    ocr_logger.info(f"[{req_id}] Результат OCR сохранен в кеш")
-                except Exception as cache_err:
-                    ocr_logger.warning(f"[{req_id}] Ошибка при сохранении в кеш: {str(cache_err)}")
-            
-            return parsed_data
-        except Exception as validation_err:
-            logging.error(f"Model validation error: {validation_err}")
-            raise RuntimeError(f"⚠️ Could not process the invoice data: {str(validation_err)}") from validation_err
-
-    except openai.APITimeoutError:
-        elapsed = time.time() - t0
-        ocr_logger.error(f"[{req_id}] OpenAI API timeout after {elapsed:.1f}s")
-        raise RuntimeError("OCR processing timed out. Please try with a clearer image.")
-    except openai.APIError as api_err:
-        elapsed = time.time() - t0
-        ocr_logger.error(f"[{req_id}] OpenAI API error after {elapsed:.1f}s: {str(api_err)}")
-        raise RuntimeError(f"OpenAI API error: {str(api_err)}")
+        # Extract function call result with validation at each step
+        if not response.choices:
+            raise ValueError("Empty response from OpenAI")
+        
+        message = response.choices[0].message
+        if not message.tool_calls or len(message.tool_calls) == 0:
+            raise ValueError("No tool call in response")
+        
+        # Get the first tool call
+        tool_call = message.tool_calls[0]
+        if tool_call.function.name != "get_parsed_invoice":
+            raise ValueError(f"Unexpected function name: {tool_call.function.name}")
+        
+        # Parse JSON arguments
+        import json
+        result_data = json.loads(tool_call.function.arguments)
+        
+        # Convert to Pydantic model
+        parsed_data = ParsedData.model_validate(result_data)
+        
+        # Post-process data
+        processed_data = postprocess_parsed_data(parsed_data)
+        
+        # Cache the result for future use
+        if use_cache:
+            try:
+                save_to_cache(image_bytes, processed_data)
+                logging.debug("OCR result saved to cache")
+            except Exception as e:
+                logging.warning(f"Cache save error: {e}")
+        
+        # Log total processing time
+        total_duration = time.time() - start_time
+        logging.info(f"Total OCR processing completed in {total_duration:.2f}s")
+        
+        return processed_data
+    
+    except TimeoutError as e:
+        logging.error(f"OCR timeout error: {e}")
+        raise RuntimeError(f"OCR operation timed out: {e}")
     except Exception as e:
-        elapsed = time.time() - t0
-        ocr_logger.error(f"[{req_id}] Unexpected error after {elapsed:.1f}s: {str(e)}")
-        raise RuntimeError(f"Unexpected error: {str(e)}")
-
-def _strip_code_fence(text: str) -> str:
-    """Remove code fences and leading/trailing whitespace."""
-    text = text.strip()
-    text = re.sub(r"^```(json)?", "", text, flags=re.IGNORECASE | re.MULTILINE)
-    text = re.sub(r"```$", "", text, flags=re.MULTILINE)
-    return text.strip()
+        logging.error(f"OCR API error: {e}")
+        raise RuntimeError(f"Failed to extract data from image: {e}")
 
 
+async def call_openai_ocr_async(image_bytes: bytes, system_prompt: str = None, api_key: Optional[str] = None) -> str:
+    """
+    Async version of the OCR function that returns raw JSON string.
+    Used by the OCR pipeline as a fallback.
+    
+    Args:
+        image_bytes: Raw image bytes
+        system_prompt: Optional custom system prompt
+        api_key: Optional API key to use
+        
+    Returns:
+        JSON string with extracted data
+    """
+    # This is a simplified async version for the pipeline
+    # In a real implementation, this would use proper async client
+    
+    # Get OpenAI client
+    client = get_ocr_client()
+    if not client:
+        raise RuntimeError("OpenAI client not available")
+    
+    # Convert image to base64
+    base64_image = base64.b64encode(image_bytes).decode("utf-8")
+    
+    # Use provided prompt or default
+    prompt = system_prompt or OCR_SYSTEM_PROMPT
+    
+    # Call OpenAI Vision
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            max_tokens=2048,
+            temperature=0.0,
+            tools=[
+                {
+                    "type": "function",
+                    "function": INVOICE_FUNCTION_SCHEMA
+                }
+            ],
+            tool_choice={
+                "type": "function",
+                "function": {"name": "get_parsed_invoice"}
+            },
+            messages=[
+                {
+                    "role": "system",
+                    "content": prompt
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{base64_image}",
+                                "detail": "high"
+                            }
+                        }
+                    ]
+                }
+            ]
+        )
+        
+        # Extract function call result
+        if not response.choices:
+            raise ValueError("Empty response from OpenAI")
+        
+        message = response.choices[0].message
+        if not message.tool_calls or len(message.tool_calls) == 0:
+            raise ValueError("No tool call in response")
+        
+        # Get the first tool call
+        tool_call = message.tool_calls[0]
+        if tool_call.function.name != "get_parsed_invoice":
+            raise ValueError(f"Unexpected function name: {tool_call.function.name}")
+        
+        # Return raw JSON string
+        return tool_call.function.arguments
+    
+    except Exception as e:
+        logging.error(f"Async OCR API error: {e}")
+        raise RuntimeError(f"Failed to extract data from image: {e}")

@@ -750,7 +750,7 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
                 thread_id=thread_id,
                 role="user",
                 content=user_input,
-                max_retries=2,
+                max_retries=3,  # Увеличиваем с 2 до 3
                 initial_backoff=1.0
             )
         except Exception as e:
@@ -761,8 +761,8 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
                 "user_message": "Не удалось отправить сообщение. Пожалуйста, попробуйте позже."
             }
 
-        # ОПТИМИЗАЦИЯ 3: Уменьшаем таймаут для запросов редактирования до 30 секунд
-        actual_timeout = min(30, timeout)
+        # ОПТИМИЗАЦИЯ 3: Устанавливаем таймаут не менее 45 секунд для обеспечения надежности
+        actual_timeout = max(45, timeout)  # Увеличиваем минимальный таймаут с 30 до 45 секунд
 
         # Запускаем ассистента с повторными попытками
         logger.info(f"[run_thread_safe_async] Creating run with assistant ID: {cached_assistant_id}")
@@ -771,7 +771,7 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
                 client.beta.threads.runs.create,
                 thread_id=thread_id,
                 assistant_id=cached_assistant_id,
-                max_retries=2,
+                max_retries=3,  # Увеличиваем с 2 до 3
                 initial_backoff=1.0
             )
             run_id = run.id
@@ -789,8 +789,77 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
         latency_monitor.record_latency(latency * 1000)
         logger.info(f"assistant_latency_ms={int(latency*1000)}")
         
-        # Когда получаем результат, кешируем его для будущих схожих запросов
-        if run.status == "completed":
+        # НОВЫЙ КОД: Ожидание завершения запроса с дополнительными проверками
+        max_wait_iterations = 8  # Максимальное количество итераций ожидания
+        wait_iteration = 0
+        status = run.status
+        
+        # Ожидаем, пока run не завершится или не упадет с ошибкой
+        while status in ["queued", "in_progress"] and wait_iteration < max_wait_iterations:
+            # Увеличиваем время ожидания с каждой итерацией
+            wait_time = 1.0 * (1.5 ** wait_iteration)  # Экспоненциальное увеличение времени ожидания
+            logger.info(f"[run_thread_safe_async] Waiting for run completion, status={status}, iteration={wait_iteration}, wait_time={wait_time:.1f}s")
+            await asyncio.sleep(wait_time)
+            
+            # Получаем обновленный статус
+            try:
+                run = await retry_openai_call(
+                    client.beta.threads.runs.retrieve,
+                    thread_id=thread_id,
+                    run_id=run_id,
+                    max_retries=2
+                )
+                status = run.status
+                logger.info(f"[run_thread_safe_async] Updated run status: {status}")
+                
+                # Обработка статуса requires_action (требуется интеграция с инструментами)
+                if status == "requires_action":
+                    # Получаем требуемые действия
+                    required_action = run.required_action
+                    if required_action and required_action.type == "submit_tool_outputs":
+                        tool_calls = required_action.submit_tool_outputs.tool_calls
+                        logger.info(f"[run_thread_safe_async] Requires action with {len(tool_calls)} tool calls")
+                        
+                        # Отправляем пустой ответ на запрос инструментов
+                        tool_outputs = []
+                        for tool_call in tool_calls:
+                            tool_outputs.append({
+                                "tool_call_id": tool_call.id,
+                                "output": "{}"  # Пустой JSON как ответ на вызов инструмента
+                            })
+                        
+                        # Отправляем ответы инструментов
+                        logger.info("[run_thread_safe_async] Submitting empty tool outputs")
+                        try:
+                            run = await retry_openai_call(
+                                client.beta.threads.runs.submit_tool_outputs,
+                                thread_id=thread_id,
+                                run_id=run_id,
+                                tool_outputs=tool_outputs,
+                                max_retries=2
+                            )
+                            status = run.status
+                            logger.info(f"[run_thread_safe_async] After submit_tool_outputs: {status}")
+                            
+                            # Добавляем дополнительное время ожидания после отправки tool outputs
+                            # т.к. статус может стать queued и требовать обработки
+                            # Сбрасываем счетчик итераций, чтобы дать больше времени после tool outputs
+                            wait_iteration = 0
+                            
+                        except Exception as e:
+                            logger.error(f"[run_thread_safe_async] Error submitting tool outputs: {e}")
+                            status = "error"
+                    else:
+                        logger.warning("[run_thread_safe_async] Unhandled required_action type")
+                        status = "error"
+            except Exception as e:
+                logger.error(f"[run_thread_safe_async] Error retrieving run status: {e}")
+                status = "error"  # Помечаем как ошибку, чтобы выйти из цикла
+            
+            wait_iteration += 1
+        
+        # Проверяем итоговый статус
+        if status == "completed":
             # После успешного получения результата
             try:
                 messages = await retry_openai_call(
@@ -821,11 +890,22 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
                     "user_message": "An error occurred while processing your request. Please try again."
                 }
         
-        # Обработка других статусов (failed, cancelled и т.д.)
+        # УЛУЧШЕНИЕ: Более информативное сообщение об ошибке в зависимости от статуса
+        error_messages = {
+            "queued": "Запрос находится в очереди слишком долго. Пожалуйста, попробуйте еще раз через несколько секунд.",
+            "in_progress": "Запрос обрабатывается слишком долго. Пожалуйста, попробуйте еще раз.",
+            "failed": "Не удалось обработать ваш запрос из-за ошибки. Пожалуйста, попробуйте еще раз.",
+            "cancelled": "Запрос был отменен. Пожалуйста, попробуйте еще раз.",
+            "expired": "Время обработки запроса истекло. Пожалуйста, попробуйте еще раз.",
+            "requires_action": "Запрос требует дополнительных действий. Пожалуйста, попробуйте еще раз с другой формулировкой."
+        }
+        
+        user_message = error_messages.get(status, "Не удалось обработать ваш запрос. Пожалуйста, попробуйте еще раз.")
+        
         return {
             "action": "unknown",
-            "error": f"run_status_{run.status}",
-            "user_message": "Не удалось обработать ваш запрос. Пожалуйста, попробуйте еще раз."
+            "error": f"run_status_{status}",
+            "user_message": user_message
         }
     except Exception as e:
         logger.exception(f"[run_thread_safe_async] Error in OpenAI Assistant API call: {e}")
