@@ -56,8 +56,17 @@ def build_table(rows):
         
     def format_price_with_spaces(price_str):
         """Форматирует цену с пробелами между тысячами: 240 000, 5 000, 13 200"""
-        if not price_str or price_str == "—":
+        if price_str is None or price_str == "—":
             return "—"
+            
+        # Преобразуем любой тип аргумента в строку
+        if not isinstance(price_str, str):
+            # Если это число, округляем до целого
+            if isinstance(price_str, (int, float)):
+                price_str = str(int(round(price_str)))
+            else:
+                price_str = str(price_str)
+                
         # Очищаем от всех нечисловых символов
         clean_price = ''.join(c for c in price_str if c.isdigit())
         if not clean_price:
