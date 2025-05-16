@@ -16,6 +16,7 @@ from app.keyboards import build_main_kb
 from app.converters import parsed_to_dict
 from app.i18n import t
 from app.utils.logger_config import get_buffered_logger
+from app.edit.multi_edit_parser import parse_multi_edit_command, apply_multi_edit
 
 logger = get_buffered_logger(__name__)
 
@@ -26,8 +27,8 @@ router = Router()
 @router.message(NotaStates.editing)
 async def handle_free_edit_text(message: Message, state: FSMContext):
     """
-    Обработчик свободного ввода пользователя для редактирования инвойса через ядро edit_core.
-    Оставляет только UI-логику, бизнес-логика вынесена в edit_core.py.
+    Обработчик свободного ввода команд редактирования.
+    Поддерживает как одиночные команды, так и мультистрочное редактирование через разделитель ';'
     """
     user_id = getattr(message.from_user, 'id', 'unknown')
     message_text = getattr(message, 'text', None)
@@ -62,114 +63,61 @@ async def handle_free_edit_text(message: Message, state: FSMContext):
     user_text = message.text.strip()
     logger.critical(f"ОТЛАДКА-ХЕНДЛЕР: Обрабатываем текст: '{user_text}' для user_id={user_id}")
     
+    # Проверяем, является ли это мультистрочной командой
+    if ";" in user_text:
+        # Парсим мультистрочную команду
+        intents = parse_multi_edit_command(user_text)
+        if not intents:
+            await message.answer("Не удалось распознать команды редактирования. Пожалуйста, проверьте формат.")
+            return
+            
+        # Применяем все изменения
+        try:
+            new_invoice, applied_changes = apply_multi_edit(invoice, intents)
+            if not applied_changes:
+                await message.answer("Ни одно изменение не было применено. Пожалуйста, проверьте формат команд.")
+                return
+                
+            # Формируем отчет о примененных изменениях
+            changes_report = "Применены следующие изменения:\n"
+            for intent in applied_changes:
+                if intent["action"] == "edit_line_field":
+                    changes_report += f"• Строка {intent['line']}, поле '{intent['field']}' → '{intent['value']}'\n"
+                elif intent["action"] == "edit_date":
+                    changes_report += f"• Дата → '{intent['value']}'\n"
+                elif intent["action"] == "remove_line":
+                    changes_report += f"• Удалена строка {intent['line']}\n"
+                    
+            # Обновляем состояние и отправляем отчет
+            await state.update_data(invoice=new_invoice)
+            formatted_report = report.format_invoice(new_invoice)
+            await message.answer(changes_report + "\n" + formatted_report)
+            
+        except Exception as e:
+            logger.error(f"Error applying multi-edit: {str(e)}")
+            await message.answer("Произошла ошибка при применении изменений. Пожалуйста, попробуйте еще раз.")
+            return
+    else:
+        # Обработка одиночной команды (существующая логика)
+        intent = detect_intent(user_text)
+        if intent["action"] == "unknown":
+            await message.answer("Не удалось распознать команду. Пожалуйста, проверьте формат.")
+            return
+            
+        try:
+            new_invoice = apply_edit(invoice, intent)
+            await state.update_data(invoice=new_invoice)
+            formatted_report = report.format_invoice(new_invoice)
+            await message.answer(formatted_report)
+        except Exception as e:
+            logger.error(f"Error applying edit: {str(e)}")
+            await message.answer("Произошла ошибка при применении изменения. Пожалуйста, попробуйте еще раз.")
+            return
+    
     # Гарантируем, что мы в режиме редактирования
     if current_state not in [EditFree.awaiting_input, NotaStates.editing]:
         logger.critical(f"ОТЛАДКА-ХЕНДЛЕР: Устанавливаем состояние в EditFree.awaiting_input из {current_state}")
         await state.set_state(EditFree.awaiting_input)
-
-    from app.handlers.edit_core import process_user_edit
-    processing_msg = None
-    async def send_processing(text):
-        nonlocal processing_msg
-        logger.critical(f"ОТЛАДКА-ХЕНДЛЕР: Отправляем сообщение об обработке: {text}")
-        processing_msg = await message.answer(text)
-    
-    async def send_result(text):
-        logger.critical(f"ОТЛАДКА-ХЕНДЛЕР: Отправляем результат (первые 50 символов): {text[:50]}...")
-        await message.answer(text, parse_mode="HTML")
-    
-    async def send_error(text):
-        logger.critical(f"ОТЛАДКА-ХЕНДЛЕР: Отправляем сообщение об ошибке: {text}")
-        await message.answer(text)
-    
-    async def fuzzy_suggester(message, state, name, idx, lang):
-        logger.critical(f"ОТЛАДКА-ХЕНДЛЕР: Вызван fuzzy_suggester для name={name}, idx={idx}")
-        from app.handlers.name_picker import show_fuzzy_suggestions
-        return await show_fuzzy_suggestions(message, state, name, idx, lang)
-    
-    async def edit_state():
-        logger.critical(f"ОТЛАДКА-ХЕНДЛЕР: Устанавливаем состояние EditFree.awaiting_input")
-        await state.set_state(EditFree.awaiting_input)
-
-    # --- Локальный парсер интента (fallback без OpenAI) ---
-    import re
-    import traceback
-    async def local_intent_parser(text: str):
-        """Простая эвристика для распознавания команды изменения даты.
-        Возвращает интент, совместимый с apply_intent.
-        """
-        logger.critical(f"ОТЛАДКА-ХЕНДЛЕР: Локальный парсер анализирует текст: '{text}'")
-        text_l = text.lower().strip()
-        
-        try:
-            # Пытаемся найти шаблон вида "дата 16.04.2025" или "date 16.04.2025"
-            m = re.search(r"\b(?:дата|date)\s+(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})", text_l)
-            if m:
-                date_value = m.group(1)
-                logger.critical(f"ОТЛАДКА-ХЕНДЛЕР: Локальный парсер нашел дату: {date_value}")
-                return {
-                    "action": "edit_date",
-                    "value": date_value,
-                    "source": "local_parser",
-                    "_debug": "from edit_flow parser"
-                }
-                
-            # Дополнительная проверка - если просто дата без префикса
-            date_only_match = re.match(r"^(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})$", text_l)
-            if date_only_match:
-                date_value = date_only_match.group(1)
-                logger.critical(f"ОТЛАДКА-ХЕНДЛЕР: Локальный парсер нашел только дату без префикса: {date_value}")
-                return {
-                    "action": "edit_date",
-                    "value": date_value,
-                    "source": "local_parser",
-                    "_debug": "from edit_flow parser (date only)"
-                }
-            
-            # Неизвестно — вернём unknown, чтобы вызвать стандартную обработку ошибки
-            logger.critical(f"ОТЛАДКА-ХЕНДЛЕР: Локальный парсер не распознал команду: '{text}'")
-            return {
-                "action": "unknown",
-                "user_message": t("error.parse_command", lang=lang),
-                "source": "local_parser"
-            }
-        except Exception as e:
-            logger.critical(f"ОТЛАДКА-ХЕНДЛЕР: Исключение в локальном парсере: {e}")
-            logger.critical(traceback.format_exc())
-            return {
-                "action": "unknown",
-                "user_message": f"Ошибка при разборе команды: {e}",
-                "source": "local_parser_error"
-            }
-
-    logger.critical(f"ОТЛАДКА-ХЕНДЛЕР: Перед вызовом process_user_edit")
-    try:
-        result = await process_user_edit(
-            message=message,
-            state=state,
-            user_text=user_text,
-            lang=lang,
-            send_processing=send_processing,
-            send_result=send_result,
-            send_error=send_error,
-            fuzzy_suggester=fuzzy_suggester,
-            edit_state=edit_state,
-            run_openai_intent=local_intent_parser
-        )
-        logger.critical(f"ОТЛАДКА-ХЕНДЛЕР: process_user_edit завершился с результатом: {bool(result)}")
-    except Exception as e:
-        logger.critical(f"ОТЛАДКА-ХЕНДЛЕР: Ошибка в process_user_edit: {e}", exc_info=True)
-        await message.answer("Произошла ошибка при обработке команды. Попробуйте ещё раз.")
-    
-    if processing_msg:
-        try:
-            logger.critical("ОТЛАДКА-ХЕНДЛЕР: Удаляем сообщение об обработке")
-            await processing_msg.delete()
-        except Exception as e:
-            logger.critical(f"ОТЛАДКА-ХЕНДЛЕР: Ошибка при удалении processing_msg: {e}")
-    
-    logger.critical("ОТЛАДКА-ХЕНДЛЕР: Устанавливаем окончательное состояние EditFree.awaiting_input")
-    await state.set_state(EditFree.awaiting_input)
 
 # Handler for the "✏️ Edit" button click
 @router.callback_query(F.data == "edit:free")
