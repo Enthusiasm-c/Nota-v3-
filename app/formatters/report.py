@@ -46,7 +46,15 @@ def build_table(rows):
     from app.utils.formatters import format_price, format_quantity
     import re
 
-    status_map = {"ok": "✓", "unknown": "❗", "unit_mismatch": "❗", "error": "❗", "manual": ""}
+    status_map = {
+        "ok": "✓", 
+        "unknown": "❗", 
+        "unit_mismatch": "❗", 
+        "error": "❗", 
+        "manual": "",
+        "price_mismatch": "💰",  # Новый статус для несоответствия цен
+        "total_mismatch": "💰"   # Новый статус для несоответствия сумм
+    }
 
     def pad_with_html(text, width):
         visible_text = re.sub(r'<[^>]+>', '', str(text))
@@ -92,13 +100,12 @@ def build_table(rows):
     unit_width = 5
     price_width = 6
     
-    # Определяем положение каждого столбца в заголовке с учетом смещений:
-    # NAME влево на 2 знака, QTY влево на 2 знака (смещаем на 1 вправо), UNIT влево на 4 знака, PRICE влево на 4 знака (смещаем на 1 вправо)
+    # Определяем положение каждого столбца в заголовке
     num_pos = 0
-    name_pos = 2  # Смещено на 2 знака влево от исходного положения (было 4)
-    qty_pos = name_pos + name_width  # Смещено на 2 знака влево от исходного положения (было -3, изменили на -2)
-    unit_pos = qty_pos + qty_width    # Смещено на 3 знака влево от исходного положения (вместо -4 сдвигаем на -3)
-    price_pos = unit_pos + unit_width + 1  # Смещено на 2 знака влево от исходного положения (вместо -4 сдвигаем на -2)
+    name_pos = 2
+    qty_pos = name_pos + name_width
+    unit_pos = qty_pos + qty_width
+    price_pos = unit_pos + unit_width + 1
     status_pos = price_pos + price_width + 1
 
     # Формируем заголовок с точным расположением названий столбцов
@@ -114,18 +121,27 @@ def build_table(rows):
         qty = format_quantity(row.get("qty", ""))
         unit = html_escape(str(row.get("unit", "")))
         price = format_price_with_spaces(row.get("price", ""))
-        status = status_map.get(row.get("status", ""), "")
-        if row.get("status") in ["unknown", "unit_mismatch", "error"]:
+        
+        # Определяем статус с учетом несоответствий в ценах
+        status = row.get("status", "")
+        if row.get("price_mismatch", False):
+            status = row.get("mismatch_type", "price_mismatch")
+            
+        status_symbol = status_map.get(status, "")
+        
+        # Выделяем жирным шрифтом проблемные значения
+        if status in ["unknown", "unit_mismatch", "error", "price_mismatch", "total_mismatch"]:
             name = f"<b>{name}</b>"
             qty = f"<b>{qty}</b>"
             unit = f"<b>{unit}</b>"
             price = f"<b>{price}</b>"
+            
         table_row = (
             f"{idx} {pad_with_html(name, name_width)}"
             f"{pad_with_html(qty, qty_width)}"
             f"{pad_with_html(unit, unit_width)}"
             f"{pad_with_html(price, price_width)}"
-            f" {status}"
+            f" {status_symbol}"
         )
         table_rows.append(table_row)
     return header + "\n" + "\n".join(table_rows)
@@ -214,6 +230,20 @@ def build_summary(match_results):
                 elif issue_type == "UNIT_MISMATCH":
                     if "suggestion" in issue:
                         error_details.append(f"should be {issue.get('suggestion', '')}")
+                        
+        # Проверка несоответствий в ценах
+        if item.get("price_mismatch", False):
+            mismatch_type = item.get("mismatch_type", "")
+            if mismatch_type == "total_mismatch":
+                problems.append(t("report.total_mismatch") or "total price mismatch")
+                if item.get("expected_total") is not None:
+                    error_details.append(f"expected total: {item.get('expected_total')}")
+                has_problems = True
+            elif mismatch_type == "price_mismatch":
+                problems.append(t("report.price_mismatch") or "price per unit mismatch")
+                if item.get("expected_total") is not None:
+                    error_details.append(f"expected total: {item.get('expected_total')}")
+                has_problems = True
         
         # Если нет проблем, увеличиваем счетчик корректных позиций
         if not has_problems and status == "ok":
@@ -327,10 +357,24 @@ def build_report(parsed_data, match_results, escape_html=True, page=1, page_size
             if status == "ok" or status == "manual":
                 issues_count += 1
                 ok_count -= 1  # корректируем счётчик OK позиций
+                
+        # Проверяем несоответствия в ценах
+        if item.get("price_mismatch", False):
+            has_errors = True
+            # Если позиция ещё не была подсчитана как проблемная
+            if status == "ok" or status == "manual":
+                issues_count += 1
+                ok_count -= 1
     
     header_html = build_header(supplier_str, date_str)
     table = build_table(rows_to_show)
     summary_html = build_summary(match_results)
+    
+    # Добавляем информацию о несоответствиях в ценах
+    if hasattr(parsed_data, "has_price_mismatches") and parsed_data.has_price_mismatches:
+        mismatch_count = getattr(parsed_data, "price_mismatch_count", 0)
+        summary_html = f"💰 Found {mismatch_count} price mismatches\n" + summary_html
+    
     # Используем <pre> вместо <code> для Telegram и тестов
     html_report = (
         f"{header_html}"

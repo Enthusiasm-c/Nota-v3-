@@ -1,0 +1,59 @@
+# Nota AI · Coding Rules v1.0  (2025-05-16)
+
+## 0. Project Snapshot
+- **Domain** Restaurant invoice OCR + matching → Telegram bot.
+- **Tech Stack** Python 3.11 · aiogram 3 · Pydantic 2 · OpenAI SDK ≥1.0 · GPT-4o Vision · RapidFuzz 3.13 · CSV look-ups · Docker + systemd.  
+- **Objectives** (1) polish MVP for one venue (2) scale cleanly to 10 venues.  
+- **Non-Goals** Re-platforming, DB migration, UI overhauls—yet.
+
+---
+
+## 1. Architecture Rules (“DO NOT BREAK”)
+1. **Separation of Concerns**  
+   - Keep *Telegram layer* (`bot.py`, handlers, FSM) independent of *core logic* (`app/ocr_pipeline.py`, `matcher.py`, `postprocessing.py`).  
+2. **Stateless Core**  
+   - No hard-coded globals. Pass context explicitly; core functions must remain chat-agnostic and tenant-agnostic.  
+3. **CSV as Source of Truth (MVP)**  
+   - `data/base_products.csv`, `base_suppliers.csv`, `aliases.csv` stay authoritative.  
+   - Any new alias ➜ append to **aliases.csv** only (no editing the other two).  
+4. **Stub vs Live OCR**  
+   - Preserve the `USE_OPENAI_OCR` env flag. The stub path must always return a Pydantic-validated payload identical in shape to the live call.  
+5. **Caching Layer**  
+   - Do **not** remove or bypass the `TTLCache` around OCR calls. Adjust TTL only via `.env`.  
+
+---
+
+## 2. Coding Conventions
+1. **PEP-8 + Ruff defaults.**  
+2. **Typing first.** Use `typing.Annotated`, `type aliases`, and `pydantic.BaseModel` everywhere IO crosses module boundaries.  
+3. **Async-first design.** No blocking I/O in handler coroutines—wrap with `asyncio.to_thread` if unavoidable.  
+4. **Fail fast, log clearly.** Use structured logging (`structlog`) with event field `{"module": ..., "action": ...}`.  
+5. **Tests required.** New/changed logic → add or update **pytest-asyncio** tests in `/tests`. Coverage target ≥80 %.  
+
+---
+
+## 3. What Cursor May **Add / Modify**
+- Helper functions, utilities, or refactors that *reduce duplication* and *retain identical public behaviour*.  
+- Internal performance improvements (e.g., vectorised pandas ops).  
+- Additional unit tests, type hints, docstrings, comments.
+
+## 4. What Cursor Must **Never** Do
+- Change public Telegram behaviour or callback data schemas.  
+- Rename, move, or delete the three CSV data files.  
+- Introduce new external services (DBs, queues, ML APIs) without an explicit task.  
+- Commit virtual-env folders, large binaries, or secret `.env` files.  
+- Push code that fails `docker-compose up && pytest`.  
+
+---
+
+## 5. Scalability Checklist (for future PRs)
+- Parametrise **data-folder path** via env (`DATA_DIR`) ← prerequisite for multi-tenant.  
+- Wrap OCR + match in background task queue when QPS > 2.  
+- Ensure Redis key-namespacing by `chat_id`.  
+- Keep RAM footprint <150 MB per bot container (DigitalOcean 2 GB VM ⇒ max 10 bots).
+
+---
+
+## 6. Versioning This Rule-Set
+- Increment header version (`v1.1`, `v1.2`, …) on every rules update.  
+- Record changes in `CHANGELOG.md` under “Rules”.  

@@ -1,6 +1,6 @@
 from datetime import date
-from typing import Optional, Union
-from pydantic import BaseModel
+from typing import Optional, Union, List
+from pydantic import BaseModel, Field
 
 
 class Product(BaseModel):
@@ -13,12 +13,18 @@ class Product(BaseModel):
 
 
 class Position(BaseModel):
+    """Модель для представления позиции в накладной."""
     name: str
-    qty: float
+    qty: Optional[float] = None
     unit: Optional[str] = None
     price: Optional[float] = None
     price_per_unit: Optional[float] = None
     total_price: Optional[float] = None
+    calculated_price: Optional[float] = None
+    price_mismatch: bool = False
+    mismatch_type: Optional[str] = None
+    expected_total: Optional[float] = None
+    status: Optional[str] = "ok"  # Добавляем поле status со значением по умолчанию "ok"
 
 
 from pydantic import field_validator
@@ -46,6 +52,8 @@ class ParsedData(BaseModel):
     price_per_unit: Optional[float] = None
     total_price: Optional[float] = None
     supplier_status: Optional[str] = None  # For marking supplier status
+    has_price_mismatches: bool = False
+    price_mismatch_count: int = 0
 
     @field_validator("date", mode="before")
     def parse_iso(cls, v):

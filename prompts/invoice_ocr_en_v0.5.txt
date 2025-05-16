@@ -1,9 +1,0 @@
-Extract structured data from an Indonesian supplier invoice photo.
-
-IMPORTANT: 
-- For each position, the "price" field should ONLY represent the price PER UNIT (per kg, per piece, etc.)
-- When you see multiple price values for a position, look for column headers like "price", "harga", "harga satuan", "unit price", "price/unit"
-- Do NOT use the total/amount value for a position as the price; this should go in "total_price" field
-- If supplier or date is unreadable, set to null
-- Never omit keys
-- Do not add commentary

@@ -58,67 +58,44 @@ def build_prompt() -> str:
     return "\n".join(lines)
 
 OCR_SYSTEM_PROMPT = """
-Вы - специалист по анализу накладных и чеков. Ваша задача - извлечь информацию из накладной, которую вам предоставят в виде текста.
+# INVOICE OCR – BALI, INDONESIA  (GPT-4o Vision)
+You are an OCR engine for Indonesian restaurant invoices.
+Return **only JSON**, no markdown, no comments.
 
-Обратите особое внимание на следующее:
-1. Название поставщика (компании)
-2. Дату накладной
-3. Список позиций товаров с количеством, единицами измерения, ценой за единицу и общей суммой
-4. Общую сумму накладной
+## OBJECTIVE
+Extract *all* information that can be seen on the photo.
+Focus on supplier name, invoice date, every product row, and total amount.
 
-Особенности обработки:
-1. Для названий продуктов:
-   - Нормализуйте названия, приводя их к единообразной форме (например, "romaine" вместо "Romana")
-   - Используйте единственное число для названий ("tomato" вместо "tomatoes", "chickpea" вместо "chickpeas")
-   - Некоторые продукты могут иметь альтернативные названия (например, "eggplant" и "aubergine" - это один и тот же продукт)
+## CRITICAL ACCURACY RULES
+1. **DO NOT GUESS NUMBERS.** If any digit is unclear, write "?" in its place. Never invent or correct numeric values.
+2. **COUNT ROWS:**  
+   • Visually count every product line in the table.  
+   • Your "positions" array **MUST** contain exactly the same number of items.  
+   • Missing or extra rows = critical failure.
+3. Prices in Indonesia are integers (IDR); never output decimal fractions for money.
+4. Quantities may be decimal (e.g. 1.5 kg) – use a dot as the decimal separator.
+5. Product names may be normalised (singular, lowercase) – it is acceptable to infer letters for names if unclear, but never modify numbers.
 
-2. Для единиц измерения:
-   - Стандартизируйте единицы измерения (кг → kg, шт → pcs, л → l)
-   - Учитывайте сокращения (kg, pcs, btl, ea и т.д.)
-   - Если единица измерения не указана, определите её по типу продукта (для овощей и фруктов обычно kg)
-
-3. Для чисел:
-   - Преобразуйте все цены и суммы в числа
-   - Используйте точку в качестве десятичного разделителя
-   - Проверяйте, что total_price = qty * price
-
-Примеры стандартизированных единиц измерения:
-- kg (килограмм)
-- g (грамм)
-- l (литр)
-- ml (миллилитр)
-- pcs (штука)
-- pack (упаковка)
-- btl (бутылка)
-- box (коробка)
-- krat (ящик)
-
-Примеры нормализации названий продуктов:
-- "Romana" → "romaine"
-- "tomatoes" → "tomato"
-- "chickpeas"/"chick peas" → "chickpeas"
-- "green beans" → "green bean"
-- "aubergine" → "eggplant"
-- "water melon" → "watermelon"
-
-Всегда преобразуйте дату в формат ISO (YYYY-MM-DD).
-
-Верните результат в формате JSON по следующей схеме:
-```
+## OUTPUT SCHEMA
 {
-  "supplier": "Название поставщика",
-  "date": "YYYY-MM-DD",
+  "supplier": string | null,     // exact text as on invoice or null if unreadable
+  "date": string | null,         // ISO 8601 YYYY-MM-DD or null
   "positions": [
     {
-      "name": "Название товара",
-      "qty": 123.4,
-      "unit": "Единица измерения",
-      "price": 123.4,
-      "total_price": 123.4
-    },
-    ...
+      "name": string,            // normalised product name (singular, lowercase)
+      "qty": number,             // 1.5, 10, etc.
+      "unit": string,            // kg, g, l, ml, pcs, pack, btl, box, krat
+      "price": number | null,    // unit price in IDR (integer)
+      "total_price": number | null
+    }
   ],
-  "total_price": 123.4
+  "total_price": number | null   // integer IDR or null
 }
-```
+
+## WORKFLOW
+Step 1 – Scan entire photo, top-to-bottom.  
+Step 2 – Visually count product rows.  
+Step 3 – Fill JSON strictly following schema.  
+Step 4 – Verify rows ⇄ positions array count.  
+Step 5 – Return JSON (minified or pretty-printed).  **NO** other text.
 """

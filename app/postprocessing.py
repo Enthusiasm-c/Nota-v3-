@@ -4,6 +4,7 @@ from typing import Optional, List
 from app.models import ParsedData, Position
 from app.data_loader import load_products
 from app.utils.enhanced_logger import log_indonesian_invoice, log_format_issues
+from app.validators.price_validator import validate_invoice_prices
 
 # Автокоррекция числовых значений с надежной обработкой различных форматов
 def clean_num(val, default=None) -> Optional[float]:
@@ -390,6 +391,13 @@ def postprocess_parsed_data(parsed: ParsedData, req_id: str = "unknown") -> Pars
                 total_sum = sum(p.total_price for p in positions_with_total)
                 parsed.total_price = total_sum
                 logging.info(f"Вычислена общая сумма: {parsed.total_price}")
+        
+        # Валидация цен
+        parsed = validate_invoice_prices(parsed)
+        if parsed.has_price_mismatches:
+            logging.warning(
+                f"[{req_id}] Обнаружены несоответствия в ценах: {parsed.price_mismatch_count} позиций"
+            )
         
         # Логируем итоговые данные
         log_indonesian_invoice(req_id, parsed.model_dump(), phase="postprocessing")
