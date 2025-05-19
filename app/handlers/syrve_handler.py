@@ -11,6 +11,8 @@ from aiogram import Router, F
 from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
 from openai import AsyncOpenAI
+from dotenv import load_dotenv
+import hashlib
 
 from app.fsm.states import NotaStates
 from app.syrve_client import SyrveClient, generate_invoice_xml
@@ -20,6 +22,9 @@ from app.config import settings
 from app.utils.monitor import increment_counter
 from app.utils.redis_cache import cache_set
 from app.alias import learn_from_invoice
+
+# Load environment variables
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -39,11 +44,32 @@ def get_syrve_client():
     if not api_url.startswith(("http://", "https://")):
         api_url = f"https://{api_url}"
 
-    return SyrveClient(
-        api_url=api_url,
-        login=os.getenv("SYRVE_LOGIN"),
-        password=f"resto#{os.getenv('SYRVE_PASSWORD', 'test')}"
-)
+    # Получаем логин
+    login = os.getenv("SYRVE_LOGIN")
+    if not login:
+        logger.error("SYRVE_LOGIN not set")
+        raise ValueError("SYRVE_LOGIN environment variable is required")
+
+    # Приоритет отдаём готовому хешу из SYRVE_PASS_SHA1
+    pass_sha = os.getenv("SYRVE_PASS_SHA1")
+    raw_pass = os.getenv("SYRVE_PASSWORD")
+
+    if pass_sha:
+        # Используем готовый хеш
+        final_pass = pass_sha
+        is_hashed = True
+        logger.debug("Using pre-hashed password from SYRVE_PASS_SHA1")
+    elif raw_pass:
+        # Передаем сырой пароль, клиент сам его захеширует
+        final_pass = raw_pass
+        is_hashed = False
+        logger.debug("Using raw password from SYRVE_PASSWORD")
+    else:
+        logger.error("Neither SYRVE_PASS_SHA1 nor SYRVE_PASSWORD is set")
+        raise ValueError("Either SYRVE_PASS_SHA1 or SYRVE_PASSWORD environment variable is required")
+
+    logger.info(f"Initializing Syrve client for {login} at {api_url}")
+    return SyrveClient(api_url, login, final_pass, is_password_hashed=is_hashed)
 
 @router.callback_query(F.data == "confirm:invoice")
 async def handle_invoice_confirm(callback: CallbackQuery, state: FSMContext):
@@ -74,9 +100,6 @@ async def handle_invoice_confirm(callback: CallbackQuery, state: FSMContext):
     try:
         # Initialize Syrve client
         syrve_client = get_syrve_client()
-
-        # Generate invoice ID
-        invoice_id = f"NOTA-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:8]}"
         
         # Get match results from state if available
         match_results = data.get("match_results", [])
@@ -107,7 +130,7 @@ async def handle_invoice_confirm(callback: CallbackQuery, state: FSMContext):
                 logger.error(f"Error learning aliases from invoice: {str(e)}", exc_info=True)
         
         # Prepare data for Syrve XML generation
-        syrve_data = prepare_invoice_data(invoice, match_results, invoice_id)
+        syrve_data = prepare_invoice_data(invoice, match_results)
         
         # Generate XML with OpenAI using global client if available
         from app.config import get_ocr_client
@@ -146,20 +169,21 @@ async def handle_invoice_confirm(callback: CallbackQuery, state: FSMContext):
         if result.get("valid", False):
             # Success - update UI
             # Use optimized safe edit instead of direct edit
+            server_number = result.get("document_number", "unknown")
             from app.utils.optimized_safe_edit import optimized_safe_edit
             await optimized_safe_edit(
                 callback.bot,
                 callback.message.chat.id,
                 processing_msg.message_id,
-                t("status.syrve_success", {"id": invoice_id}, lang=lang),
+                t("status.syrve_success", {"id": f"✅ Импорт OK · № {server_number}"}, lang=lang),
                 kb=kb_main(lang)
             )
             
             # Track successful upload
             increment_counter("nota_invoices_total", {"status": "ok"})
             
-            # Save invoice ID for reference
-            cache_set(f"invoice:{invoice_id}", json.dumps(syrve_data), ex=86400)  # 24 hours
+            # Save invoice data for reference (using server number)
+            cache_set(f"invoice:{server_number}", json.dumps(syrve_data), ex=86400)  # 24 hours
             
         else:
             # Ошибка от Syrve или OpenAI
@@ -181,7 +205,7 @@ async def handle_invoice_confirm(callback: CallbackQuery, state: FSMContext):
                         try:
                             await callback.bot.send_message(
                                 admin_chat_id,
-                                f"⚠️ Syrve error (ID: {invoice_id}):\n{error_msg}"
+                                f"⚠️ Syrve error (ID: {server_number}):\n{error_msg}"
                             )
                         except Exception as e:
                             logger.error(f"Failed to send admin alert: {str(e)}")
@@ -203,14 +227,13 @@ async def handle_invoice_confirm(callback: CallbackQuery, state: FSMContext):
     await state.set_state(NotaStates.main_menu)
 
 
-def prepare_invoice_data(invoice, match_results, invoice_id):
+def prepare_invoice_data(invoice, match_results):
     """
     Prepare invoice data for Syrve XML generation.
     
     Args:
         invoice: Invoice data from state
         match_results: Match results with product IDs
-        invoice_id: Generated invoice ID
         
     Returns:
         Dictionary with structured data for XML generation
@@ -305,13 +328,17 @@ def prepare_invoice_data(invoice, match_results, invoice_id):
     
     # Create final data structure
     result = {
-        "invoice_number": invoice_id,
         "invoice_date": invoice_date,
         "conception_id": conception_id,
         "supplier_id": supplier_id,
         "store_id": store_id,
         "items": items
     }
+    
+    # Add document number only if it exists in invoice
+    doc_number = getattr(invoice, "document_number", None)
+    if doc_number is not None:
+        result["invoice_number"] = doc_number
     
     # Проверяем итоговую структуру на наличие обязательных полей
     required_fields = ["conception_id", "supplier_id", "store_id", "items"]

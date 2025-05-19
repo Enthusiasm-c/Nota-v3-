@@ -8,10 +8,8 @@ import httpx
 import json
 import logging
 import xml.etree.ElementTree as ET
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Any
 from pathlib import Path
-from typing import Dict, Any, List
-import os
 
 from app.utils.api_decorators import with_retry_backoff
 from app.utils.redis_cache import cache_get, cache_set
@@ -30,21 +28,26 @@ class SyrveClient:
     - Importing invoices
     """
 
-    def __init__(self, api_url: str, login: str, password: str):
+    def __init__(self, api_url: str, login: str, password: str, is_password_hashed: bool = False):
         """
         Initialize the Syrve client.
         Args:
             api_url: Base URL for the Syrve API (e.g., https://host:port)
             login: API login username
-            password: API login password (plain text)
+            password: API login password (plain text or SHA1 hash)
+            is_password_hashed: Whether the password is already SHA1 hashed
         """
         self.api_url = api_url.rstrip('/')
         self.login = login
         self.password = password
+        self.is_password_hashed = is_password_hashed
         self.timeout = 30  # Default timeout in seconds
 
     def _get_sha1_password(self) -> str:
-        # Syrve Resto API: для данной конфигурации используем sha1(password) без префикса
+        # Если пароль уже хешированный - возвращаем как есть
+        if self.is_password_hashed:
+            return self.password
+        # Иначе хешируем
         return hashlib.sha1(self.password.encode("utf-8")).hexdigest()
 
     async def auth(self) -> str:
@@ -184,7 +187,7 @@ class SyrveClient:
             key: Auth token
             xml: XML invoice data
         Returns:
-            Response data from Syrve API
+            Response data from Syrve API with document number if available
         Raises:
             Exception: If the import fails
         """
@@ -210,8 +213,48 @@ class SyrveClient:
                 
                 # Проверяем ответ
                 if response.status_code == 200:
-                    logger.info("Invoice successfully imported to Syrve")
-                    return {"response": response.text, "valid": True}
+                    try:
+                        # Парсим XML ответа
+                        import xml.etree.ElementTree as ET
+                        root = ET.fromstring(response.text)
+                        
+                        # Проверяем успешность операции
+                        is_valid = root.find(".//valid")
+                        if is_valid is not None and is_valid.text.lower() == "true":
+                            # Получаем номер документа из ответа
+                            doc_number = None
+                            doc_number_elem = root.find(".//documentNumber")
+                            if doc_number_elem is not None:
+                                doc_number = doc_number_elem.text
+                            
+                            logger.info("Invoice successfully imported to Syrve")
+                            if doc_number:
+                                logger.info(f"Assigned document number: {doc_number}")
+                            
+                            return {
+                                "valid": True,
+                                "document_number": doc_number
+                            }
+                        else:
+                            # Получаем сообщение об ошибке
+                            error_msg = "Unknown validation error"
+                            error_elem = root.find(".//errorMessage")
+                            if error_elem is not None and error_elem.text:
+                                error_msg = error_elem.text
+                            
+                            logger.warning(f"Syrve validation error: {error_msg}")
+                            return {
+                                "valid": False,
+                                "status": response.status_code,
+                                "errorMessage": error_msg
+                            }
+                    except ET.ParseError as e:
+                        logger.error(f"Failed to parse Syrve response XML: {str(e)}")
+                        return {
+                            "valid": False,
+                            "status": response.status_code,
+                            "errorMessage": f"Invalid XML response: {str(e)}"
+                        }
                 else:
                     logger.warning(f"Syrve returned non-200 status: {response.status_code}")
                     logger.warning(f"Response body: {response.text}")
@@ -252,15 +295,15 @@ async def generate_invoice_xml(invoice_data: Dict[str, Any], openai_client) -> s
     global _syrve_prompt_cache
     
     try:
-        # Check required fields
-        required_fields = ["invoice_number", "invoice_date", "conception_id", "supplier_id", "store_id", "items"]
+        # Check required fields (без invoice_number, так как он теперь опционален)
+        required_fields = ["invoice_date", "conception_id", "supplier_id", "store_id", "items"]
         missing_fields = [field for field in required_fields if not invoice_data.get(field)]
         
         if missing_fields:
             error_msg = f"Missing required fields: {', '.join(missing_fields)}"
             logger.error(error_msg)
             # Return basic XML with error info
-            return f'<?xml version="1.0" encoding="UTF-8"?>\n<error>{error_msg}</error>'
+            return f'<?xml version="1.0" encoding="UTF-8"?>\n<e>{error_msg}</e>'
         
         # Fix missing fields with defaults if needed
         if "conception_id" not in invoice_data or not invoice_data["conception_id"]:
@@ -289,7 +332,7 @@ async def generate_invoice_xml(invoice_data: Dict[str, Any], openai_client) -> s
             # Calculate sum
             item_sum = quantity * price
             
-            xml += f'    <item>\n'
+            xml += '    <item>\n'
             xml += f'      <num>{idx}</num>\n'
             xml += f'      <product>{product_id}</product>\n'
             xml += f'      <amount>{quantity:.2f}</amount>\n'
@@ -304,8 +347,6 @@ async def generate_invoice_xml(invoice_data: Dict[str, Any], openai_client) -> s
         xml += f'  <defaultStore>{invoice_data["store_id"]}</defaultStore>\n'
         
         # Add optional elements if present
-        if invoice_data.get("invoice_number"):
-            xml += f'  <documentNumber>{invoice_data["invoice_number"]}</documentNumber>\n'
         if invoice_data.get("invoice_date"):
             xml += f'  <dateIncoming>{invoice_data["invoice_date"]}T08:00:00</dateIncoming>\n'
             
