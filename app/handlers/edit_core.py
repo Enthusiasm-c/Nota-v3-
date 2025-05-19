@@ -61,6 +61,7 @@ async def process_user_edit(
             if send_result:
                 await send_result(t("status.edit_cancelled", lang=lang))
             await state.set_state(None)
+            await set_processing_edit(user_id, False)  # Снимаем блокировку при отмене
             return
 
         # Получаем данные из состояния
@@ -73,6 +74,7 @@ async def process_user_edit(
             if send_error:
                 await send_error(t("status.session_expired", lang=lang))
             await state.clear()
+            await set_processing_edit(user_id, False)  # Снимаем блокировку при ошибке
             return
 
         # Отправляем сообщение о начале обработки
@@ -111,12 +113,14 @@ async def process_user_edit(
             logger.critical(f"ОТЛАДКА-ЯДРО: Таймаут парсера для user_id={user_id}")
             if send_error:
                 await send_error(t("error.openai_timeout", lang=lang))
+            await set_processing_edit(user_id, False)  # Снимаем блокировку при ошибке
             return
         except Exception as e:
             logger.critical(f"ОТЛАДКА-ЯДРО: Ошибка парсера: {e}")
             logger.critical(traceback.format_exc())
             if send_error:
                 await send_error(t("error.openai_failed", lang=lang))
+            await set_processing_edit(user_id, False)  # Снимаем блокировку при ошибке
             return
 
         # Проверка на неизвестный интент
@@ -124,6 +128,7 @@ async def process_user_edit(
             logger.critical(f"ОТЛАДКА-ЯДРО: Пустой интент получен")
             if send_error:
                 await send_error(t("error.parse_command", lang=lang))
+            await set_processing_edit(user_id, False)  # Снимаем блокировку при ошибке
             return
             
         if intent.get("action") == "unknown":
@@ -131,6 +136,7 @@ async def process_user_edit(
             logger.critical(f"ОТЛАДКА-ЯДРО: Неизвестный интент: {intent}")
             if send_error:
                 await send_error(error_message)
+            await set_processing_edit(user_id, False)  # Снимаем блокировку при ошибке
             return
 
         # Применяем интент к инвойсу
@@ -144,6 +150,7 @@ async def process_user_edit(
                 logger.critical(f"ОТЛАДКА-ЯДРО: apply_intent вернул None вместо инвойса")
                 if send_error:
                     await send_error(f"Ошибка при применении изменений: инвойс не получен")
+                await set_processing_edit(user_id, False)  # Снимаем блокировку при ошибке
                 return
                 
             logger.critical(f"ОТЛАДКА-ЯДРО: Интент применен, действие: {intent.get('action')}")
@@ -152,6 +159,7 @@ async def process_user_edit(
             logger.critical(traceback.format_exc())
             if send_error:
                 await send_error(f"Ошибка при применении изменений: {e}")
+            await set_processing_edit(user_id, False)  # Снимаем блокировку при ошибке
             return
 
         # Пересчёт совпадений
@@ -163,6 +171,7 @@ async def process_user_edit(
             logger.critical(f"ОТЛАДКА-ЯДРО: В инвойсе нет позиций после применения интента")
             if send_error:
                 await send_error(f"Ошибка: после применения изменений в инвойсе отсутствуют позиции")
+            await set_processing_edit(user_id, False)  # Снимаем блокировку при ошибке
             return
             
         match_results = match_positions(new_invoice["positions"], products)
@@ -192,41 +201,36 @@ async def process_user_edit(
             logger.critical(traceback.format_exc())
             if send_error:
                 await send_error(f"Ошибка при формировании отчета: {e}")
+            await set_processing_edit(user_id, False)  # Снимаем блокировку при ошибке
             return
         
         # Fuzzy-сопоставление
         suggestion_shown = False
         for idx, item in enumerate(match_results):
             if item.get("status") == "unknown" and fuzzy_suggester:
-                logger.critical(f"ОТЛАДКА-ЯДРО: Проверяем fuzzy-совпадение для позиции {idx}")
-                name_to_check = item.get("name", "")
-                suggestion_shown = await fuzzy_suggester(message, state, name_to_check, idx, lang)
+                try:
+                    name = new_invoice["positions"][idx]["name"]
+                    suggestion_shown = await fuzzy_suggester(message, state, name, idx, lang)
                 if suggestion_shown:
-                    logger.critical(f"ОТЛАДКА-ЯДРО: Показаны fuzzy-предложения, выходим")
-                    if edit_state:
-                        await edit_state()
-                    return
+                        break  # Показываем только одно предложение за раз
+                except Exception as e:
+                    logger.warning(f"Ошибка при fuzzy-сопоставлении: {e}")
 
-        # Обновление состояния
-        if edit_state:
-            logger.critical(f"ОТЛАДКА-ЯДРО: Вызываем edit_state()")
-            await edit_state()
-
-        # Отправка результата
-        if send_result:
-            logger.critical(f"ОТЛАДКА-ЯДРО: Отправляем результат пользователю")
+        # Если не было показано предложений, отправляем обычный отчет
+        if not suggestion_shown and send_result:
             await send_result(text)
 
-        logger.critical(f"ОТЛАДКА-ЯДРО: Завершаем process_user_edit успешно")
-        return new_invoice, match_results, has_errors
+        # Снимаем блокировку после успешного завершения
+        await set_processing_edit(user_id, False)
+        logger.critical(f"ОТЛАДКА-ЯДРО: Блокировка снята для user_id={user_id}")
+        
+        return True
 
     except Exception as e:
-        logger.critical(f"ОТЛАДКА-ЯДРО: Неперехваченное исключение: {e}")
+        logger.critical(f"ОТЛАДКА-ЯДРО: Неожиданная ошибка: {e}")
         logger.critical(traceback.format_exc())
         if send_error:
-            await send_error(f"Произошла ошибка: {e}")
-        return None
-    finally:
-        # Снимаем блокировку редактирования в любом случае
-        logger.critical(f"ОТЛАДКА-ЯДРО: Снимаем блокировку для user_id={user_id}")
+            await send_error(t("error.unexpected", lang=lang))
+        # Снимаем блокировку при любой ошибке
         await set_processing_edit(user_id, False)
+        return False

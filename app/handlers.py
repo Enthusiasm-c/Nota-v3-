@@ -70,18 +70,7 @@ async def handle_choose_line(message: Message, state: FSMContext):
         reply_markup=None
     )
 
-# --- EDIT button pressed: show choose-field menu ---
-@router.callback_query(F.data == "edit:free")
-async def handle_edit_free(call: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    logger.info(f"[DEBUG] State at handle_edit_free: {data}")
-    await state.set_state(EditFree.awaiting_input)
-    await call.message.answer(
-        "Что нужно отредактировать? (пример: 'дата — 26 апреля' или 'строка 2 цена 90000')"
-    )
-
-
-# --- EDIT button pressed: show choose-field menu ---
+# --- Field selection: set FSM and ask for new value ---
 
 
 

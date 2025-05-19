@@ -26,11 +26,23 @@ logger = logging.getLogger(__name__)
 # Create router for handler registration
 router = Router()
 
-# Initialize Syrve client
-syrve_client = SyrveClient(
-    api_url=os.getenv("SYRVE_SERVER_URL", getattr(settings, "SYRVE_SERVER_URL", "")),
-    login=os.getenv("SYRVE_LOGIN", getattr(settings, "SYRVE_LOGIN", "")),
-    password=os.getenv("SYRVE_PASSWORD", getattr(settings, "SYRVE_PASSWORD", ""))
+def get_syrve_client():
+    """
+    Initialize and return Syrve client with current environment settings
+    """
+    api_url = os.getenv("SYRVE_SERVER_URL", "").strip()
+    if not api_url:
+        logger.error("SYRVE_SERVER_URL not set")
+        raise ValueError("SYRVE_SERVER_URL environment variable is required")
+
+    # Ensure URL has protocol
+    if not api_url.startswith(("http://", "https://")):
+        api_url = f"https://{api_url}"
+
+    return SyrveClient(
+        api_url=api_url,
+        login=os.getenv("SYRVE_LOGIN"),
+        password=f"resto#{os.getenv('SYRVE_PASSWORD', 'test')}"
 )
 
 @router.callback_query(F.data == "confirm:invoice")
@@ -60,6 +72,9 @@ async def handle_invoice_confirm(callback: CallbackQuery, state: FSMContext):
     processing_msg = await callback.message.answer(t("status.sending_to_syrve", {}, lang=lang))
     
     try:
+        # Initialize Syrve client
+        syrve_client = get_syrve_client()
+
         # Generate invoice ID
         invoice_id = f"NOTA-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:8]}"
         
