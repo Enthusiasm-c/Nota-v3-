@@ -5,11 +5,11 @@
 import logging
 import asyncio
 import time
-from typing import List, Dict, Optional, Tuple, Any, Set, Callable
+from typing import List, Dict, Optional
 from functools import lru_cache
 import re
 
-from rapidfuzz import fuzz, process
+from rapidfuzz import fuzz
 from app.config import settings
 from app.utils.string_cache import get_string_similarity_cached, set_string_similarity_cached, cached_string_similarity
 

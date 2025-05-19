@@ -1,4 +1,3 @@
-import pytest
 from app.matcher import fuzzy_best, match_positions
 
 
@@ -98,8 +97,8 @@ def test_fuzzy_rescue_in_match_positions():
     product_ids = [r.get("product_id") for r in results if r.get("product_id")]
     statuses = [r["status"] for r in results]
     # Make assertions more flexible
-    assert any(s == "ok" for s in statuses)
-    # Skip strict ID checks which are too specific
+    assert "rescued" in statuses
+    assert len(product_ids) > 0, "Should have at least one matched product"
 
 
 def test_fuzzy_find_basic():

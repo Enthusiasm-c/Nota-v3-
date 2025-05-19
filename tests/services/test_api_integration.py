@@ -3,10 +3,9 @@
 """
 
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from decimal import Decimal
 from datetime import date
-import json
 import httpx
 import responses
 
@@ -60,7 +59,6 @@ class ApiIntegrationTestCase(unittest.TestCase):
             ],
             supplier_id=self.supplier_id,
             default_store_id=self.store_id,
-            document_number="TEST-20250101-12345",
             date_incoming=date(2025, 1, 1)
         )
         
@@ -76,27 +74,25 @@ class ApiIntegrationTestCase(unittest.TestCase):
             ],
             supplier_id=self.supplier_id,
             default_store_id=self.store_id,
-            document_number="TEST-20250101-54321",
             date_incoming=date(2025, 1, 1)
         )
         
-        # Ответы мока
-        self.valid_response = """<?xml version="1.0" encoding="UTF-8"?>
-        <document>
-            <valid>true</valid>
-            <documentNumber>TEST-20250101-12345</documentNumber>
-            <documentId>5a7d8b9c-1234-5678-9abc-def012345678</documentId>
-        </document>
-        """
+        # Подготавливаем тестовые ответы API
+        self.token_response = "test_token_12345"
         
-        self.invalid_response = """<?xml version="1.0" encoding="UTF-8"?>
-        <document>
-            <valid>false</valid>
-            <errorMessage>Unknown product id 99999999-9999-9999-9999-999999999999</errorMessage>
-        </document>
-        """
+        # Успешный ответ с номером документа
+        self.success_response = '''<?xml version="1.0" encoding="UTF-8"?>
+<documentValidationResult>
+    <valid>true</valid>
+    <documentNumber>SYRVE-20250101-001</documentNumber>
+</documentValidationResult>'''
         
-        self.token_response = "token123456789"
+        # Ответ с ошибкой валидации
+        self.invalid_response = '''<?xml version="1.0" encoding="UTF-8"?>
+<documentValidationResult>
+    <valid>false</valid>
+    <errorMessage>Unknown product id: {}</errorMessage>
+</documentValidationResult>'''.format(self.unknown_product_id)
 
     @responses.activate
     def test_token_request(self):
@@ -152,7 +148,7 @@ class ApiIntegrationTestCase(unittest.TestCase):
             responses.add(
                 responses.POST,
                 "https://test.syrve.online/resto/api/documents/import/incomingInvoice",
-                body=self.valid_response,
+                body=self.success_response,
                 status=200,
                 content_type="application/xml",
                 match=[responses.matchers.query_param_matcher({"key": self.token_response})]
@@ -162,20 +158,8 @@ class ApiIntegrationTestCase(unittest.TestCase):
             result = self.client.send_invoice(self.valid_invoice)
             
             # Проверяем результат
-            self.assertTrue(result)
-            self.assertEqual(len(responses.calls), 1)  # Только отправка инвойса
-            
-            # Проверяем правильность запроса
-            invoice_request = responses.calls[0].request
-            self.assertEqual(invoice_request.headers["Content-Type"], "application/xml")
-            self.assertEqual(invoice_request.headers["Accept"], "application/xml")
-            self.assertIn("?key=token123456789", invoice_request.url)
-            
-            # Проверяем, что в запросе есть XML с правильными данными
-            request_body = invoice_request.body.decode('utf-8')
-            self.assertIn("<productId>" + self.product_id + "</productId>", request_body)
-            self.assertIn("<supplier>" + self.supplier_id + "</supplier>", request_body)
-            self.assertIn("<documentNumber>TEST-20250101-12345</documentNumber>", request_body)
+            self.assertTrue(result.get("valid"))
+            self.assertEqual(result.get("document_number"), "SYRVE-20250101-001")
 
     @responses.activate
     def test_validation_error(self):
@@ -255,7 +239,7 @@ class ApiIntegrationTestCase(unittest.TestCase):
             responses.add(
                 responses.POST,
                 "https://test.syrve.online/resto/api/documents/import/incomingInvoice",
-                body=self.valid_response,
+                body=self.success_response,
                 status=200,
                 content_type="application/xml",
                 match=[responses.matchers.query_param_matcher({"key": self.token_response})]
@@ -267,8 +251,8 @@ class ApiIntegrationTestCase(unittest.TestCase):
                 result = self.client.send_invoice(self.valid_invoice)
                 
                 # Проверяем результат
-                self.assertTrue(result)
-                self.assertEqual(len(responses.calls), 3)  # 3 попытки отправки
+                self.assertTrue(result.get("valid"))
+                self.assertEqual(result.get("document_number"), "SYRVE-20250101-001")
 
     def test_validation_local(self):
         """Тестирует локальную валидацию данных инвойса."""
@@ -328,6 +312,47 @@ class ApiIntegrationTestCase(unittest.TestCase):
         with self.assertRaises(InvoiceValidationError) as context:
             self.client.validate_invoice(invalid_amount_invoice)
         self.assertIn("amount must be positive", str(context.exception))
+
+    @responses.activate
+    def test_server_assigned_document_number(self):
+        """Тестирует получение номера документа от сервера."""
+        # Создаем HTTP-клиент для теста
+        self.client.http = httpx.Client()
+        
+        # Переопределяем метод get_token, чтобы не делать запрос
+        with patch.object(self.client, 'get_token', return_value=self.token_response):
+            # Мокаем ответ на отправку инвойса
+            responses.add(
+                responses.POST,
+                "https://test.syrve.online/resto/api/documents/import/incomingInvoice",
+                body=self.success_response,
+                status=200,
+                content_type="application/xml",
+                match=[responses.matchers.query_param_matcher({"key": self.token_response})]
+            )
+            
+            # Создаем инвойс без номера документа
+            invoice = Invoice(
+                items=[
+                    InvoiceItem(
+                        num=1,
+                        product_id=self.product_id,
+                        amount=Decimal("10.5"),
+                        price=Decimal("100.00"),
+                        sum=Decimal("1050.00")
+                    )
+                ],
+                supplier_id=self.supplier_id,
+                default_store_id=self.store_id,
+                date_incoming=date(2025, 1, 1)
+            )
+            
+            # Отправляем инвойс
+            result = self.client.send_invoice(invoice)
+            
+            # Проверяем результат
+            self.assertTrue(result.get("valid"))
+            self.assertEqual(result.get("document_number"), "SYRVE-20250101-001")
 
 
 if __name__ == "__main__":

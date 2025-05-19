@@ -1,8 +1,4 @@
-from app.data_loader import load_products, load_units
-from app.config import settings
 
-from typing import Iterable, Optional
-from app.models import Product
 
 
 def build_prompt() -> str:

@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from app.validators.pipeline import ValidationPipeline
 from app.validators.arithmetic import ArithmeticValidator
 from app.validators.sanity import SanityValidator

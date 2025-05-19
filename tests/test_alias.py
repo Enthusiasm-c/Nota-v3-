@@ -1,5 +1,3 @@
-import os
-import csv
 from app import alias
 
 def test_read_aliases_empty(tmp_path):

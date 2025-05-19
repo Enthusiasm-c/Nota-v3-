@@ -7,12 +7,9 @@
 import asyncio
 import logging
 import re
-from pprint import pprint
 from copy import deepcopy
 from aiogram.types import Message, User, Chat
-from aiogram.fsm.context import FSMContext
 from unittest.mock import AsyncMock, MagicMock, patch
-import json
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')

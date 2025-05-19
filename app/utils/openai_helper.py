@@ -6,11 +6,8 @@
 """
 
 import logging
-import json
 import time
-from typing import Any, Dict, List, Optional, Union
-from openai import OpenAI
-from openai.types.chat import ChatCompletion
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 

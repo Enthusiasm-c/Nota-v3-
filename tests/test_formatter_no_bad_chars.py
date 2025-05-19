@@ -1,8 +1,6 @@
 import pytest
-import html
 from app.formatters.report import build_report
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
 from aiogram.exceptions import TelegramBadRequest
 
 

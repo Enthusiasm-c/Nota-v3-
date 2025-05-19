@@ -3,7 +3,6 @@ import sys
 import pytest
 from io import BytesIO
 from PIL import Image
-import numpy as np
 
 # Добавляем путь к директории проекта в sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))

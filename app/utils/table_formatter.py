@@ -1,5 +1,4 @@
-import re
-from typing import List, Dict, Tuple
+from typing import Tuple
 
 def format_price(price_str: str) -> str:
     """

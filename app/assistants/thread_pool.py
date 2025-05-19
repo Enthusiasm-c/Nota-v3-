@@ -5,9 +5,7 @@
 
 import asyncio
 import logging
-import os
-import time
-from typing import List, Optional, Set
+from typing import List, Set
 import random
 from app.utils.redis_cache import cache_get, cache_set
 
@@ -206,7 +204,7 @@ async def shutdown_thread_pool() -> None:
         # Clear pool from Redis
         pool = cache_get(POOL_KEY)
         if pool:
-            logger.info(f"Clearing thread pool from Redis")
+            logger.info("Clearing thread pool from Redis")
             cache_set(POOL_KEY, "", ex=1)  # Set empty with 1s TTL (effectively delete)
     except Exception as e:
         logger.error(f"Error clearing thread pool from Redis: {e}")

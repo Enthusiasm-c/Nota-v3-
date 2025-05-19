@@ -1,5 +1,4 @@
 import re
-from datetime import date
 from typing import Any, Dict
 
 # Примеры шаблонов для MVP

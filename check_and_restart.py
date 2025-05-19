@@ -15,7 +15,6 @@ import requests
 import subprocess
 import logging
 import signal
-from configparser import ConfigParser
 
 # Setup logging
 logging.basicConfig(
@@ -155,6 +154,10 @@ def main():
     # Kill existing processes
     logger.info("Checking for existing bot processes...")
     killed = kill_python_processes_with_bot_py()
+    if killed:
+        logger.info(f"Killed {killed} existing bot processes")
+    else:
+        logger.info("No existing bot processes found")
     
     # Check if bot is active
     logger.info("Checking Telegram bot status...")

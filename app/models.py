@@ -1,3 +1,6 @@
+import sys
+import datetime
+from pydantic import field_validator
 from datetime import date
 from typing import Optional, Union
 from pydantic import BaseModel
@@ -21,21 +24,12 @@ class Position(BaseModel):
     total_price: Optional[float] = None
 
 
-from pydantic import field_validator
-
-import sys
-
 if sys.version_info >= (3, 10):
     from typing import TypeAlias
 
     DateOrNone: TypeAlias = Union[date, None]
 else:
-    from typing import Optional as DateOrNone
-
-import datetime
-
-
-
+    pass
 
 
 class ParsedData(BaseModel):

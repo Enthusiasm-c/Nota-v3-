@@ -7,14 +7,14 @@ import base64
 import json
 import logging
 import time
-from typing import Dict, Any, Optional, Union
+from typing import Optional
 import aiohttp
 
 from app.models import ParsedData
 from app.postprocessing import postprocess_parsed_data
 from app.ocr_prompt import OCR_SYSTEM_PROMPT
 from app.config import settings
-from app.utils.enhanced_ocr_cache import async_get_from_cache, async_save_to_cache
+from app.utils.enhanced_ocr_cache import get_from_cache_async, save_to_cache_async
 from app.imgprep.prepare import prepare_for_ocr
 
 logger = logging.getLogger(__name__)
@@ -99,7 +99,7 @@ async def close_http_session():
         _http_session = None
 
 async def async_ocr(image_bytes: bytes, req_id: Optional[str] = None, 
-                   use_cache: bool = True, timeout: int = 25) -> ParsedData:
+                   use_cache: bool = True, timeout: int = 60) -> ParsedData:
     """
     Асинхронно выполняет OCR изображения с использованием OpenAI API.
     
@@ -123,7 +123,7 @@ async def async_ocr(image_bytes: bytes, req_id: Optional[str] = None,
     # Пробуем получить из кеша
     if use_cache:
         try:
-            cached_data = await async_get_from_cache(image_bytes)
+            cached_data = await get_from_cache_async(image_bytes)
             if cached_data:
                 logger.info(f"[{req_id}] Использован кешированный OCR результат")
                 return cached_data
@@ -224,7 +224,7 @@ async def async_ocr(image_bytes: bytes, req_id: Optional[str] = None,
         # Кешируем результат
         if use_cache:
             try:
-                await async_save_to_cache(image_bytes, processed_data)
+                await save_to_cache_async(image_bytes, processed_data)
                 logger.debug(f"[{req_id}] OCR результат сохранен в кеш")
             except Exception as e:
                 logger.warning(f"[{req_id}] Ошибка кеширования OCR результата: {e}")

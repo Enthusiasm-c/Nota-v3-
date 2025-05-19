@@ -1,7 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock
 from app.assistants.client import run_thread_safe
-import json
 from fakeredis import FakeRedis
 
 
@@ -34,7 +33,12 @@ def test_run_thread_safe_caching(mock_cache_get, mock_cache_set, mock_client):
     runs = MagicMock()
     # client.beta
     mock_client.beta = beta
+    # client.beta.threads
     beta.threads = threads
+    # client.beta.threads.messages
+    threads.messages = messages
+    # client.beta.threads.runs
+    threads.runs = runs
     # threads.create().id
     threads.create.return_value.id = "test-thread-id"
     # messages.create (возвращает объект)
@@ -62,8 +66,11 @@ def test_run_thread_safe_latency_with_cache(mock_cache_set, mock_cache_get, fake
     messages = MagicMock()
     runs = MagicMock()
     mock_client.beta = beta
+    # client.beta.threads
     beta.threads = threads
+    # client.beta.threads.messages
     threads.messages = messages
+    # client.beta.threads.runs
     threads.runs = runs
     messages.create.return_value = MagicMock(id='test-message-id')
     runs.create.return_value = MagicMock(id='test-run-id', status='completed')
@@ -87,7 +94,7 @@ def test_run_thread_safe_latency_with_cache(mock_cache_set, mock_cache_get, fake
 
     # Запускаем функцию
     from app.assistants.client import run_thread_safe
-    result = run_thread_safe('set qty', timeout=2)
+    run_thread_safe('set qty', timeout=2)  # Не сохраняем результат, так как он не используется
 
     # Проверяем, что cache_get был вызван (чтение из кэша)
     assert mock_cache_get.called, 'cache_get не вызван'
@@ -98,6 +105,7 @@ def test_run_thread_safe_latency_with_cache(mock_cache_set, mock_cache_get, fake
     threads = MagicMock()
     # client.beta
     mock_client.beta = beta
+    # client.beta.threads
     beta.threads = threads
     # threads.create().id
     threads.create.return_value.id = "test-thread-id"

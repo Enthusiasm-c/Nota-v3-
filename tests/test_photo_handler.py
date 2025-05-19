@@ -30,7 +30,7 @@ async def test_photo_ok(monkeypatch, fake_msg):
     with patch("bot.create_bot_and_dispatcher", return_value=(mock_bot, mock_dp)), \
          patch("bot.bot", mock_bot):
         # Импортируем после патча, чтобы использовать наш мок
-        from bot import create_bot_and_dispatcher, register_handlers, photo_handler
+        from bot import register_handlers, photo_handler
         register_handlers(mock_dp, mock_bot)
         
         # --- Добавляем недостающие атрибуты в fake_msg ---
@@ -112,7 +112,7 @@ async def test_photo_error(monkeypatch, fake_msg):
     with patch("bot.create_bot_and_dispatcher", return_value=(mock_bot, mock_dp)), \
          patch("bot.bot", mock_bot):
         # Импортируем после патча, чтобы использовать наш мок
-        from bot import create_bot_and_dispatcher, register_handlers, photo_handler
+        from bot import register_handlers, photo_handler
         register_handlers(mock_dp, mock_bot)
         
         # --- Добавляем недостающие атрибуты в fake_msg ---

@@ -2,15 +2,12 @@
 Handlers for invoice editing flow via GPT-3.5-turbo.
 """
 
-import logging
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from app.fsm.states import EditFree, NotaStates
-from app.assistants.client import run_thread_safe, run_thread_safe_async
-from app.edit.apply_intent import apply_intent
 from app.formatters import report
-from app.matcher import match_positions, fuzzy_find
+from app.matcher import match_positions
 from app.data_loader import load_products
 from app.keyboards import build_main_kb
 from app.converters import parsed_to_dict
@@ -76,7 +73,19 @@ async def handle_free_edit_text(message: Message, state: FSMContext):
     
     async def send_result(text):
         logger.critical(f"ОТЛАДКА-ХЕНДЛЕР: Отправляем результат (первые 50 символов): {text[:50]}...")
-        await message.answer(text, parse_mode="HTML")
+        # Получаем обновленные данные для проверки ошибок
+        data = await state.get_data()
+        match_results = data.get("match_results", [])
+        unknown_count = sum(1 for item in match_results if item.get("status") == "unknown")
+        partial_count = sum(1 for item in match_results if item.get("status") == "partial")
+        has_errors = unknown_count + partial_count > 0
+        
+        # Отправляем сообщение с клавиатурой
+        await message.answer(
+            text,
+            parse_mode="HTML",
+            reply_markup=build_main_kb(has_errors=has_errors, lang=lang)
+        )
     
     async def send_error(text):
         logger.critical(f"ОТЛАДКА-ХЕНДЛЕР: Отправляем сообщение об ошибке: {text}")
@@ -88,8 +97,8 @@ async def handle_free_edit_text(message: Message, state: FSMContext):
         return await show_fuzzy_suggestions(message, state, name, idx, lang)
     
     async def edit_state():
-        logger.critical(f"ОТЛАДКА-ХЕНДЛЕР: Устанавливаем состояние EditFree.awaiting_input")
-        await state.set_state(EditFree.awaiting_input)
+        logger.critical("ОТЛАДКА-ХЕНДЛЕР: Устанавливаем состояние в основное меню")
+        await state.set_state(NotaStates.main_menu)
 
     # --- Локальный парсер интента (fallback без OpenAI) ---
     import re
@@ -142,7 +151,7 @@ async def handle_free_edit_text(message: Message, state: FSMContext):
                 "source": "local_parser_error"
             }
 
-    logger.critical(f"ОТЛАДКА-ХЕНДЛЕР: Перед вызовом process_user_edit")
+    logger.critical("ОТЛАДКА-ХЕНДЛЕР: Перед вызовом process_user_edit")
     try:
         result = await process_user_edit(
             message=message,
@@ -178,7 +187,6 @@ async def handle_edit_free(call: CallbackQuery, state: FSMContext):
     Handler for the "✏️ Edit" button.
     Transitions user to free-form editing mode.
     """
-    import logging
     logger.warning(f"ДИАГНОСТИКА: Нажата кнопка Edit, user_id={call.from_user.id}, chat_id={call.message.chat.id}, message_id={call.message.message_id}")
     # Get data from state
     data = await state.get_data()
@@ -220,7 +228,6 @@ async def confirm_fuzzy_name(call: CallbackQuery, state: FSMContext):
     # Get data from state
     data = await state.get_data()
     fuzzy_match = data.get("fuzzy_match")  # Suggested name
-    fuzzy_original = data.get("fuzzy_original")  # Original name
     invoice = data.get("invoice")
     lang = data.get("lang", "en")
     
@@ -258,28 +265,28 @@ async def confirm_fuzzy_name(call: CallbackQuery, state: FSMContext):
             except Exception:
                 pass
                 
-            # Remove suggestion buttons
+        # Remove suggestion buttons
+        try:
             await call.message.edit_reply_markup(reply_markup=None)
+        except Exception as e:
+            logger.warning(f"Failed to remove suggestion buttons: {e}")
             
-            # Generate keyboard based on errors presence
-            keyboard = build_main_kb(has_errors, lang=lang)
+        # Generate keyboard based on errors presence
+        keyboard = build_main_kb(has_errors, lang=lang)
+        
+        # Send updated report
+        await call.message.answer(
+            text, 
+            reply_markup=keyboard, 
+            parse_mode="HTML"
+        )
+        
+        # Add message about successful editing
+        success_message = f"✅ {t('status.edit_success', {'field': 'name'}, lang=lang)}"
+        if not has_errors:
+            success_message += f" {t('status.edit_success_confirm', lang=lang)}"
             
-            # Send updated report
-            await call.message.answer(
-                text, 
-                reply_markup=keyboard, 
-                parse_mode="HTML"
-            )
-            
-            # Add message about successful editing
-            success_message = f"✅ {t('status.edit_success', {'field': 'name'}, lang=lang)}"
-            if not has_errors:
-                success_message += f" {t('status.edit_success_confirm', lang=lang)}"
-                
-            await call.message.answer(success_message, parse_mode="HTML")
-        else:
-            await call.message.answer(t("error.position_not_found", {"index": line_idx}, lang=lang))
-    
+        await call.message.answer(success_message, parse_mode="HTML")
     except Exception as e:
         logger.error("[confirm_fuzzy_name] Error updating name", extra={"data": {"error": str(e)}})
         
@@ -306,11 +313,6 @@ async def reject_fuzzy_name(call: CallbackQuery, state: FSMContext):
     """
     # Get line index from callback data
     line_idx = int(call.data.split(":")[-1])
-    
-    # Get data from state
-    data = await state.get_data()
-    fuzzy_original = data.get("fuzzy_original")
-    lang = data.get("lang", "en")
     
     # Remove suggestion buttons
     await call.message.edit_reply_markup(reply_markup=None)

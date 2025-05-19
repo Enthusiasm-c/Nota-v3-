@@ -1,5 +1,4 @@
 # Патч для отслеживания инициализации бота
-import sys
 import time
 import logging
 from functools import wraps

@@ -1,16 +1,11 @@
 import pytest
-from unittest.mock import MagicMock, patch
-import os
 import io
 from PIL import Image
 import numpy as np
 
 from app.ocr_cleaner import (
-    preprocess_for_ocr, 
-    apply_thresholding,
-    remove_noise, 
-    straighten_image,
-    enhance_contrast
+    preprocess_for_ocr,
+    resize_image
 )
 
 @pytest.fixture
@@ -23,14 +18,29 @@ def sample_image():
     return Image.fromarray(img_array)
 
 @pytest.fixture
+def large_sample_image():
+    """Создает большое тестовое изображение"""
+    img = Image.new('RGB', (3000, 2000), color='white')
+    img_array = np.array(img)
+    img_array[1000:1500, 1000:1500] = (0, 0, 0)
+    return Image.fromarray(img_array)
+
+@pytest.fixture
 def sample_image_bytes(sample_image):
     """Преобразует тестовое изображение в байты"""
     img_byte_arr = io.BytesIO()
     sample_image.save(img_byte_arr, format='JPEG')
     return img_byte_arr.getvalue()
 
-def test_preprocess_for_ocr(sample_image_bytes):
-    """Тест полного процесса предобработки изображения"""
+@pytest.fixture
+def large_image_bytes(large_sample_image):
+    """Преобразует большое тестовое изображение в байты"""
+    img_byte_arr = io.BytesIO()
+    large_sample_image.save(img_byte_arr, format='JPEG')
+    return img_byte_arr.getvalue()
+
+def test_preprocess_for_ocr_small_image(sample_image_bytes):
+    """Тест обработки маленького изображения"""
     # Запускаем функцию предобработки
     processed_bytes = preprocess_for_ocr(sample_image_bytes)
     
@@ -38,85 +48,52 @@ def test_preprocess_for_ocr(sample_image_bytes):
     assert processed_bytes is not None
     assert isinstance(processed_bytes, bytes)
     
-    # Проверяем, что размер изменился (обычно уменьшается после оптимизации)
+    # Проверяем, что размер изменился незначительно (только из-за сжатия JPEG)
     assert len(processed_bytes) > 0
     assert len(processed_bytes) <= len(sample_image_bytes)
 
-def test_apply_thresholding(sample_image):
-    """Тест применения пороговой обработки к изображению"""
-    # Конвертируем в массив numpy для преобработки
-    img_array = np.array(sample_image)
+def test_preprocess_for_ocr_large_image(large_image_bytes):
+    """Тест обработки большого изображения"""
+    # Запускаем функцию предобработки
+    processed_bytes = preprocess_for_ocr(large_image_bytes)
     
-    # Применяем пороговую обработку
-    processed = apply_thresholding(img_array)
+    # Проверяем, что результат не None и является байтами
+    assert processed_bytes is not None
+    assert isinstance(processed_bytes, bytes)
     
-    # Проверяем, что результат имеет ожидаемую форму и тип
-    assert processed.shape == img_array.shape
-    assert processed.dtype == np.uint8
-    
-    # Проверяем, что изображение стало более контрастным (имеет меньше уникальных значений)
-    assert len(np.unique(processed)) <= len(np.unique(img_array))
+    # Проверяем, что размер значительно уменьшился
+    assert len(processed_bytes) > 0
+    assert len(processed_bytes) < len(large_image_bytes)
 
-def test_remove_noise(sample_image):
-    """Тест удаления шума из изображения"""
-    # Конвертируем в массив numpy для преобработки
-    img_array = np.array(sample_image)
-    
-    # Добавляем случайный шум
-    noisy_img = img_array.copy()
-    noisy_img[10:20, 10:20] = np.random.randint(0, 255, size=(10, 10, 3), dtype=np.uint8)
-    
-    # Применяем удаление шума
-    denoised = remove_noise(noisy_img)
-    
-    # Проверяем, что форма и тип данных сохранились
-    assert denoised.shape == noisy_img.shape
-    assert denoised.dtype == np.uint8
-    
-    # Проверяем, что какая-то обработка произошла (пиксели изменились)
-    assert not np.array_equal(denoised, noisy_img)
-
-def test_straighten_image(sample_image):
-    """Тест выпрямления изображения"""
+def test_resize_image(large_sample_image):
+    """Тест функции изменения размера изображения"""
     # Конвертируем в массив numpy
-    img_array = np.array(sample_image)
+    img_array = np.array(large_sample_image)
     
-    # Применяем выпрямление
-    straightened = straighten_image(img_array)
+    # Задаем максимальный размер
+    max_size = 1024
     
-    # Проверяем, что изображение не пустое и имеет правильную форму
-    assert straightened.shape[:2] == img_array.shape[:2]
-    assert straightened.dtype == np.uint8
-
-def test_enhance_contrast(sample_image):
-    """Тест улучшения контрастности изображения"""
-    # Конвертируем в массив numpy
-    img_array = np.array(sample_image)
+    # Применяем изменение размера
+    resized = resize_image(img_array, max_size)
     
-    # Создаем изображение с низким контрастом
-    low_contrast = img_array.copy()
-    low_contrast = (low_contrast * 0.5).astype(np.uint8)
+    # Проверяем, что размеры не превышают максимальный
+    height, width = resized.shape[:2]
+    assert max(height, width) <= max_size
     
-    # Применяем улучшение контраста
-    enhanced = enhance_contrast(low_contrast)
-    
-    # Проверяем, что форма и тип данных сохранились
-    assert enhanced.shape == low_contrast.shape
-    assert enhanced.dtype == np.uint8
-    
-    # Проверяем, что контраст действительно улучшился
-    # (стандартное отклонение значений пикселей должно увеличиться)
-    assert np.std(enhanced) >= np.std(low_contrast)
+    # Проверяем, что пропорции сохранились
+    original_ratio = img_array.shape[1] / img_array.shape[0]
+    resized_ratio = width / height
+    assert abs(original_ratio - resized_ratio) < 0.1
 
 def test_preprocess_for_ocr_with_invalid_input():
     """Тест предобработки с невалидными входными данными"""
     # Тест с пустыми байтами
-    with pytest.raises(Exception):
-        preprocess_for_ocr(b"")
+    result = preprocess_for_ocr(b"")
+    assert result == b""
     
     # Тест с невалидным форматом изображения
-    with pytest.raises(Exception):
-        preprocess_for_ocr(b"not an image")
+    result = preprocess_for_ocr(b"not an image")
+    assert result == b"not an image"
     
     # Тест с None
     with pytest.raises(Exception):
@@ -137,3 +114,12 @@ def test_preprocess_for_ocr_file_types(sample_image):
         assert processed is not None
         assert isinstance(processed, bytes)
         assert len(processed) > 0
+
+def test_preprocess_for_ocr_quality_settings(sample_image_bytes):
+    """Тест настроек качества JPEG"""
+    # Тест с разными уровнями качества
+    high_quality = preprocess_for_ocr(sample_image_bytes, {"jpeg_quality": 95})
+    low_quality = preprocess_for_ocr(sample_image_bytes, {"jpeg_quality": 50})
+    
+    # Проверяем, что размер файла с низким качеством меньше
+    assert len(low_quality) < len(high_quality)

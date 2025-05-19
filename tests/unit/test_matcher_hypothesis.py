@@ -4,9 +4,7 @@ Property-based tests for the matcher module using Hypothesis.
 These tests verify matcher functionality with a wide range of inputs
 including edge cases and corner cases.
 """
-import pytest
 from hypothesis import given, settings, strategies as st, example, assume, HealthCheck
-from typing import Dict, List, Optional
 
 from app.matcher import (
     normalize_product_name,
@@ -130,10 +128,8 @@ def test_string_similarity_edge_cases(s1, s2):
     # Special characters should affect similarity
     similarity_normal = calculate_string_similarity(s1, s2)
     similarity_special = calculate_string_similarity(special_s1, special_s2)
-    
-    # If original strings are the same, similarity with special chars should still be high
-    if s1 == s2:
-        assert similarity_special > 0.7
+    # Специальные символы должны уменьшать схожесть
+    assert similarity_special < similarity_normal, "Special characters should reduce similarity"
     
     # Test with whitespace variations
     padded_s1 = f"  {s1}  "

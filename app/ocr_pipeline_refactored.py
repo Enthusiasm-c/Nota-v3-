@@ -6,7 +6,6 @@
 2. OCR-обработчик
 3. Валидационный пайплайн (арифметический + бизнес-правила)
 """
-import os
 import json
 import logging
 import asyncio
@@ -22,8 +21,6 @@ from app.detectors.table.factory import get_detector
 from app.validators.pipeline import ValidationPipeline
 from paddleocr import PaddleOCR
 from app.ocr import call_openai_ocr_async
-from app.models import ParsedData
-from app.postprocessing import postprocess_parsed_data
 from app.ocr_prompt import OCR_SYSTEM_PROMPT
 from app.config import settings, get_ocr_client
 
@@ -74,7 +71,6 @@ class OCRPipeline:
             table_detection_start = time.time()
             try:
                 table_detector = get_detector("paddle")
-                table_data = table_detector.detect(image_bytes)
                 cells = table_detector.extract_cells(image_bytes)
                 timing['table_detection'] = time.time() - table_detection_start
                 

@@ -19,6 +19,29 @@ CACHE_TTL = 12 * 60 * 60  # Cache Time-To-Live in seconds (12 hours)
 logger = logging.getLogger(__name__)
 
 
+def get_cache_key(image_bytes: bytes, extra_data: Optional[Dict[str, Any]] = None) -> str:
+    """
+    Generate cache key from image bytes and optional extra data.
+    
+    Args:
+        image_bytes: Raw image bytes
+        extra_data: Optional dictionary with additional data to include in key
+        
+    Returns:
+        Cache key string
+    """
+    hasher = hashlib.md5()
+    hasher.update(image_bytes)
+    
+    if extra_data:
+        # Sort keys to ensure consistent ordering
+        sorted_items = sorted(extra_data.items())
+        for key, value in sorted_items:
+            hasher.update(f"{key}:{value}".encode())
+    
+    return hasher.hexdigest()
+
+
 def get_image_hash(image_bytes: bytes) -> str:
     """
     Generate MD5 hash of image bytes for cache key.
@@ -86,6 +109,26 @@ def clear_cache() -> None:
     """Clear the OCR cache."""
     OCR_CACHE.clear()
     logger.info("OCR Cache cleared")
+
+
+def clear_expired_cache() -> int:
+    """
+    Remove all expired entries from the cache.
+    
+    Returns:
+        Number of entries removed
+    """
+    now = time.time()
+    expired_keys = [
+        key for key, (_, timestamp) in OCR_CACHE.items()
+        if now - timestamp > CACHE_TTL
+    ]
+    
+    for key in expired_keys:
+        OCR_CACHE.pop(key)
+        logger.info(f"Removed expired cache entry {key[:8]}")
+    
+    return len(expired_keys)
 
 
 def get_cache_stats() -> Dict[str, Any]:

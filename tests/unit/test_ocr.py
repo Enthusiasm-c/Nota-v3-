@@ -1,16 +1,10 @@
 import pytest
 import json
-import os
-import re
 from datetime import date
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 import openai
 
 from app.ocr import call_openai_ocr, ParsedData, INVOICE_FUNCTION_SCHEMA
-from app.utils.ocr_cache import get_from_cache, save_to_cache
-from app.utils.monitor import increment_counter
-from app.imgprep import prepare_for_ocr
-from app.config import get_ocr_client
 
 
 class DummyMessage:

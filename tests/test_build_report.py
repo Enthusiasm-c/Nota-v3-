@@ -1,4 +1,3 @@
-import pytest
 from app.formatters.report import build_report
 from types import SimpleNamespace
 import html

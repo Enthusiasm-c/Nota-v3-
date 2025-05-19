@@ -12,7 +12,6 @@ import time
 import asyncio
 from decimal import Decimal
 from pathlib import Path
-from typing import Dict, List, Any
 
 # Добавляем корневую директорию в путь, чтобы импорты работали как в prod
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

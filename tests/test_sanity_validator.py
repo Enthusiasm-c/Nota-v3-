@@ -1,5 +1,3 @@
-import pytest
-from decimal import Decimal
 from app.validators.sanity import SanityValidator
 
 class TestSanityValidator:

@@ -8,11 +8,8 @@
 import logging
 import asyncio
 import time
-from typing import Tuple, Dict, List, Any, Optional
-from pathlib import Path
+from typing import Tuple, Any
 import app.ocr as ocr  # Импортируем весь модуль ocr вместо отдельной функции
-from app.models import ParsedData
-from app.utils.enhanced_logger import PerformanceTimer
 
 logger = logging.getLogger(__name__)
 

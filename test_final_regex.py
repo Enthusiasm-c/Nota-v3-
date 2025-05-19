@@ -32,7 +32,7 @@ def test_regex(command, text):
         results["unit"] = {"action": "edit_unit", "index": line_num, "value": unit}
     
     print(f"\n=== Тестирование команды: '{command}' ===")
-    print(f"Результаты распознавания:")
+    print("Результаты распознавания:")
     
     if "unit_qty" in results:
         print(f"✅ Распознано как изменение единицы измерения (с qty): {results['unit_qty']}")
@@ -77,6 +77,7 @@ def main():
     
     for cmd in commands:
         intent = test_regex("Команда", cmd)
+        print(f"Результат для команды '{cmd}': {intent}\n")
     
     print("\n=== ТЕСТИРОВАНИЕ ЗАВЕРШЕНО ===")
 

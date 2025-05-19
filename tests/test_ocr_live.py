@@ -1,6 +1,5 @@
 import os
 import pytest
-import base64
 from pathlib import Path
 from app.ocr import call_openai_ocr
 

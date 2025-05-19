@@ -4,13 +4,9 @@ Unit tests for refactored OCR pipeline functionality.
 import pytest
 pytest_plugins = ["pytest_asyncio"]
 import json
-import os
-import base64
-import numpy as np
-from datetime import datetime
 from PIL import Image
 import io
-from unittest.mock import MagicMock, patch, AsyncMock, call
+from unittest.mock import MagicMock, patch, AsyncMock
 
 # Add paddleocr mock to avoid import error
 import sys

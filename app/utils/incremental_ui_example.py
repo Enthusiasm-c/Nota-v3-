@@ -15,11 +15,11 @@ from aiogram.fsm.context import FSMContext
 from app.utils.incremental_ui import IncrementalUI
 from app.i18n import t
 
-logger = logging.getLogger(__name__)
-router = Router()
-
 import re
 from typing import List
+
+router = Router()
+logger = logging.getLogger(__name__)
 
 def split_message(text: str, max_length: int = 4000) -> List[str]:
     """
@@ -61,7 +61,7 @@ def split_message(text: str, max_length: int = 4000) -> List[str]:
                     
                     unclosed_tags = []
                     for tag in open_tags:
-                        if f"</{tag}>" not in chunk or chunk.rfind(f"<{tag}") > chunk.rfind(f"</{tag}>"):
+                        if tag not in [t for t in close_tags]:
                             unclosed_tags.append(tag)
                     
                     # Закрываем незакрытые теги

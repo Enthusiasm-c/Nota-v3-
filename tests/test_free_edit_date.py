@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock, patch, MagicMock
 from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
 from app.fsm.states import EditFree
-from datetime import datetime
 
 @pytest.mark.asyncio
 async def test_free_edit_date():

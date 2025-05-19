@@ -1,4 +1,3 @@
-import pytest
 from decimal import Decimal
 from app.validators.arithmetic import ArithmeticValidator
 

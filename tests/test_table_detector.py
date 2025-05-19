@@ -1,7 +1,6 @@
 import os
 import pytest
 from unittest.mock import MagicMock, patch
-from app.detectors.table.interface import TableDetector
 from app.detectors.table.factory import get_detector
 from app.detectors.table.paddle_detector import PaddleTableDetector
 

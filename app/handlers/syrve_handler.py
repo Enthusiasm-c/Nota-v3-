@@ -5,14 +5,12 @@ Handler for processing invoice confirmation and Syrve integration.
 import logging
 import os
 import json
-import uuid
 from datetime import datetime
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
 from openai import AsyncOpenAI
 from dotenv import load_dotenv
-import hashlib
 
 from app.fsm.states import NotaStates
 from app.syrve_client import SyrveClient, generate_invoice_xml
@@ -80,24 +78,23 @@ async def handle_invoice_confirm(callback: CallbackQuery, state: FSMContext):
         callback: Callback query from the Confirm button
         state: FSM context
     """
-    # Get user language
-    data = await state.get_data()
-    lang = data.get("lang", "en")
-    
-    # Get invoice data from state
-    invoice = data.get("invoice")
-    if not invoice:
-        await callback.message.answer(t("error.invoice_not_found", {}, lang=lang))
-        await callback.answer()
-        return
-    
-    # Show processing indicator
-    await callback.answer(t("status.processing", {}, lang=lang), show_alert=False)
-    
-    # First message - processing started
-    processing_msg = await callback.message.answer(t("status.sending_to_syrve", {}, lang=lang))
-    
     try:
+        # Immediately answer the callback to prevent timeout
+        await callback.answer(show_alert=False)
+        
+        # Get user language
+        data = await state.get_data()
+        lang = data.get("lang", "en")
+        
+        # Get invoice data from state
+        invoice = data.get("invoice")
+        if not invoice:
+            await callback.message.answer(t("error.invoice_not_found", {}, lang=lang))
+            return
+            
+        # Show processing indicator
+        processing_msg = await callback.message.answer(t("status.sending_to_syrve", {}, lang=lang))
+        
         # Initialize Syrve client
         syrve_client = get_syrve_client()
         

@@ -2,7 +2,7 @@ import pytest
 import vcr
 from app import ocr
 from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import AsyncMock
 
 CASSETTE_PATH = str(Path(__file__).parent / "vcr_cassettes" / "ocr_function_call.yaml")
 SAMPLE_IMAGE = str(Path(__file__).parent / "sample_invoice.jpg")

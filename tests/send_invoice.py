@@ -9,18 +9,14 @@ import os
 import sys
 import json
 import logging
-import httpx
 import asyncio
 from datetime import datetime
 from dotenv import load_dotenv
-from xml.etree.ElementTree import Element, SubElement, tostring
-from xml.dom.minidom import parseString
 
 # Добавляем корневую директорию проекта в PYTHONPATH
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from app.syrve_client import SyrveClient
-from openai import AsyncOpenAI
 
 # Настройка логирования
 logging.basicConfig(

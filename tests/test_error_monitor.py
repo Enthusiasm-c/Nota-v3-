@@ -1,4 +1,3 @@
-import pytest
 from app.actions import error_monitor
 from datetime import datetime
 

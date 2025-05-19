@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
 import bot
 from app.fsm.states import EditFree
@@ -119,6 +119,11 @@ async def test_confirm_fuzzy_name():
     }}):
         # Мокаем data_loader.load_products
         with patch('app.data_loader.load_products') as mock_load:
+            mock_load.return_value = [
+                MagicMock(name="Apple"),
+                MagicMock(name="Orange"),
+                MagicMock(name="Banana")
+            ]
             # Мокаем matcher.match_positions
             with patch('app.matcher.match_positions') as mock_match:
                 mock_match.return_value = [
@@ -141,6 +146,9 @@ async def test_confirm_fuzzy_name():
                     
                     # Проверяем, что состояние изменено
                     state.set_state.assert_called_once_with(bot.NotaStates.editing)
+                    
+                    # Проверяем, что load_products был вызван
+                    mock_load.assert_called_once()
 
 
 @pytest.mark.asyncio

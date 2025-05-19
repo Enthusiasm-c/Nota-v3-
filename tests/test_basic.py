@@ -1,7 +1,6 @@
 from app.data_loader import load_products, load_suppliers
 from app.ocr import ParsedData
 from app.matcher import match_positions
-from datetime import date
 
 
 def test_csv_loaded():

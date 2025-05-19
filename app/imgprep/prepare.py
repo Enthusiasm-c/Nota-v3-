@@ -2,8 +2,9 @@
 Image preprocessing utilities for OCR.
 """
 import io
-from typing import Union, Optional
+from typing import Union
 from PIL import Image
+from PIL.Image import Resampling
 
 
 def resize_image(image_bytes: bytes, max_size: int = 1600, quality: int = 90) -> bytes:
@@ -19,7 +20,7 @@ def resize_image(image_bytes: bytes, max_size: int = 1600, quality: int = 90) ->
         Optimized image bytes
     """
     try:
-        img = Image.open(io.BytesIO(image_bytes))
+        img: Image.Image = Image.open(io.BytesIO(image_bytes))
         
         # If image is already small enough, return as is
         if max(img.size) <= max_size and len(image_bytes) <= 1.5 * 1024 * 1024:
@@ -29,7 +30,7 @@ def resize_image(image_bytes: bytes, max_size: int = 1600, quality: int = 90) ->
         if max(img.size) > max_size:
             ratio = max_size / max(img.size)
             new_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
-            img = img.resize(new_size, Image.LANCZOS)
+            img = img.resize(new_size, Resampling.LANCZOS)
             
         # Save with quality optimization
         output = io.BytesIO()
@@ -50,7 +51,7 @@ def resize_image(image_bytes: bytes, max_size: int = 1600, quality: int = 90) ->
             return image_bytes
             
         return result
-    except Exception as e:
+    except Exception:
         # If any error occurs, return original image
         return image_bytes
 

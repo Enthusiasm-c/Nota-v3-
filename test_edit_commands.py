@@ -3,17 +3,14 @@
 Тестовый скрипт для проверки работы парсера команд редактирования в incremental_edit_flow.py
 """
 
-import asyncio
 import logging
 import re
 from pprint import pprint
+from app.edit.apply_intent import apply_intent
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
-# Импортируем функцию для применения интентов
-from app.edit.apply_intent import apply_intent
 
 # Имитация локального парсера из incremental_edit_flow.py
 def local_intent_parser(text: str):
@@ -74,7 +71,7 @@ def test_command(command, invoice):
     
     if intent["action"] != "unknown":
         result = apply_intent(invoice, intent)
-        print(f"Результат применения интента:")
+        print("Результат применения интента:")
         pprint(result)
         return result
     else:

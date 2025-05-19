@@ -7,7 +7,6 @@
 
 import os
 import sys
-import json
 import logging
 import httpx
 import asyncio
@@ -40,8 +39,8 @@ async def check_endpoint(client, auth_token, endpoint, description):
                     data = response.json()
                     logger.info(f"Получено объектов: {len(data) if isinstance(data, list) else 'Не список'}")
                     logger.info(f"Пример данных: {str(data)[:150]}...")
-                except:
-                    logger.info(f"Ответ не JSON: {response.text[:150]}...")
+                except Exception as e:
+                    logger.info(f"Ответ не JSON: {response.text[:150]}... (ошибка: {e})")
             else:
                 logger.error(f"❌ {description} недоступен. Статус: {response.status_code}")
                 logger.error(f"Текст ошибки: {response.text[:200]}")

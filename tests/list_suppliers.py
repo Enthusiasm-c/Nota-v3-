@@ -61,7 +61,7 @@ async def main():
             # Сохраняем полный ответ в JSON файл для дальнейшего анализа
             with open("suppliers.json", "w", encoding="utf-8") as f:
                 json.dump(suppliers, f, ensure_ascii=False, indent=2)
-                logger.info(f"Список поставщиков сохранен в файл suppliers.json")
+                logger.info("Список поставщиков сохранен в файл suppliers.json")
         
         except Exception as e:
             logger.error(f"Ошибка при получении списка поставщиков: {str(e)}")

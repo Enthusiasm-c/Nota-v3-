@@ -1,4 +1,3 @@
-import pytest
 from app.utils.md import escape_html, escape_v2
 
 

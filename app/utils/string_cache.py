@@ -3,17 +3,17 @@
 Существенно ускоряет операции сопоставления при повторных запросах.
 """
 import threading
-from typing import Dict, Tuple, Optional, Any
+from typing import Dict, Optional, Any, Tuple, Union, Callable
 from functools import lru_cache
 
 # Кеш для сравнения строк со встроенным LRU механизмом
-_string_compare_cache = {}
+_string_compare_cache: Dict[Tuple[str, str], float] = {}
 _cache_lock = threading.RLock()
 
 # Ограничения для кеша
-MAX_CACHE_SIZE = 10000  # Максимальное количество элементов в кеше
-MAX_STRING_LENGTH = 200  # Максимальная длина строки для кеширования
-CLEANUP_THRESHOLD = 0.8  # Порог заполнения для очистки кеша
+MAX_CACHE_SIZE: int = 10000  # Максимальное количество элементов в кеше
+MAX_STRING_LENGTH: int = 200  # Максимальная длина строки для кеширования
+CLEANUP_THRESHOLD: float = 0.8  # Порог заполнения для очистки кеша
 
 def get_string_similarity_cached(s1: str, s2: str) -> Optional[float]:
     """
@@ -31,7 +31,7 @@ def get_string_similarity_cached(s1: str, s2: str) -> Optional[float]:
         return None
         
     # Строки должны быть отсортированы для консистентного ключа
-    key = tuple(sorted([s1, s2]))
+    key = (min(s1, s2), max(s1, s2))
     
     with _cache_lock:
         return _string_compare_cache.get(key)
@@ -50,7 +50,7 @@ def set_string_similarity_cached(s1: str, s2: str, similarity: float) -> None:
         return
         
     # Строки должны быть отсортированы для консистентного ключа
-    key = tuple(sorted([s1, s2]))
+    key = (min(s1, s2), max(s1, s2))
     
     with _cache_lock:
         # Проверяем размер кеша и очищаем его при необходимости

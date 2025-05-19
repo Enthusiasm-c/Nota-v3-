@@ -17,7 +17,6 @@ async def test_start_handler(monkeypatch):
     register_handlers(dp, bot)
     state = AsyncMock()
     # Найти handler для /start
-    from aiogram.filters.command import CommandStart
 
     found = False
     # DEBUG: print all handler filters

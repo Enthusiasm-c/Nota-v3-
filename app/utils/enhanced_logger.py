@@ -5,6 +5,29 @@ import time
 # Настройка логгера для индонезийских накладных
 indonesia_logger = logging.getLogger("nota.indonesia")
 
+def setup_enhanced_logging(log_level: str = "INFO") -> None:
+    """
+    Настраивает расширенное логирование с дополнительными форматами и обработчиками.
+    
+    Args:
+        log_level: Уровень логирования (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    """
+    numeric_level = getattr(logging, log_level.upper(), logging.INFO)
+    
+    # Настройка основного логгера
+    logging.basicConfig(
+        level=numeric_level,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    
+    # Настройка специального логгера для индонезийских накладных
+    indonesia_handler = logging.StreamHandler()
+    indonesia_handler.setFormatter(
+        logging.Formatter('%(asctime)s - [INDONESIA] %(levelname)s - %(message)s')
+    )
+    indonesia_logger.addHandler(indonesia_handler)
+    indonesia_logger.setLevel(numeric_level)
 
 def log_indonesian_invoice(req_id: str, data: Dict[str, Any], phase: str = "processing") -> None:
     """

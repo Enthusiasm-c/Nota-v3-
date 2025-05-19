@@ -2,17 +2,15 @@
 Integration tests for OCR pipeline functionality.
 """
 import pytest
-pytest_plugins = ["pytest_asyncio"]
 import json
-import os
-import base64
-import numpy as np
 from PIL import Image
 import io
 from unittest.mock import MagicMock, patch, AsyncMock
+import sys
+
+pytest_plugins = ["pytest_asyncio"]
 
 # Add paddleocr mock to avoid import error
-import sys
 if 'paddleocr' not in sys.modules:
     sys.modules['paddleocr'] = MagicMock()
     # Create PaddleOCR class mock
@@ -22,9 +20,9 @@ if 'paddleocr' not in sys.modules:
     ]
     sys.modules['paddleocr'].PaddleOCR = PaddleOCR
 
-# Import after mocking
+# ruff: noqa: E402
+# Import after mocking to avoid import errors
 from app.ocr_pipeline import OCRPipeline, send_to_gpt
-from app.models import ParsedData
 
 
 @pytest.fixture
@@ -160,6 +158,10 @@ def test_ocr_pipeline_init_custom_params():
         assert paddle_call_args["lang"] == "ru"
         assert paddle_call_args["use_angle_cls"] is True
         assert paddle_call_args["show_log"] is False
+        
+        # Verify pipeline configuration
+        assert pipeline.table_detector_method == "custom"
+        assert pipeline.paddle_ocr_lang == "ru"
 
 
 @pytest.mark.asyncio

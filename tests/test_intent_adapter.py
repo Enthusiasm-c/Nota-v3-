@@ -1,4 +1,3 @@
-import pytest
 from app.assistants.intent_adapter import IntentAdapter
 
 

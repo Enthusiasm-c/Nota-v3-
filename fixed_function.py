@@ -1,3 +1,19 @@
+import logging
+from typing import Dict, Tuple, Any, Optional, List, cast
+from aiogram.fsm.context import FSMContext
+from app.fsm.states import NotaStates
+from app.i18n import t
+from app.utils.bot import bot
+from app.utils.retry import with_async_retry_backoff
+from app.formatters.report import build_report
+from app.data_loader import load_products
+from app.matcher import match_positions
+
+logger = logging.getLogger(__name__)
+
+# Глобальный словарь для хранения матчей пользователей
+user_matches: Dict[Tuple[int, int], Dict[str, Any]] = {}
+
 @with_async_retry_backoff(max_retries=2, initial_backoff=1.0, backoff_factor=2.0)
 async def handle_field_edit(message, state: FSMContext):
     """
@@ -15,7 +31,7 @@ async def handle_field_edit(message, state: FSMContext):
     
     # ВАЖНО: очищаем режим редактирования, чтобы следующие сообщения обрабатывались как обычные
     await state.update_data(editing_mode=None)
-    logger.debug(f"BUGFIX: Cleared editing_mode in state")
+    logger.debug("BUGFIX: Cleared editing_mode in state")
     
     if idx is None or field is None or msg_id is None:
         logger.warning(
@@ -51,9 +67,11 @@ async def handle_field_edit(message, state: FSMContext):
         
         # Запускаем матчер заново для обновленной строки, если нужно
         if field in ["name", "qty", "unit"]:
-            products = data_loader.load_products("data/base_products.csv")
-            entry["match_results"][idx] = matcher.match_positions(
-                [entry["match_results"][idx]], products
+            products = load_products("data/base_products.csv")
+            # Преобразуем список в нужный формат
+            match_result = cast(Dict[str, Any], entry["match_results"][idx])
+            entry["match_results"][idx] = match_positions(
+                [match_result], cast(List[Dict[str, Any]], products)
             )[0]
             logger.debug(
                 f"BUGFIX: Re-matched item, new status: {entry['match_results'][idx].get('status')}"
@@ -137,7 +155,7 @@ async def handle_field_edit(message, state: FSMContext):
                 logger.error(f"Final fallback message failed: {final_e}")
                 try:
                     # Крайний случай - простое сообщение без i18n
-                    result = await message.answer(f"Field updated successfully.", parse_mode=None)
+                    result = await message.answer("Field updated successfully.", parse_mode=None)
                     logger.info("Sent basic fallback message")
                     return  # Выходим досрочно
                 except Exception as absolutely_final_e:

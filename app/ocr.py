@@ -4,7 +4,7 @@ OCR utility functions for invoice processing.
 import base64
 import logging
 import time
-from typing import Dict, Any, Optional
+from typing import Optional
 
 from app.models import ParsedData
 from app.postprocessing import postprocess_parsed_data
@@ -81,7 +81,7 @@ def get_ocr_client():
         return None
 
 
-def call_openai_ocr(image_bytes: bytes, _req_id=None, use_cache: bool = True, timeout: int = 20) -> ParsedData:
+def call_openai_ocr(image_bytes: bytes, _req_id=None, use_cache: bool = True, timeout: int = 60) -> ParsedData:
     """
     Call OpenAI Vision API to extract data from an invoice image.
     
@@ -89,7 +89,7 @@ def call_openai_ocr(image_bytes: bytes, _req_id=None, use_cache: bool = True, ti
         image_bytes: Raw image bytes
         _req_id: Optional request ID for tracking
         use_cache: Whether to use cache
-        timeout: Timeout in seconds for the API call (default 20)
+        timeout: Timeout in seconds for the API call (default 60)
         
     Returns:
         ParsedData model with extracted information

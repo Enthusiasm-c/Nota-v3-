@@ -74,13 +74,13 @@ def test_autocorrect_name_edge_cases():
     # Пустая строка
     assert postprocessing.autocorrect_name("", allowed) == ""
     # None
-    assert postprocessing.autocorrect_name(None, allowed) == None
+    assert postprocessing.autocorrect_name(None, allowed) is None
     # Очень длинная строка
     assert postprocessing.autocorrect_name("A"*100, allowed) == "A"*100
 
 def test_normalize_units_edge_cases():
     # None
-    assert postprocessing.normalize_units(None) == None
+    assert postprocessing.normalize_units(None) is None
     # Пустая строка
     assert postprocessing.normalize_units("") == ""
     # Неизвестная единица

@@ -1,12 +1,9 @@
 from aiogram import Router, CallbackQuery, Message, F
 import re
 import logging
-import asyncio
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from app.fsm.states import EditFree
-from app.utils.processing_guard import require_user_free, require_rate_limit
-from app.edit import free_parser
 from aiogram.types import ForceReply
 
 
@@ -54,6 +51,7 @@ async def handle_choose_line(message: Message, state: FSMContext):
     data = await state.get_data()
     logger.info(f"[DEBUG] State at handle_choose_line: {data}")
     text = message.text.strip()
+    lang = data.get("lang", "en")  # Получаем язык из состояния
     if not text.isdigit() or not (1 <= int(text) <= 40):
         await message.answer(t("edit.enter_row_number", lang=lang))
         return
@@ -163,6 +161,17 @@ async def handle_page_next(call: CallbackQuery, state: FSMContext):
     invoice = data.get("invoice")
     page = data.get("invoice_page", 1)
 
+    if not invoice:
+        await call.answer(
+            "Session expired. Please resend the invoice.", show_alert=True
+        )
+        return
+
+    # Получаем результаты сопоставления
+    match_results = matcher.match_positions(
+        invoice["positions"], data_loader.load_products()
+    )
+    table_rows = [r for r in match_results]
     total_rows = len(table_rows)
     page_size = 15
     total_pages = (total_rows + page_size - 1) // page_size
@@ -478,18 +487,11 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
         invoice["positions"], data_loader.load_products()
     )
     page = 1
-    page_size = 40
-    total_rows = len(match_results)
-    total_pages = (total_rows + page_size - 1) // page_size
     if match["status"] == "ok":
-
         # После успешного редактирования сбрасываем страницу на 1
         await state.update_data(invoice_page=1)
         match_results = matcher.match_positions(invoice["positions"], data_loader.load_products())
         page = 1
-        page_size = 40
-        total_rows = len(match_results)
-        total_pages = (total_rows + page_size - 1) // page_size
         text, has_errors = invoice_report.build_report(invoice, match_results, page=page)
         reply_markup = keyboards.build_main_kb(has_errors)
         text_to_send = f"<b>Updated!</b><br>{text}"
@@ -538,9 +540,6 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
             invoice["positions"], data_loader.load_products()
         )
         page = 1
-        page_size = 40
-        total_rows = len(match_results)
-        total_pages = (total_rows + page_size - 1) // page_size
         text, has_errors = invoice_report.build_report(invoice, match_results, page=page)
         reply_markup = keyboards.build_main_kb(has_errors)
         text_to_send = f"<b>Updated!</b><br>{text}"
@@ -576,6 +575,8 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
             logging.warning(f"Failed to update edit fields keyboard: {e}")
             # Пробуем отправить новое сообщение с клавиатурой
             try:
+                data = await state.get_data()
+                lang = data.get("lang", "en")  # Получаем язык из состояния
                 await message.answer(t("edit.select_field", lang=lang), reply_markup=keyboards.kb_edit_fields(idx))
                 # Обновляем ID сообщения в состоянии
                 new_msg = await message.answer(t("edit.editing_position", lang=lang), reply_markup=keyboards.kb_edit_fields(idx))

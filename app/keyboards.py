@@ -203,18 +203,17 @@ def build_main_kb(has_errors: bool = True, lang: str = "en") -> InlineKeyboardMa
     buttons.append([
         InlineKeyboardButton(
             text=f"{'⚠️' if has_errors else '✏️'} {t('buttons.edit', {'default': 'Edit'}, lang)}",
-        callback_data="edit:free"
-    )
+            callback_data="edit:free"
+        )
     ])
     
-    # Confirm button (only if no errors)
-    if not has_errors:
-        buttons.append([
-            InlineKeyboardButton(
-                text=f"✅ {t('buttons.confirm', {'default': 'Confirm'}, lang)}",
-        callback_data="confirm:invoice"
-    )
-        ])
+    # Confirm button (always show, but with warning if has errors)
+    buttons.append([
+        InlineKeyboardButton(
+            text=f"{'⚠️' if has_errors else '✅'} {t('buttons.confirm', {'default': 'Confirm'}, lang)}",
+            callback_data="confirm:invoice"
+        )
+    ])
     
     # Cancel button
     buttons.append([

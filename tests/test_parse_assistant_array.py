@@ -2,8 +2,6 @@
 Тесты для проверки обработки массива actions в parse_assistant_output.
 """
 
-import json
-import pytest
 from app.assistants.client import parse_assistant_output, EditCommand
 
 

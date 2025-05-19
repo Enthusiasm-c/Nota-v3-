@@ -9,7 +9,6 @@ import asyncio
 import os
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
-from pprint import pprint
 from aiogram.types import Message, User, Chat
 
 # Добавляем корневую директорию проекта в путь для поиска модулей
@@ -140,7 +139,7 @@ async def test_gpt_parser():
                             print("❌ Не удалось найти позицию 3")
                             
                         # Проверяем вызов UI-методов
-                        print(f"\nUI вызовы:")
+                        print("\nUI вызовы:")
                         print(f"start: {mock_ui.start.called}")
                         print(f"complete: {mock_ui.complete.called}")
                         print(f"error: {mock_ui.error.called}")
@@ -195,7 +194,7 @@ async def test_gpt_qty_as_unit():
                             print("❌ Не удалось найти позицию 3")
                             
                         # Проверяем вызов UI-методов
-                        print(f"\nUI вызовы:")
+                        print("\nUI вызовы:")
                         print(f"start: {mock_ui.start.called}")
                         print(f"complete: {mock_ui.complete.called}")
                         print(f"error: {mock_ui.error.called}")

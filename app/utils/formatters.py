@@ -6,7 +6,7 @@
 
 import re
 import logging
-from typing import Optional, Union, Dict, Any, List
+from typing import Optional, Union
 
 # Импортируем функцию clean_num из postprocessing
 from app.postprocessing import clean_num

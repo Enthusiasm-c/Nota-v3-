@@ -5,9 +5,7 @@
 """
 
 import sys
-import os
 import logging
-from typing import Dict, Any, List, Optional
 import unittest
 import asyncio
 
@@ -74,7 +72,6 @@ class OptimizationTest(unittest.TestCase):
         """Тестирование модуля кеширования данных"""
         from app.utils.cached_loader import (
             cached_load_products,
-            cached_load_data,
             clear_cache,
             get_cache_stats
         )
@@ -98,9 +95,10 @@ class OptimizationTest(unittest.TestCase):
         products_again = cached_load_products("test_path.csv", test_loader)
         stats_after = get_cache_stats()
         
-        self.assertEqual(stats_before["data_cache"]["size"], 
-                         stats_after["data_cache"]["size"],
-                        "Размер кеша не должен измениться при повторной загрузке")
+        # Проверяем, что данные были взяты из кэша и не изменились
+        assert stats_after.hits == stats_before.hits + 1
+        assert stats_after.misses == stats_before.misses
+        assert products_again == test_data  # Проверяем, что данные те же самые
         
         # Проверяем очистку кеша
         clear_cache()

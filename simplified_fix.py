@@ -9,7 +9,6 @@ import re
 import sys
 import shutil
 import time
-from pathlib import Path
 
 # Версия скрипта
 VERSION = "1.0.0"

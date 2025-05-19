@@ -6,12 +6,9 @@ import pytest
 pytest_plugins = ["pytest_asyncio"]
 import json
 import os
-import base64
-import numpy as np
 from PIL import Image
 import io
 from unittest.mock import MagicMock, patch, AsyncMock
-import datetime
 
 # Add paddleocr mock to avoid import error
 import sys
@@ -26,9 +23,6 @@ if 'paddleocr' not in sys.modules:
 
 # Import after mocking
 from app.ocr_pipeline import OCRPipeline
-from app.models import ParsedData
-from app.validators.pipeline import ValidationPipeline
-from app.postprocessing import postprocess_parsed_data
 
 
 @pytest.fixture

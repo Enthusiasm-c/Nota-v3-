@@ -3,11 +3,12 @@
 """
 
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Union
 from datetime import datetime
 from copy import deepcopy
-import copy
 import re
+from app.models import ParsedData
+from app.converters import parsed_to_dict
 
 logger = logging.getLogger(__name__)
 
@@ -131,10 +132,6 @@ def set_unit(invoice: Dict[str, Any], line_index: int, value: str) -> Dict[str, 
         logger.warning(f"Попытка установить единицу измерения для несуществующей строки: {line_index + 1}")
     
     return result
-
-from typing import Union
-from app.models import ParsedData
-from app.converters import parsed_to_dict
 
 def apply_intent(invoice: Union[dict, ParsedData], intent: dict) -> dict:
     """

@@ -1,4 +1,3 @@
-import pytest
 from app.assistants.client import parse_assistant_output, EditCommand
 
 # --- RED TESTS: Старый формат ---

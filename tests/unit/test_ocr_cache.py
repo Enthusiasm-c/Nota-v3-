@@ -1,10 +1,7 @@
 import pytest
 from unittest.mock import MagicMock, patch
-import json
 import pickle
-import os
 import hashlib
-from datetime import datetime
 
 from app.utils.ocr_cache import (
     get_from_cache,

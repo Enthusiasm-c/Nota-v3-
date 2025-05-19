@@ -1,6 +1,5 @@
 import time
 from aiogram.dispatcher.middlewares.base import BaseMiddleware
-from aiogram.types import Update
 from app.trace_context import set_trace_id
 import logging
 import json

@@ -1,10 +1,7 @@
 import logging
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.enums import ParseMode
 from typing import Any, Dict
-import asyncio
 import re
-from app.utils.md import escape_html
 
 # In-memory cache for message edits (can be replaced with Redis)
 _edit_cache: Dict[str, Dict[str, Any]] = {}

@@ -2,12 +2,11 @@
 Тесты для проверки генерации XML-документов в соответствии с XSD-схемой Syrve API.
 """
 
-import os
 import unittest
 from decimal import Decimal
 from datetime import date
 from io import BytesIO
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 
 from lxml import etree
 

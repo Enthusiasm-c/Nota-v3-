@@ -18,7 +18,7 @@ def test_regex(pattern, test_strings):
             unit = match.group(2).strip()
             print(f"   Индекс: {line_num}, Единица: '{unit}'")
         else:
-            print(f"❌ Совпадение не найдено")
+            print("❌ Совпадение не найдено")
 
 if __name__ == "__main__":
     # Шаблон для распознавания команд редактирования единицы измерения

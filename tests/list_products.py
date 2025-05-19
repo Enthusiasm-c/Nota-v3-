@@ -89,7 +89,7 @@ async def main():
                 # Сохраняем полный ответ в JSON файл для дальнейшего анализа
                 with open("products.json", "w", encoding="utf-8") as f:
                     json.dump(products, f, ensure_ascii=False, indent=2)
-                    logger.info(f"Список продуктов сохранен в файл products.json")
+                    logger.info("Список продуктов сохранен в файл products.json")
             else:
                 logger.error("Не удалось получить список продуктов")
         

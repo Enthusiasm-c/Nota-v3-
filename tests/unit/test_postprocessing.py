@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from app import postprocessing
 from app.models import ParsedData, Position
 from datetime import date

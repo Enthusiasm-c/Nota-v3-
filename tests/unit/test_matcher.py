@@ -1,5 +1,3 @@
-import pytest
-from unittest.mock import MagicMock, patch
 from app.matcher import (
     fuzzy_find,
     normalize_product_name,

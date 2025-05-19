@@ -49,40 +49,8 @@ restart_log() {
 
 # Bot start function
 start_bot() {
-    log "Starting bot..."
-    
-    # Load environment variables
-    load_env
-    
-    # Check if bot is already running
-    if [ -f "${PID_FILE}" ]; then
-        local old_pid=$(cat "${PID_FILE}")
-        if ps -p "${old_pid}" > /dev/null 2>&1; then
-            error_log "Bot is already running with PID ${old_pid}"
-            return 1
-        else
-            log "Found stale PID file. Removing..."
-            rm -f "${PID_FILE}"
-        fi
-    fi
-    
-    # Start bot in background
-    cd "${APP_DIR}"
-    
-    # Launch with output redirection to log files
-    nohup ${PYTHON_PATH} ${BOT_SCRIPT} > "${LOG_DIR}/bot_stdout.log" 2> "${LOG_DIR}/bot_stderr.log" &
-    
-    local bot_pid=$!
-    echo "${bot_pid}" > "${PID_FILE}"
-    
-    # Verify process is running
-    if ps -p "${bot_pid}" > /dev/null 2>&1; then
-        log "Bot successfully started with PID ${bot_pid}"
-        return 0
-    else
-        error_log "Failed to start bot"
-        return 1
-    fi
+    echo "🚀 Запуск бота..."
+    python3 bot.py
 }
 
 # Bot stop function
@@ -141,9 +109,7 @@ check_bot() {
 
 # Bot restart function
 restart_bot() {
-    restart_log "Restarting bot..."
-    stop_bot
-    sleep 2
+    kill_bot
     start_bot
 }
 
@@ -160,27 +126,69 @@ monitor_and_restart() {
     done
 }
 
+# Функция для завершения процессов бота
+kill_bot() {
+    echo "🔍 Поиск процессов бота..."
+    
+    # Находим все процессы Python, связанные с bot.py
+    BOT_PROCESSES=$(ps -ef | grep "python.*bot.py" | grep -v grep)
+    
+    if [ -n "$BOT_PROCESSES" ]; then
+        echo "🛑 Найдены процессы бота:"
+        echo "$BOT_PROCESSES"
+        
+        # Получаем PID всех процессов и их родителей
+        echo "🔄 Завершение процессов бота и их родителей..."
+        echo "$BOT_PROCESSES" | while read -r line; do
+            PID=$(echo $line | awk '{print $2}')
+            PPID=$(echo $line | awk '{print $3}')
+            
+            # Завершаем процесс и его родителя
+            kill -9 $PID $PPID 2>/dev/null || true
+        done
+        
+        # Даем время на завершение
+        sleep 2
+        
+        # Проверяем, остались ли процессы
+        REMAINING=$(ps aux | grep "python.*bot.py" | grep -v grep)
+        if [ -n "$REMAINING" ]; then
+            echo "⚠️ Обнаружены оставшиеся процессы, применяем принудительное завершение..."
+            pkill -9 -f "python.*bot.py" || true
+            sleep 1
+        fi
+        
+        echo "✅ Все процессы бота завершены"
+    else
+        echo "ℹ️ Активные процессы бота не найдены"
+    fi
+    
+    # Очищаем PID файл, если он существует
+    [ -f "bot.pid" ] && rm -f "bot.pid"
+}
+
 # Command line argument handling
 case "$1" in
-    start)
+    "start")
+        kill_bot
         start_bot
         ;;
-    stop)
-        stop_bot
+    "stop")
+        kill_bot
         ;;
-    restart)
+    "restart")
         restart_bot
         ;;
-    status)
+    "status")
         check_bot
         ;;
-    monitor)
+    "monitor")
         # Start bot and monitoring
         start_bot
         monitor_and_restart
         ;;
     *)
-        echo "Usage: $0 {start|stop|restart|status|monitor}"
+        echo "Использование: $0 {start|stop|restart|status|monitor}"
         echo "  start   - start the bot"
         echo "  stop    - stop the bot"
         echo "  restart - restart the bot"

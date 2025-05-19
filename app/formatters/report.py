@@ -1,9 +1,10 @@
-from html import escape  # For escaping data only, not HTML tags
 import logging
-logging.getLogger("nota.report").debug("escape func = %s", escape)
-from decimal import Decimal
-from app.utils.formatters import format_price, format_quantity
 import re
+from html import escape  # For escaping data only, not HTML tags
+from app.utils.formatters import format_price, format_quantity
+
+logger = logging.getLogger("nota.report")
+logger.debug("escape func = %s", escape)
 
 def format_idr(val):
     """Format number with narrow space and no currency for table."""
@@ -43,8 +44,6 @@ def build_table(rows):
     Проблемные значения выделяются жирным шрифтом.
     """
     from html import escape as html_escape
-    from app.utils.formatters import format_price, format_quantity
-    import re
 
     status_map = {"ok": "✓", "unknown": "❗", "unit_mismatch": "❗", "error": "❗", "manual": ""}
 
@@ -83,7 +82,7 @@ def build_table(rows):
 
     # Если позиций нет, возвращаем только заголовок и строку-заглушку
     if not rows:
-        header = f"# NAME            QTY   UNIT PRICE  "
+        header = "# NAME            QTY   UNIT PRICE  "
         return header + "\n—"
 
     # Жёстко задаём ширины для теста layout
@@ -99,7 +98,6 @@ def build_table(rows):
     qty_pos = name_pos + name_width  # Смещено на 2 знака влево от исходного положения (было -3, изменили на -2)
     unit_pos = qty_pos + qty_width    # Смещено на 3 знака влево от исходного положения (вместо -4 сдвигаем на -3)
     price_pos = unit_pos + unit_width + 1  # Смещено на 2 знака влево от исходного положения (вместо -4 сдвигаем на -2)
-    status_pos = price_pos + price_width + 1
 
     # Формируем заголовок с точным расположением названий столбцов
     header = " " * num_pos + "#" + " " * (name_pos - num_pos - 1) + "NAME" + " " * (qty_pos - name_pos - 4) + "QTY" + " " * (unit_pos - qty_pos - 3) + "UNIT" + " " * (price_pos - unit_pos - 4 - 1) + "PRICE"
@@ -190,7 +188,6 @@ def build_summary(match_results):
         # Проверка автокоррекции цены
         if "auto_fixed" in item and item.get("auto_fixed", False):
             if "original_price" in item and "price" in item:
-                original_price = item.get("original_price")
                 corrected_price = item.get("price")
                 error_details.append(f"price fixed: {corrected_price}")
                 

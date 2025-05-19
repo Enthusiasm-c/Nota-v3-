@@ -7,8 +7,6 @@ import logging.handlers
 import os
 import time
 import threading
-from typing import Dict, List, Tuple, Any, Optional
-from queue import Queue
 
 # Buffer for non-critical logs
 log_buffer = []

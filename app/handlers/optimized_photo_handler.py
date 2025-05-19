@@ -9,21 +9,19 @@ and detailed execution time logging.
 import asyncio
 import logging
 import uuid
-import time
-from pathlib import Path
-from typing import Optional, Dict, Any, List, Union, Tuple
+from typing import Dict, Any, Tuple
+from bot import user_matches
 
 from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
-from aiogram.enums import ParseMode
 
 from app.utils.incremental_ui import IncrementalUI
-from app.utils.timing_logger import operation_timer, async_timed
+from app.utils.timing_logger import async_timed
 from app.utils.processing_guard import require_user_free, set_processing_photo, is_processing_photo
 from app.utils.async_ocr import async_ocr
 from app.utils.optimized_matcher import async_match_positions
-from app.utils.cached_loader import cached_load_products, cached_load_data_async
+from app.utils.cached_loader import cached_load_products
 
 from app.formatters.report import build_report
 from app.keyboards import build_main_kb
@@ -36,11 +34,7 @@ logger = logging.getLogger(__name__)
 # Create router for handler registration
 router = Router()
 
-# Import required states
-from app.fsm.states import EditFree, NotaStates
-
-# Import user_matches with type annotation
-from bot import user_matches
+# Initialize user_matches if needed
 if not isinstance(user_matches, dict):
     user_matches: Dict[Tuple[int, int], Dict[str, Any]] = {}
 
@@ -120,7 +114,7 @@ async def optimized_photo_handler(message: Message, state: FSMContext):
         await ui.start_spinner(theme="dots")
         
         try:
-            ocr_result = await async_ocr(img_bytes, req_id=req_id, use_cache=True, timeout=30)
+            ocr_result = await async_ocr(img_bytes, req_id=req_id, use_cache=True, timeout=60)
             positions_count = len(ocr_result["positions"]) if isinstance(ocr_result, dict) else len(ocr_result.positions)
         except asyncio.TimeoutError:
             logger.error(f"OCR timeout for request {req_id}")

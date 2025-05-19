@@ -1,9 +1,8 @@
 import pytest
 import logging
 import time
-from unittest.mock import MagicMock, patch, ANY
+from unittest.mock import MagicMock, patch
 import json
-import traceback
 
 from app.utils.enhanced_logger import (
     log_indonesian_invoice,

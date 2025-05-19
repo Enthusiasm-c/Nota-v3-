@@ -64,6 +64,4 @@ def _row(
 # build_table удалён — используйте app/formatters/report.py
 
 
-from typing import Any
-
 # build_report и build_table удалены — используйте app/formatters/report.py

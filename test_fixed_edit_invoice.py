@@ -6,7 +6,6 @@
 
 import logging
 import asyncio
-from pprint import pprint
 from copy import deepcopy
 
 # Настройка логирования
@@ -82,7 +81,6 @@ async def test_invoice_status():
         
         # 5. Смотрим на поведение process_user_edit в edit_core.py
         print("\n=== Анализ обработки в process_user_edit ===")
-        from app.handlers.edit_core import process_user_edit
         
         # Проверяем условие переопределения has_errors
         unknown_count = sum(1 for r in match_results if r.get("status") == "unknown")

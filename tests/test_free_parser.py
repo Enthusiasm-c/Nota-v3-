@@ -1,4 +1,3 @@
-import pytest
 from app.edit import free_parser
 
 def test_detect_intent_date():

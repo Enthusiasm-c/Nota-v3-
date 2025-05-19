@@ -15,7 +15,8 @@ from app.config import settings
 from app.assistants.trace_openai import trace_openai
 from app.utils.redis_cache import cache_get, cache_set
 from app.assistants.intent_adapter import adapt_intent
-from app.assistants.thread_pool import get_thread, initialize_pool
+from app.assistants.thread_pool import get_thread
+from app.utils.monitor import parse_action_monitor
 
 from pydantic import BaseModel, ValidationError, field_validator
 from functools import wraps
@@ -49,8 +50,6 @@ class EditCommand(BaseModel):
                 raise ValueError(f"row must be >= 1 for action {action}")
         return v
 
-from app.utils.monitor import parse_action_monitor
-
 __all__ = [
     "EditCommand",
     "parse_assistant_output",
@@ -73,7 +72,6 @@ def parse_edit_command(user_input: str, invoice_lines=None) -> list:
     """
     import re
     from datetime import datetime
-    import logging
     
     # Проверка на пустой ввод
     if not user_input or not user_input.strip():
@@ -552,7 +550,7 @@ def parse_assistant_output(raw: str) -> List[EditCommand]:
     
     for i, obj in enumerate(actions):
         if not isinstance(obj, dict):
-            logger.error(f"[parse_assistant_output] Action не dict", extra={"data": {"index": i, "item": obj}})
+            logger.error("[parse_assistant_output] Action не dict", extra={"data": {"index": i, "item": obj}})
             continue  # Пропускаем некорректный элемент, но продолжаем обработку
             
         if "action" not in obj:
@@ -563,10 +561,10 @@ def parse_assistant_output(raw: str) -> List[EditCommand]:
             cmds.append(EditCommand(**obj))
             logger.info(f"[parse_assistant_output] Добавлена команда {obj.get('action')} из элемента {i}")
         except ValidationError as ve:
-            logger.error(f"[parse_assistant_output] Validation error", extra={"data": {"index": i, "item": obj, "error": str(ve)}})
+            logger.error("[parse_assistant_output] Validation error", extra={"data": {"index": i, "item": obj, "error": str(ve)}})
             # Продолжаем обработку остальных элементов
         except ValueError as ve:
-            logger.error(f"[parse_assistant_output] Validation error (row check)", extra={"data": {"index": i, "item": obj, "error": str(ve)}})
+            logger.error("[parse_assistant_output] Validation error (row check)", extra={"data": {"index": i, "item": obj, "error": str(ve)}})
             # Продолжаем обработку остальных элементов
     
     # Если не удалось получить ни одной команды, возвращаем ошибку
@@ -745,7 +743,7 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
         # Добавляем сообщение пользователя с повторными попытками при ошибках API
         logger.info(f"[run_thread_safe_async] Adding user message: '{user_input}'")
         try:
-            message = await retry_openai_call(
+            await retry_openai_call(
                 client.beta.threads.messages.create,
                 thread_id=thread_id,
                 role="user",
@@ -762,7 +760,7 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
             }
 
         # ОПТИМИЗАЦИЯ 3: Устанавливаем таймаут не менее 45 секунд для обеспечения надежности
-        actual_timeout = max(45, timeout)  # Увеличиваем минимальный таймаут с 30 до 45 секунд
+        timeout = max(45, timeout)  # Увеличиваем минимальный таймаут с 30 до 45 секунд
 
         # Запускаем ассистента с повторными попытками
         logger.info(f"[run_thread_safe_async] Creating run with assistant ID: {cached_assistant_id}")

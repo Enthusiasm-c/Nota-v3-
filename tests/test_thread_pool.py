@@ -1,7 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from app.assistants import thread_pool
-import asyncio
 
 @pytest.mark.asyncio
 async def test_initialize_pool_creates_new():

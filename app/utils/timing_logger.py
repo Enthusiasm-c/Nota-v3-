@@ -5,17 +5,16 @@
 
 import logging
 import time
-import asyncio
 import functools
-import inspect
 import threading
-from typing import Dict, List, Any, Optional, Callable, Union, Tuple
+from typing import Dict, List, Any, Optional, Callable, Union
 from contextlib import contextmanager
+from functools import wraps
 
 logger = logging.getLogger(__name__)
 
 # Глобальное хранилище таймеров по ID запроса
-_timers = {}
+_timers: Dict[str, float] = {}
 _timers_lock = threading.RLock()
 
 class TimingContext:
@@ -253,6 +252,7 @@ def timed(request_id_arg: Union[str, int, Callable] = None, operation_name: Opti
             # Запускаем таймер
             with TimingContext(req_id, func_name) as timer:
                 result = func(*args, **kwargs)
+                logger.debug(f"Function {func_name} completed in {timer.duration:.2f}s")
                 return result
                 
         return wrapper
@@ -295,6 +295,7 @@ def async_timed(request_id_arg: Union[str, int, Callable] = None, operation_name
             # Запускаем таймер
             with TimingContext(req_id, func_name) as timer:
                 result = await func(*args, **kwargs)
+                logger.debug(f"Async function {func_name} completed in {timer.duration:.2f}s")
                 return result
                 
         return wrapper
@@ -326,3 +327,79 @@ def operation_timer(request_id: str, operation_name: str, parent_timer: Optional
         yield timer
     finally:
         timer.stop()
+
+def timing_decorator(
+    name: str,
+    request_id_arg: Optional[Union[str, int, Callable[..., Any]]] = None
+) -> Callable:
+    """
+    Decorator for timing function execution.
+    
+    Args:
+        name: Name for the timing log
+        request_id_arg: Argument to use as request ID
+        
+    Returns:
+        Decorated function
+    """
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            # Get request ID if specified
+            req_id: Optional[Union[str, int]] = None
+            if request_id_arg is not None:
+                if isinstance(request_id_arg, (str, int)):
+                    req_id = str(request_id_arg)
+                elif callable(request_id_arg):
+                    req_id = str(request_id_arg(*args, **kwargs))
+                    
+            start_time = time.time()
+            try:
+                result = func(*args, **kwargs)
+                return result
+            finally:
+                duration = time.time() - start_time
+                if req_id:
+                    logger.info(f"{name} completed in {duration:.3f}s [req_id={req_id}]")
+                else:
+                    logger.info(f"{name} completed in {duration:.3f}s")
+        return wrapper
+    return decorator
+
+def async_timing_decorator(
+    name: str,
+    request_id_arg: Optional[Union[str, int, Callable[..., Any]]] = None
+) -> Callable:
+    """
+    Async version of timing decorator.
+    
+    Args:
+        name: Name for the timing log
+        request_id_arg: Argument to use as request ID
+        
+    Returns:
+        Decorated async function
+    """
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
+            # Get request ID if specified
+            req_id: Optional[Union[str, int]] = None
+            if request_id_arg is not None:
+                if isinstance(request_id_arg, (str, int)):
+                    req_id = str(request_id_arg)
+                elif callable(request_id_arg):
+                    req_id = str(request_id_arg(*args, **kwargs))
+                    
+            start_time = time.time()
+            try:
+                result = await func(*args, **kwargs)
+                return result
+            finally:
+                duration = time.time() - start_time
+                if req_id:
+                    logger.info(f"{name} completed in {duration:.3f}s [req_id={req_id}]")
+                else:
+                    logger.info(f"{name} completed in {duration:.3f}s")
+        return wrapper
+    return decorator

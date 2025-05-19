@@ -4,13 +4,9 @@ Integration tests for OCR pipeline with complex table layouts and fallback scena
 import pytest
 pytest_plugins = ["pytest_asyncio"]
 import json
-import os
-import base64
-import numpy as np
-from datetime import datetime
 from PIL import Image
 import io
-from unittest.mock import MagicMock, patch, AsyncMock, call
+from unittest.mock import MagicMock, patch, AsyncMock
 
 # Add paddleocr mock to avoid import error
 import sys
@@ -24,8 +20,8 @@ if 'paddleocr' not in sys.modules:
     sys.modules['paddleocr'].PaddleOCR = PaddleOCR
 
 # Import after mocking
-from app.ocr_pipeline import OCRPipeline, send_to_gpt
-from app.ocr_helpers import parse_numeric_value, process_cell_with_gpt4o
+from app.ocr_pipeline import OCRPipeline
+from app.ocr_helpers import process_cell_with_gpt4o
 
 
 @pytest.fixture

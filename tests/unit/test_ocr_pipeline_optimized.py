@@ -5,10 +5,8 @@ import os
 import sys
 import io
 import pytest
-import asyncio
 import json
-from unittest.mock import patch, MagicMock, AsyncMock
-import numpy as np
+from unittest.mock import patch, MagicMock
 from PIL import Image
 
 # Add app directory to path
@@ -20,7 +18,7 @@ from app.ocr_pipeline_optimized import OCRPipelineOptimized
 # Helper function for creating test images
 def create_test_image(width, height, text=None):
     """Create a test image with optional text."""
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import ImageDraw, ImageFont
     image = Image.new('RGB', (width, height), color=(255, 255, 255))
     if text:
         try:

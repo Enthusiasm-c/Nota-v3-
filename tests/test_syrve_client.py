@@ -1,6 +1,5 @@
 import os
 import pytest
-import asyncio
 import hashlib
 from dotenv import load_dotenv
 from app.syrve_client import SyrveClient
@@ -52,39 +51,53 @@ async def test_import_invoice():
   <items>
     <item>
       <amount>1.00</amount>
-      <supplierProduct>00000000-0000-0000-0000-000000000000</supplierProduct>
       <product>00000000-0000-0000-0000-000000000000</product>
       <num>1</num>
-      <containerId>00000000-0000-0000-0000-000000000000</containerId>
-      <amountUnit>00000000-0000-0000-0000-000000000000</amountUnit>
-      <actualUnitWeight/>
-      <discountSum>0.00</discountSum>
-      <sumWithoutNds>10.00</sumWithoutNds>
-      <ndsPercent>0.00</ndsPercent>
       <sum>10.00</sum>
-      <priceUnit/>
       <price>10.00</price>
-      <code>12345</code>
       <store>00000000-0000-0000-0000-000000000000</store>
-      <customsDeclarationNumber>cdn-1</customsDeclarationNumber>
-      <actualAmount>1.00</actualAmount>
     </item>
   </items>
   <conception>00000000-0000-0000-0000-000000000000</conception>
-  <comment>test</comment>
-  <documentNumber>dn-1</documentNumber>
   <dateIncoming>2024-01-01</dateIncoming>
-  <useDefaultDocumentTime>true</useDefaultDocumentTime>
-  <invoice>in-1</invoice>
   <defaultStore>00000000-0000-0000-0000-000000000000</defaultStore>
   <supplier>00000000-0000-0000-0000-000000000000</supplier>
-  <dueDate>2024-01-10</dueDate>
-  <incomingDocumentNumber>idn-1</incomingDocumentNumber>
-  <employeePassToAccount>00000000-0000-0000-0000-000000000000</employeePassToAccount>
-  <transportInvoiceNumber>tin-1</transportInvoiceNumber>
 </document>'''
     result = await client.import_invoice(token, xml)
     assert isinstance(result, dict)
     assert "valid" in result
+    # Логаут в конце
+    await client.logout(token)
+
+@pytest.mark.asyncio
+async def test_server_assigned_document_number():
+    """Тест проверяет, что сервер может присвоить номер документа."""
+    client = SyrveClient(SYRVE_SERVER_URL, SYRVE_LOGIN, SYRVE_PASSWORD)
+    token = await client.auth()
+    
+    # XML без номера документа
+    xml = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<document>
+  <items>
+    <item>
+      <amount>1.00</amount>
+      <product>00000000-0000-0000-0000-000000000000</product>
+      <num>1</num>
+      <sum>10.00</sum>
+      <price>10.00</price>
+      <store>00000000-0000-0000-0000-000000000000</store>
+    </item>
+  </items>
+  <conception>00000000-0000-0000-0000-000000000000</conception>
+  <dateIncoming>2024-01-01</dateIncoming>
+  <defaultStore>00000000-0000-0000-0000-000000000000</defaultStore>
+  <supplier>00000000-0000-0000-0000-000000000000</supplier>
+</document>'''
+    
+    result = await client.import_invoice(token, xml)
+    assert isinstance(result, dict)
+    assert result["valid"] is True
+    assert "document_number" in result
+    assert result["document_number"] is not None
     # Логаут в конце
     await client.logout(token)

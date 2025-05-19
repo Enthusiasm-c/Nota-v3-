@@ -6,7 +6,7 @@ import logging
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
-from app.fsm.states import EditFree, NotaStates
+from app.fsm.states import EditFree
 from app.formatters import report
 from app.matcher import match_positions, fuzzy_find
 from app.data_loader import load_products
@@ -111,7 +111,7 @@ async def handle_pick_name(call: CallbackQuery, state: FSMContext):
             await processing_msg.delete()
         await call.answer()
     
-    except Exception as e:
+    except Exception:
         logger.exception("Error in handle_pick_name")
         await processing_msg.delete()
         await call.message.answer(
@@ -147,7 +147,7 @@ async def show_fuzzy_suggestions(message: Message, state: FSMContext, name: str,
     
     # Skip fuzzy matching if we're processing commands with date or other structured data
     if data.get("skip_fuzzy_matching") or any(action in name.lower() for action in ["date", "дата", "изменить дату"]):
-        logger.info(f"Skipping fuzzy matching due to skip_fuzzy_matching flag or presence of date command")
+        logger.info("Skipping fuzzy matching due to skip_fuzzy_matching flag or presence of date command")
         # Reset flag after use
         await state.update_data(skip_fuzzy_matching=False)  
         return False

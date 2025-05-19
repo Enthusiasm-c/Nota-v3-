@@ -1,11 +1,10 @@
 import pytest
-pytest_plugins = ["pytest_asyncio"]
 import json
-import os
-import re
 from datetime import date
 from app.ocr import call_openai_ocr, ParsedData, INVOICE_FUNCTION_SCHEMA
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
+
+pytest_plugins = ["pytest_asyncio"]
 
 
 class DummyMessage:

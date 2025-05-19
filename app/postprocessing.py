@@ -1,103 +1,42 @@
 import re
 import logging
-from typing import Optional, List
-from app.models import ParsedData, Position
+from typing import Optional, List, Union
+from app.models import ParsedData
 from app.data_loader import load_products
 from app.utils.enhanced_logger import log_indonesian_invoice, log_format_issues
 
 # Автокоррекция числовых значений с надежной обработкой различных форматов
-def clean_num(val, default=None) -> Optional[float]:
+def clean_num(val: Optional[Union[str, float, int]], default: Optional[float] = None) -> Optional[float]:
     """
-    Очистка и конвертация числовых значений из разных форматов.
-    Работает с форматами: 1,000.00, 1.000,00, 1 000, 1'000, и т.д.
-    Также распознает валютные символы и суффиксы (k, м, млн).
+    Очищает и конвертирует числовое значение.
     
     Args:
-        val: Входное значение (число, строка, None)
-        default: Значение по умолчанию, если не удалось распознать
+        val: Исходное значение
+        default: Значение по умолчанию
         
     Returns:
-        float: Распознанное число или default при ошибке
+        Очищенное числовое значение или None
     """
-    # Проверка на None и пустые значения
-    if val in (None, "", "null", "—", "-", "n/a", "NA", "N/A"):
+    if val is None:
         return default
-    
-    # Конвертация в строку, если это не строка
-    if isinstance(val, (int, float)):
-        return float(val)
-    
-    # Конвертация в строку и нижний регистр
-    s = str(val).lower().strip()
-    
-    # Предварительная очистка от распространённых валютных символов и текста
-    currency_patterns = [
-        r'(?i)(?:rp|rupiah|idr|руб|рубл[яей]|usd|\$|€|евро|р\.|руб\.|₽)',
-        r'(?i)total:?',
-        r'(?i)price:?'
-    ]
-    for pattern in currency_patterns:
-        s = re.sub(pattern, '', s)
-    
-    # Обработка суффиксов кратности
-    mult = 1
-    # Тысячи: k, к, тыс
-    if re.search(r'(?i)[kк]$|тыс\.?$', s):
-        mult = 1000
-        s = re.sub(r'(?i)[kк]$|тыс\.?$', '', s)
-    # Миллионы: m, м, млн
-    elif re.search(r'(?i)[mм]$|млн\.?$', s):
-        mult = 1000000
-        s = re.sub(r'(?i)[mм]$|млн\.?$', '', s)
-    
-    # Очистка от всех нецифровых символов, кроме разделителей
-    # Допустимые разделители: точка, запятая, пробел, апостроф
-    s = ''.join(c for c in s if c.isdigit() or c in '., \'')
-    
-    # Удаляем разделители тысяч (пробелы, апострофы)
-    s = s.replace(" ", "").replace("'", "")
-    
-    # Более сложная логика определения десятичного разделителя
-    # Если в строке есть и запятая, и точка
-    if ',' in s and '.' in s:
-        # Проверяем позиции десятичных разделителей
-        last_comma_pos = s.rfind(',')
-        last_dot_pos = s.rfind('.')
         
-        if last_dot_pos > last_comma_pos:
-            # Американский/английский формат: 1,234.56
-            s = s.replace(',', '')
-        else:
-            # Европейский формат: 1.234,56
-            s = s.replace('.', '')
-            s = s.replace(',', '.')
-    elif ',' in s:
-        # Только запятые - определяем их роль
-        comma_parts = s.split(',')
-        
-        # Если после запятой 1-2 цифры, это вероятно десятичный разделитель
-        # Или если запятая ближе к концу строки
-        if len(comma_parts[-1]) <= 2 or len(comma_parts[-1]) < len(s) * 0.3:
-            s = s.replace(',', '.')
-        else:
-            # Вероятно, это разделитель тысяч
-            s = s.replace(',', '')
-    
-    # На этом этапе в строке должны остаться только цифры и возможно одна точка
     try:
-        # Если осталась точка в начале или конце, удаляем ее
-        s = s.strip('.')
-        return float(s) * mult if s else default
-    except (ValueError, TypeError):
-        # Если что-то пошло не так, делаем последнюю попытку
-        try:
-            # Оставляем только цифры и точку, точку оставляем только одну и не в начале
-            digits_only = re.sub(r'[^0-9]', '', s)
-            if not digits_only:
-                return default
-            return float(digits_only) * mult
-        except (ValueError, TypeError):
+        if isinstance(val, (int, float)):
+            return float(val)
+            
+        # Удаляем все нечисловые символы, кроме точки и запятой
+        clean_str = re.sub(r'[^\d.,]', '', str(val))
+        
+        # Заменяем запятую на точку
+        clean_str = clean_str.replace(',', '.')
+        
+        # Если строка пустая, возвращаем значение по умолчанию
+        if not clean_str:
             return default
+            
+        return float(clean_str)
+    except (ValueError, TypeError):
+        return default
 
 # Автозамена названий по словарю (расстояние Левенштейна <= 2)
 def autocorrect_name(name: str, allowed_names: List[str]) -> str:
@@ -239,7 +178,7 @@ PRODUCT_CATEGORIES = {
     "packaged": ["can", "jar", "packet", "box", "paper"]
 }
 
-def normalize_units(unit: str, product_name: str = None) -> str:
+def normalize_units(unit: str, product_name: Optional[str] = None) -> str:
     """
     Нормализует единицы измерения на основе словаря маппинга
     и категории продукта.
@@ -318,7 +257,9 @@ def postprocess_parsed_data(parsed: ParsedData, req_id: str = "unknown") -> Pars
                 logging.warning(f"Ошибка при конвертации даты: {date_err}")
         
         # Обработка общей суммы
-        parsed.total_price = clean_num(parsed.total_price)
+        total_price = clean_num(parsed.total_price)
+        if total_price is not None:
+            parsed.total_price = total_price
         
         # Обработка позиций
         pos_count = len(parsed.positions)
@@ -333,9 +274,17 @@ def postprocess_parsed_data(parsed: ParsedData, req_id: str = "unknown") -> Pars
                 continue
                 
             # Очистка числовых значений
-            pos.price = clean_num(pos.price)
-            pos.qty = clean_num(pos.qty, 1.0)  # Если количество не указано, предполагаем 1
-            pos.total_price = clean_num(pos.total_price)
+            price = clean_num(pos.price)
+            if price is not None:
+                pos.price = price
+                
+            qty = clean_num(pos.qty, 1.0)
+            if qty is not None:
+                pos.qty = qty
+                
+            total = clean_num(pos.total_price)
+            if total is not None:
+                pos.total_price = total
             
             # Автокоррекция имени
             if pos.name:
@@ -348,7 +297,7 @@ def postprocess_parsed_data(parsed: ParsedData, req_id: str = "unknown") -> Pars
                     log_format_issues(req_id, "position.name", pos.name, "< 30 chars")
             
             # Нормализация единиц измерения
-            if hasattr(pos, 'unit'):
+            if hasattr(pos, 'unit') and pos.unit is not None:
                 old_unit = pos.unit
                 pos.unit = normalize_units(pos.unit, pos.name)
                 if old_unit != pos.unit:
@@ -385,9 +334,12 @@ def postprocess_parsed_data(parsed: ParsedData, req_id: str = "unknown") -> Pars
         
         # Если общая сумма не указана, но есть позиции с ценами - вычисляем её
         if not parsed.total_price or parsed.total_price == 0:
-            positions_with_total = [p for p in parsed.positions if p.total_price]
-            if positions_with_total:
-                total_sum = sum(p.total_price for p in positions_with_total)
+            # Фильтруем позиции с ненулевой total_price
+            total_sum = 0.0
+            for pos in parsed.positions:
+                if pos.total_price is not None and pos.total_price > 0:
+                    total_sum += pos.total_price
+            if total_sum > 0:
                 parsed.total_price = total_sum
                 logging.info(f"Вычислена общая сумма: {parsed.total_price}")
         

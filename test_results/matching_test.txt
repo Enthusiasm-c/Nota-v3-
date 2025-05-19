@@ -1,0 +1,9 @@
+Testing matching performance...
+Loaded 605 products
+Matching completed in: 0.0125s
+Results:
+- Total positions: 5
+- Successfully matched: 5
+- Unknown: 0
+- Low confidence: 0
+- Success rate: 100.0%

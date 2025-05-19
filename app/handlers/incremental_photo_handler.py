@@ -8,13 +8,9 @@ and analyzing invoices with progressive UI updates.
 import asyncio
 import logging
 import uuid
-import os
-import tempfile
-from pathlib import Path
 from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
-from aiogram.enums import ParseMode
 
 from app.utils.incremental_ui import IncrementalUI
 from app import ocr, matcher, data_loader
@@ -109,14 +105,14 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         
         # Запускаем OCR асинхронно в отдельном потоке с таймаутом
         try:
-            # Явно указываем таймаут в 25 секунд для OCR
-            logger.info(f"[{req_id}] Starting OCR processing with timeout 25s")
+            # Явно указываем таймаут в 60 секунд для OCR
+            logger.info(f"[{req_id}] Starting OCR processing with timeout 60s")
             
             # Обновляем UI, чтобы пользователь видел, что обработка идет
-            await ui.update("🔍 Распознавание текста (может занять до 30 секунд)...")
+            await ui.update("🔍 Распознавание текста (может занять до 60 секунд)...")
             
             # Используем to_thread для выполнения OCR без блокировки основного потока
-            ocr_result = await asyncio.to_thread(ocr.call_openai_ocr, img_bytes, timeout=25)
+            ocr_result = await asyncio.to_thread(ocr.call_openai_ocr, img_bytes, timeout=60)
             
             logger.info(f"[{req_id}] OCR completed successfully")
         except asyncio.TimeoutError as e:
@@ -255,5 +251,5 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         # Останавливаем спиннер, если он все еще активен
         try:
             ui.stop_spinner()
-        except:
+        except Exception:
             pass

@@ -9,17 +9,15 @@ import os
 import re
 import uuid
 import time
-import hashlib
 import logging
 from datetime import date, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from dataclasses import dataclass
-from typing import List, Optional, Union, Dict, Any, Callable
+from typing import List, Optional, Callable
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
 
 import httpx
-from lxml import etree
 
 # Настройка логгера
 logger = logging.getLogger(__name__)

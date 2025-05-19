@@ -1,7 +1,6 @@
 """
 Factory for creating table detectors.
 """
-from typing import Dict, Any
 
 
 def get_detector(method="paddle"):

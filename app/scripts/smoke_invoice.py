@@ -8,15 +8,13 @@ import sys
 import json
 import logging
 from pathlib import Path
+from app.matcher import match_positions
+from app.ocr import call_openai_ocr
 
 # Настройка логгирования
 logging.basicConfig(level=logging.INFO, 
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
-# Импорты компонентов системы
-from app.matcher import match_positions
-from app.ocr import call_openai_ocr
 
 def smoke_test(image_path):
     """

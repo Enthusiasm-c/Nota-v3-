@@ -8,9 +8,7 @@ with support for animated indicators and real-time status updates.
 import logging
 import asyncio
 import time
-import random
-from typing import Optional, Dict, Any, List, Union, Callable
-from aiogram import Bot
+from typing import Optional, Any, List, Callable
 from aiogram.types import InlineKeyboardMarkup, Message
 
 from app.bot_utils import edit_message_text_safe
@@ -165,7 +163,7 @@ class IncrementalUI:
         keyboard = build_main_kb(has_errors=has_errors, lang=lang)
         
         await self.complete(final_text, kb=keyboard)
-        logger.info(f"Completed with keyboard")
+        logger.info("Completed with keyboard")
     
     async def error(self, error_text: str, show_timing: bool = False) -> None:
         """

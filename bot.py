@@ -1,43 +1,32 @@
 import asyncio
-import concurrent.futures
-import logging
-import re
 import os
-from app.formatters.report import build_report
 import atexit
-import uuid
-import json
-import time
 import shutil
 from typing import Dict, Any, Tuple
 from pathlib import Path
-import signal
-import sys
 from json_trace_logger import setup_json_trace_logger
 from app.handlers.tracing_log_middleware import TracingLogMiddleware
 import argparse
 from app.utils.file_manager import cleanup_temp_files, ensure_temp_dirs
+import logging
+import time
+from aiogram.types import CallbackQuery
+from aiogram.fsm.context import FSMContext
+from app.fsm.states import NotaStates
+from app.keyboards import kb_main
 
 # Aiogram imports
 from aiogram import Bot, Dispatcher, F
-from aiogram.fsm.context import FSMContext
-from aiogram.filters import Command, CommandStart
+from aiogram.filters import CommandStart
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.exceptions import TelegramBadRequest
-from aiogram.enums import ParseMode
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, Message
+from aiogram.types import Message
 
 # Import states
-from app.fsm.states import EditFree, NotaStates
 
 # App imports
-from app import ocr, matcher, data_loader
-from app.utils.md import escape_html, clean_html
 from app.config import settings
-from app.i18n import t
 
 # Import edit flow handlers
-from app.handlers.edit_flow import router as edit_flow_router
 
 # Import optimized logging configuration
 from app.utils.logger_config import configure_logging, get_buffered_logger
@@ -125,12 +114,91 @@ def register_handlers(dp, bot=None):
         # Register start command
         dp.message.register(cmd_start, CommandStart())
         
+        # Register cancel:all callback
+        dp.callback_query.register(handle_cancel_all, F.data == "cancel:all")
+        
         logger.info("All handlers registered successfully")
     except Exception as e:
         logger.error(f"Error registering handlers: {e}")
 
 async def cmd_start(message: Message):
     await message.answer("Welcome! I'm Nota AI Bot - a bot for processing invoices.\n\nJust send me a photo of an invoice, and I'll analyze it for you.")
+
+async def handle_cancel_all(call: CallbackQuery, state: FSMContext):
+    """Обработчик кнопки Cancel с улучшенной обработкой ошибок"""
+    # Используем более уникальный ID для трассировки в логах
+    op_id = f"cancel_{call.message.message_id}_{int(time.time() * 1000)}"
+    
+    logger.info(f"[{op_id}] START: получен cancel:all callback")
+    
+    # Шаг 1: Немедленно отвечаем на callback (самый критический шаг)
+    async def step1_answer_callback():
+        try:
+            await call.answer("Отмена", cache_time=1)
+            return True
+        except Exception as e:
+            logger.error(f"[{op_id}] STEP1 ERROR: {str(e)}")
+            return False
+            
+    # Запускаем первый шаг с коротким таймаутом (2 секунды)
+    try:
+        answered = await asyncio.wait_for(step1_answer_callback(), timeout=2)
+        if answered:
+            logger.info(f"[{op_id}] STEP1: callback answered successfully")
+        else:
+            logger.warning(f"[{op_id}] STEP1: failed to answer callback")
+    except asyncio.TimeoutError:
+        logger.error(f"[{op_id}] STEP1 TIMEOUT: callback answer timed out")
+    
+    # Шаг 2: Очищаем состояние
+    try:
+        await state.clear()
+        await state.set_state(NotaStates.main_menu)
+        logger.info(f"[{op_id}] STEP2: состояние очищено")
+    except Exception as e:
+        logger.error(f"[{op_id}] STEP2 ERROR: {str(e)}")
+    
+    # Шаг 3: Очищаем блокировки пользователя
+    try:
+        from app.utils.processing_guard import set_processing_photo
+        await set_processing_photo(call.from_user.id, False)
+        logger.info(f"[{op_id}] STEP3: блокировки пользователя сняты")
+    except Exception as e:
+        logger.error(f"[{op_id}] STEP3 ERROR: {str(e)}")
+    
+    # Шаг 4: Удаляем клавиатуру
+    try:
+        await call.message.edit_reply_markup(reply_markup=None)
+        logger.info(f"[{op_id}] STEP4: клавиатура удалена")
+    except Exception as e:
+        logger.warning(f"[{op_id}] STEP4 WARNING: не удалось удалить клавиатуру: {str(e)}")
+    
+    # Шаг 5: Отправляем подтверждение пользователю
+    try:
+        # Получаем язык пользователя
+        data = await state.get_data()
+        lang = data.get("lang", "en")
+        
+        # Простое сообщение без форматирования для максимальной надежности
+        result = await call.message.answer(
+            "✅ Обработка отменена. Пожалуйста, отправьте новое фото.",
+            reply_markup=kb_main(lang=lang)
+        )
+        logger.info(f"[{op_id}] STEP5: сообщение отправлено, message_id={result.message_id}")
+    except Exception as e:
+        logger.error(f"[{op_id}] STEP5 ERROR: не удалось отправить сообщение: {str(e)}")
+        try:
+            # Последняя попытка отправить самое простое сообщение
+            await call.message.answer(
+                "Операция отменена.",
+                reply_markup=None
+            )
+            logger.info(f"[{op_id}] STEP5 FALLBACK: отправлено резервное сообщение")
+        except Exception as e2:
+            logger.error(f"[{op_id}] STEP5 FALLBACK ERROR: {str(e2)}")
+    
+    # Конец обработчика
+    logger.info(f"[{op_id}] COMPLETE: обработка cancel:all завершена")
 
 async def main():
     # Parse command line arguments
@@ -140,7 +208,17 @@ async def main():
     args = parser.parse_args()
     
     # Create logs directory if it doesn't exist
-    os.makedirs("logs", exist_ok=True)
+    os.makedirs('logs', exist_ok=True)
+    
+    # Configure logging based on test mode
+    if args.test_mode:
+        logging.basicConfig(level=logging.DEBUG)
+        logger.info("Running in test mode")
+    
+    # Force restart if requested
+    if args.force_restart:
+        logger.info("Force restarting Telegram session")
+        # Add your force restart logic here
     
     # Create bot and dispatcher
     bot, dp = create_bot_and_dispatcher()

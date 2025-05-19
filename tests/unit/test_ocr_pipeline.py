@@ -4,13 +4,10 @@ Unit tests for OCR pipeline functionality.
 import pytest
 pytest_plugins = ["pytest_asyncio"]
 import json
-import os
-import base64
 import numpy as np
-from datetime import datetime
 from PIL import Image
 import io
-from unittest.mock import MagicMock, patch, AsyncMock, call
+from unittest.mock import MagicMock, patch, AsyncMock
 
 # Add paddleocr mock to avoid import error
 import sys
@@ -25,7 +22,7 @@ if 'paddleocr' not in sys.modules:
 
 # Import after mocking
 from app.ocr_pipeline import OCRPipeline, send_to_gpt
-from app.ocr_helpers import parse_numeric_value, process_cell_with_gpt4o, prepare_cell_image, build_lines_from_cells
+from app.ocr_helpers import parse_numeric_value, process_cell_with_gpt4o, build_lines_from_cells
 
 
 @pytest.fixture
@@ -723,10 +720,7 @@ def test_build_lines_from_cells():
 
 def test_ocr_pipeline_missing_dependencies():
     """Test OCR pipeline initialization with missing dependencies."""
-    with patch("app.ocr_pipeline.get_detector", side_effect=ImportError("Module not found")), \
-         patch("app.ocr_pipeline.PaddleOCR") as mock_paddle_ocr, \
-         patch("app.ocr_pipeline.ValidationPipeline") as mock_validation:
-        
+    with patch("app.ocr_pipeline.get_detector", side_effect=ImportError("Module not found")):
         # This should raise an exception during initialization
         with pytest.raises(ImportError):
             OCRPipeline()
