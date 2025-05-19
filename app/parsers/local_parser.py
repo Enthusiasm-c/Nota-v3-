@@ -8,6 +8,7 @@ import time
 import asyncio
 
 from app.parsers.date_parser import parse_date_command
+from app.parsers.line_parser import parse_line_command
 
 logger = logging.getLogger(__name__)
 
@@ -30,13 +31,22 @@ def parse_command(text: str) -> Optional[Dict[str, Any]]:
         elapsed_ms = (time.time() - start_time) * 1000
         logger.info(f"Локальный парсер обработал команду даты за {elapsed_ms:.1f} мс: {date_result}")
         return date_result
-    
-    # Здесь можно добавить другие типы парсеров
+        
+    # Попытка парсинга команды редактирования строки
+    line_result = parse_line_command(text)
+    if line_result:
+        elapsed_ms = (time.time() - start_time) * 1000
+        logger.info(f"Локальный парсер обработал команду редактирования строки за {elapsed_ms:.1f} мс: {line_result}")
+        return line_result
     
     # Если ни один парсер не сработал
     elapsed_ms = (time.time() - start_time) * 1000
     logger.info(f"Локальный парсер не смог распознать команду за {elapsed_ms:.1f} мс")
-    return None
+    return {
+        "action": "unknown",
+        "user_message": "I couldn't understand your command. Please try again with a simpler format.",
+        "source": "local_parser"
+    }
 
 async def parse_command_async(text: str) -> Optional[Dict[str, Any]]:
     """
