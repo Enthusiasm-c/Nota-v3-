@@ -3,12 +3,21 @@
 """
 
 import logging
-from typing import Dict, Any, Union
+from typing import Dict, Any, Union, Optional
 from datetime import datetime
 from copy import deepcopy
 import re
 from app.models import ParsedData
 from app.converters import parsed_to_dict
+from app.models.invoice import Invoice
+from app.edit.actions import (
+    set_name,
+    set_quantity,
+    set_unit,
+    set_price,
+    set_date,
+    set_supplier
+)
 
 logger = logging.getLogger(__name__)
 
@@ -133,223 +142,94 @@ def set_unit(invoice: Dict[str, Any], line_index: int, value: str) -> Dict[str, 
     
     return result
 
-def apply_intent(invoice: Union[dict, ParsedData], intent: dict) -> dict:
+def apply_intent(invoice: Union[dict, ParsedData, Invoice], intent: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Применяет интент к инвойсу на основе действия.
+    Применяет интент к инвойсу.
     
     Args:
-        invoice: Словарь с данными инвойса или ParsedData
-        intent: Словарь с интентом от GPT-3.5
-    
+        invoice: Инвойс для редактирования
+        intent: Интент для применения
+        
     Returns:
-        Dict: Обновленный инвойс
+        Dict: Результат применения интента
     """
-    invoice = parsed_to_dict(invoice)
-    action = intent.get("action", "unknown")
-    source = intent.get("source", "openai")
-    logger.info(f"Применяем интент: action={action}, source={source}")
+    # Проверяем и конвертируем входные данные
+    if not isinstance(invoice, dict):
+        invoice = parsed_to_dict(invoice)
     
-    # Тестовый блок для проверки обработки интента edit_quantity
-    if action == "edit_quantity":
-        line_value = intent.get("line", 0)
-        logger.info(f"Тест: intent.get('line', 0) = {line_value}, intent.get('line', 0) - 1 = {line_value - 1}")
+    # Создаем глубокую копию инвойса
+    result = deepcopy(invoice)
     
-    if action == "set_date":
-        return set_date(invoice, intent.get("value", ""))
+    # Проверяем наличие позиций
+    if "positions" not in result:
+        result["positions"] = []
+        logger.warning("В инвойсе отсутствует список позиций, создаем пустой список")
     
-    elif action == "set_price":
-        return set_price(
-            invoice, 
-            intent.get("line_index", 0), 
-            intent.get("value", "")
-        )
-    
-    elif action == "set_name":
-        return set_name(
-            invoice, 
-            intent.get("line_index", 0), 
-            intent.get("value", "")
-        )
-    
-    elif action == "set_quantity":
-        return set_quantity(
-            invoice, 
-            intent.get("line_index", 0), 
-            intent.get("value", "")
-        )
-    
-    elif action == "set_qty":
-        line = intent.get("line", 0) - 1
-        qty = str(intent.get("qty", "0"))
-        logger.info(f"set_qty: line={line}, qty={qty}")
-        return set_quantity(
-            invoice,
-            line,
-            qty
-        )
-    
-    elif action == "set_unit":
-        return set_unit(
-            invoice, 
-            intent.get("line_index", 0), 
-            intent.get("value", "")
-        )
-    
-    elif action == "edit_name":
-        return set_name(
-            invoice,
-            intent.get("line", 0) - 1,
-            intent.get("value", "")
-        )
-    elif action == "edit_line_field":
-        line = intent.get("line", 0) - 1  # Преобразуем в 0-based индекс
-        field = intent.get("field")
-        value = intent.get("value")
+    action = intent.get("action")
+    if not action:
+        logger.error("Интент не содержит действия")
+        return result
         
-        if (
-            isinstance(invoice.get("positions"), list)
-            and 0 <= line < len(invoice["positions"])
-        ):
-            # Обрабатываем поле name специальным образом для ручного редактирования
-            if field == "name":
-                return set_name(invoice, line, value, manual_edit=True)
-            # For other fields, just update the value. Do not touch 'status'.
-            if field in invoice["positions"][line]:
-                invoice["positions"][line][field] = value
-                # Only set status to 'manual' for name edits
-                if field == "name":
-                    invoice["positions"][line]["status"] = "manual"
-                logger.info(f"Line {line+1} field '{field}' manually edited by user: value = '{value}'")
-                
-        return invoice
-
-    elif action == "edit_date":
-        try:
-            # Изменение даты
+    logger.info(f"Применение интента: {action}")
+    
+    try:
+        if action == "set_name":
+            line = intent.get("line", 0) - 1  # Преобразуем в 0-based индекс
             value = intent.get("value", "")
-            logger.info(f"Изменяем дату инвойса на: {value}")
+            updated = set_name(result, line, value)
+            if isinstance(updated, dict) and "positions" in updated:
+                result = updated
             
-            # Проверяем формат даты и преобразуем его
-            # Поддерживаем различные форматы: DD.MM.YYYY, MM/DD/YYYY, YYYY-MM-DD и т.д.
-            match = re.match(r"(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})", value)
+        elif action == "set_qty":
+            line = intent.get("line", 0) - 1
+            qty = str(intent.get("qty", "0"))
+            updated = set_quantity(result, line, qty)
+            if isinstance(updated, dict) and "positions" in updated:
+                result = updated
             
-            if match:
-                day, month, year = match.groups()
-                
-                # Приводим год к YYYY формату, если он в формате YY
-                if len(year) == 2:
-                    current_year = datetime.now().year
-                    century = current_year // 100
-                    year_num = int(year)
-                    if year_num > (current_year % 100):
-                        # Если год больше текущего, считаем что это прошлый век
-                        century -= 1
-                    year = f"{century}{year}"
-                
-                # Форматируем дату
-                formatted_date = f"{int(day):02d}.{int(month):02d}.{int(year)}"
-                logger.info(f"Дата отформатирована в {formatted_date}")
-                
-                invoice["date"] = formatted_date
-            else:
-                logger.warning(f"Некорректный формат даты: {value}")
-        except Exception as e:
-            logger.error(f"Ошибка при обработке интента edit_date: {e}")
-        
-        # Возвращаем invoice с изменениями
-        return invoice
-
-    elif action == "edit_quantity":
-        try:
-            # Изменение количества
-            position_idx = intent.get("line", 0) - 1
-            value = intent.get("value", "0")
+        elif action == "set_unit":
+            line = intent.get("line", 0) - 1
+            unit = intent.get("value", "")
+            updated = set_unit(result, line, unit)
+            if isinstance(updated, dict) and "positions" in updated:
+                result = updated
             
-            # Проверяем, что в позициях есть элемент с таким индексом
-            if 0 <= position_idx < len(invoice.get("positions", [])):
-                # Конвертируем строку в число
-                numeric_value = value
-                if isinstance(value, str):
-                    # Заменяем запятую на точку для корректного парсинга
-                    value = value.replace(",", ".")
-                    numeric_value = float(value)
+        elif action == "set_price":
+            line = intent.get("line", 0) - 1
+            price = str(intent.get("value", "0"))
+            updated = set_price(result, line, price)
+            if isinstance(updated, dict) and "positions" in updated:
+                result = updated
+            
+        elif action == "set_date":
+            date_str = intent.get("value", "")
+            try:
+                # Преобразуем дату и сохраняем как строку в нужном формате
+                date = datetime.strptime(date_str, "%Y-%m-%d")
+                updated = set_date(result, date_str)
+                if isinstance(updated, dict):
+                    result = updated
+            except ValueError:
+                logger.error(f"Неверный формат даты: {date_str}")
                 
-                invoice["positions"][position_idx]["qty"] = numeric_value
-            else:
-                logger.warning(f"Невалидный индекс позиции для изменения: {position_idx}")
-        except Exception as e:
-            logger.error(f"Ошибка при изменении quantity: {e}")
-        
-        # Возвращаем invoice с изменениями
-        return invoice
+        elif action == "edit_supplier":
+            supplier_name = intent.get("value", "")
+            supplier_id = intent.get("supplier_id")
+            supplier_code = intent.get("supplier_code")
+            updated = set_supplier(result, supplier_name, supplier_id, supplier_code)
+            if isinstance(updated, dict) and not updated.get("error"):
+                result = updated
+            
+        else:
+            logger.warning(f"Неизвестное действие: {action}")
     
-    elif action == "edit_unit":
-        try:
-            # Изменение единицы измерения
-            position_idx = intent.get("line", 0) - 1
-            value = intent.get("value", "").strip().lower()
-            
-            # Проверяем, что в позициях есть элемент с таким индексом
-            if 0 <= position_idx < len(invoice.get("positions", [])):
-                # Нормализуем единицу измерения
-                normalized_unit = value
-                if value in ["g", "г", "гр", "грамм", "гра", "грамма", "грамм"]:
-                    normalized_unit = "g"
-                elif value in ["kg", "кг", "кило", "килограмм", "килограмма"]:
-                    normalized_unit = "kg"
-                elif value in ["l", "л", "литр", "литра", "литров"]:
-                    normalized_unit = "l"
-                elif value in ["ml", "мл", "миллилитр", "миллилитра", "миллилитров"]:
-                    normalized_unit = "ml"
-                elif value in ["pc", "шт", "штука", "штуки", "штук"]:
-                    normalized_unit = "pc"
-                
-                invoice["positions"][position_idx]["unit"] = normalized_unit
-            else:
-                logger.warning(f"Невалидный индекс позиции для изменения: {position_idx}")
-        except Exception as e:
-            logger.error(f"Ошибка при изменении unit: {e}")
-        
-        # Возвращаем invoice с изменениями
-        return invoice
+    except Exception as e:
+        logger.error(f"Ошибка при применении интента {action}: {str(e)}")
+        logger.exception(e)
     
-    elif action == "edit_price":
-        try:
-            # Изменение цены
-            position_idx = intent.get("line", 0) - 1
-            value = intent.get("value", "0")
-            
-            # Проверяем, что в позициях есть элемент с таким индексом
-            if 0 <= position_idx < len(invoice.get("positions", [])):
-                # Конвертируем строку в число
-                numeric_value = value
-                if isinstance(value, str):
-                    # Заменяем запятую на точку для корректного парсинга
-                    value = value.replace(",", ".")
-                    numeric_value = float(value)
-                
-                invoice["positions"][position_idx]["price"] = numeric_value
-            else:
-                logger.warning(f"Невалидный индекс позиции для изменения: {position_idx}")
-        except Exception as e:
-            logger.error(f"Ошибка при изменении price: {e}")
+    # Проверяем, что позиции не были потеряны
+    if not result.get("positions"):
+        logger.critical("Позиции были потеряны при применении интента, возвращаем исходный инвойс")
+        return invoice
         
-        # Возвращаем invoice с изменениями
-        return invoice
-    
-    elif action == "add_line":
-        value = intent.get("value")
-        parts = value.split()
-        if len(parts) >= 4:
-            name = parts[0]
-            qty = parts[1]
-            unit = parts[2]
-            price = parts[3]
-            invoice.setdefault("positions", []).append(
-                {"name": name, "qty": qty, "unit": unit, "price": price}
-            )
-        return invoice
-
-    else:
-        logger.warning(f"Неизвестное действие в интенте: {action}")
-        return deepcopy(invoice)  # Возвращаем копию без изменений
+    return result
