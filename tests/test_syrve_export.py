@@ -203,8 +203,11 @@ async def main():
         password=os.getenv("SYRVE_PASSWORD", "Redriver1993")
     )
     
-    # Создаем клиента OpenAI для генерации XML
-    openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_OCR_KEY", ""))
+    # Initialize OpenAI client
+    ocr_key = os.getenv("OPENAI_OCR_KEY", "")
+    if not ocr_key:
+        ocr_key = os.getenv("OPENAI_API_KEY", "")
+    openai_client = AsyncOpenAI(api_key=ocr_key)
     
     try:
         # Получаем токен аутентификации

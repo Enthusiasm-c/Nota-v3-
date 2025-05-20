@@ -145,9 +145,20 @@ async def async_ocr(image_bytes: bytes, req_id: Optional[str] = None,
     
     # Формируем параметры запроса к API
     api_url = "https://api.openai.com/v1/chat/completions"
+    
+    # Используем OPENAI_OCR_KEY, если его нет - OPENAI_API_KEY
+    api_key = settings.OPENAI_OCR_KEY
+    if not api_key:
+        logger.warning(f"[{req_id}] OPENAI_OCR_KEY не установлен, пытаемся использовать OPENAI_API_KEY")
+        api_key = getattr(settings, "OPENAI_API_KEY", "")
+        
+    if not api_key:
+        logger.error(f"[{req_id}] Нет доступного API ключа для OCR")
+        raise RuntimeError("Нет доступного API ключа для OCR")
+        
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {settings.OPENAI_OCR_KEY}"
+        "Authorization": f"Bearer {api_key}"
     }
     
     payload = {

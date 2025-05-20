@@ -149,6 +149,11 @@ def apply_intent(invoice: Union[dict, ParsedData], intent: dict) -> dict:
     source = intent.get("source", "openai")
     logger.info(f"Применяем интент: action={action}, source={source}")
     
+    # Тестовый блок для проверки обработки интента edit_quantity
+    if action == "edit_quantity":
+        line_value = intent.get("line", 0)
+        logger.info(f"Тест: intent.get('line', 0) = {line_value}, intent.get('line', 0) - 1 = {line_value - 1}")
+    
     if action == "set_date":
         return set_date(invoice, intent.get("value", ""))
     
@@ -173,6 +178,16 @@ def apply_intent(invoice: Union[dict, ParsedData], intent: dict) -> dict:
             intent.get("value", "")
         )
     
+    elif action == "set_qty":
+        line = intent.get("line", 0) - 1
+        qty = str(intent.get("qty", "0"))
+        logger.info(f"set_qty: line={line}, qty={qty}")
+        return set_quantity(
+            invoice,
+            line,
+            qty
+        )
+    
     elif action == "set_unit":
         return set_unit(
             invoice, 
@@ -183,11 +198,11 @@ def apply_intent(invoice: Union[dict, ParsedData], intent: dict) -> dict:
     elif action == "edit_name":
         return set_name(
             invoice,
-            intent.get("line", 0),
+            intent.get("line", 0) - 1,
             intent.get("value", "")
         )
     elif action == "edit_line_field":
-        line = intent.get("line", 0) - 1
+        line = intent.get("line", 0) - 1  # Преобразуем в 0-based индекс
         field = intent.get("field")
         value = intent.get("value")
         
@@ -247,7 +262,7 @@ def apply_intent(invoice: Union[dict, ParsedData], intent: dict) -> dict:
     elif action == "edit_quantity":
         try:
             # Изменение количества
-            position_idx = intent.get("index", 0)
+            position_idx = intent.get("line", 0) - 1
             value = intent.get("value", "0")
             
             # Проверяем, что в позициях есть элемент с таким индексом
@@ -271,7 +286,7 @@ def apply_intent(invoice: Union[dict, ParsedData], intent: dict) -> dict:
     elif action == "edit_unit":
         try:
             # Изменение единицы измерения
-            position_idx = intent.get("index", 0)
+            position_idx = intent.get("line", 0) - 1
             value = intent.get("value", "").strip().lower()
             
             # Проверяем, что в позициях есть элемент с таким индексом
@@ -301,7 +316,7 @@ def apply_intent(invoice: Union[dict, ParsedData], intent: dict) -> dict:
     elif action == "edit_price":
         try:
             # Изменение цены
-            position_idx = intent.get("index", 0)
+            position_idx = intent.get("line", 0) - 1
             value = intent.get("value", "0")
             
             # Проверяем, что в позициях есть элемент с таким индексом

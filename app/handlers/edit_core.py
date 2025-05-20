@@ -95,15 +95,17 @@ async def process_user_edit(
                     logger.critical("ОТЛАДКА-ЯДРО: Результат локального парсера (%0.1f мс): %s" % (elapsed, intent))
             except ImportError:
                 logger.critical("ОТЛАДКА-ЯДРО: Локальный парсер не найден, используем OpenAI")
+                intent = None
             except Exception as e:
                 logger.critical("ОТЛАДКА-ЯДРО: Ошибка локального парсера: %s" % e)
+                intent = None
             
-            # Если локальный парсер не справился, используем OpenAI или другой внешний парсер
-            if intent is None:
+            # Если локальный парсер не справился или вернул unknown, используем OpenAI
+            if intent is None or intent.get("action") == "unknown":
                 if run_openai_intent:
-                    logger.critical("ОТЛАДКА-ЯДРО: Используем локальный парсер для текста: '%s'" % user_text)
+                    logger.critical("ОТЛАДКА-ЯДРО: Используем OpenAI для текста: '%s'" % user_text)
                     intent = await asyncio.wait_for(run_openai_intent(user_text), timeout=10.0)
-                    logger.critical("ОТЛАДКА-ЯДРО: Результат локального парсера: %s" % intent)
+                    logger.critical("ОТЛАДКА-ЯДРО: Результат OpenAI: %s" % intent)
                 else:
                     from app.assistants.client import run_thread_safe_async
                     logger.critical("ОТЛАДКА-ЯДРО: Используем OpenAI для текста: '%s'" % user_text)

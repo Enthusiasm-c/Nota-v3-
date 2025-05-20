@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 # Константы
 GUID_REGEX = re.compile(r'^[0-9a-fA-F-]{36}$')
 TOKEN_CACHE_MINUTES = 25  # Время жизни токена в минутах
+TOKEN_REFRESH_THRESHOLD = 5  # За сколько минут до истечения обновлять токен
 
 # Исключения
 class InvoiceError(Exception):
@@ -40,7 +41,7 @@ class InvoiceHTTPError(InvoiceError):
     pass
 
 class InvoiceAuthError(InvoiceError):
-    """Ошибка аутентификации при получении токена."""
+    """Ошибка аутентификации при отправке инвойса."""
     pass
 
 
@@ -156,6 +157,43 @@ class SyrveClient:
         
         return cls(base_url, login, password_sha1)
     
+    def _is_token_valid(self) -> bool:
+        """Проверяет, действителен ли текущий токен"""
+        if not self._token or not self._token_expiry:
+            return False
+        
+        # Проверяем, не истекает ли токен в ближайшее время
+        current_time = datetime.now()
+        time_until_expiry = (self._token_expiry - current_time).total_seconds() / 60
+        
+        return time_until_expiry > TOKEN_REFRESH_THRESHOLD
+    
+    def _request_new_token(self) -> str:
+        """Запрашивает новый токен у API"""
+        auth_url = f"{self.base_url}/resto/api/auth?login={self.login}&pass={self.password_sha1}"
+        
+        try:
+            response = self.http.get(auth_url)
+            response.raise_for_status()
+            
+            token = response.text.strip()
+            if not token:
+                raise InvoiceAuthError("Empty token received from Syrve API")
+            
+            # Устанавливаем время жизни токена
+            self._token = token
+            self._token_expiry = datetime.now() + timedelta(minutes=TOKEN_CACHE_MINUTES)
+            
+            logger.info(f"Successfully obtained new Syrve token, valid for {TOKEN_CACHE_MINUTES} minutes")
+            return token
+            
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error during token request: {e.response.status_code} - {e.response.text}")
+            raise InvoiceAuthError(f"HTTP error during authentication: {e.response.status_code}")
+        except httpx.RequestError as e:
+            logger.error(f"Network error during token request: {str(e)}")
+            raise InvoiceAuthError(f"Network error during authentication: {str(e)}")
+    
     def get_token(self) -> str:
         """
         Получает действующий токен аутентификации, при необходимости запрашивает новый.
@@ -166,39 +204,14 @@ class SyrveClient:
         Raises:
             InvoiceAuthError: При ошибке аутентификации
         """
-        # Проверяем, нужно ли обновить токен
-        current_time = datetime.now()
-        if self._token and self._token_expiry and current_time < self._token_expiry:
+        # Проверяем локальный токен
+        if self._is_token_valid():
             logger.debug("Using cached token (expires in %s minutes)", 
-                         (self._token_expiry - current_time).total_seconds() / 60)
+                        (self._token_expiry - datetime.now()).total_seconds() / 60)
             return self._token
         
-        # Запрашиваем новый токен
-        logger.info("Requesting new Syrve token for user %s", self.login)
-        auth_url = f"{self.base_url}/resto/api/auth?login={self.login}&pass={self.password_sha1}"
-        
-        try:
-            response = self.http.get(auth_url)
-            response.raise_for_status()
-            
-            # Ожидаем, что токен будет возвращен как текст в теле ответа
-            token = response.text.strip()
-            if not token:
-                raise InvoiceAuthError("Empty token received from Syrve API")
-            
-            # Устанавливаем срок действия токена
-            self._token = token
-            self._token_expiry = current_time + timedelta(minutes=TOKEN_CACHE_MINUTES)
-            
-            logger.info("Successfully obtained new Syrve token, valid for %d minutes", TOKEN_CACHE_MINUTES)
-            return token
-            
-        except httpx.HTTPStatusError as e:
-            logger.error("HTTP error during token request: %s - %s", e.response.status_code, e.response.text)
-            raise InvoiceAuthError(f"HTTP error during authentication: {e.response.status_code}")
-        except httpx.RequestError as e:
-            logger.error("Network error during token request: %s", str(e))
-            raise InvoiceAuthError(f"Network error during authentication: {str(e)}")
+        # Если нет валидного токена, запрашиваем новый
+        return self._request_new_token()
     
     def validate_invoice(self, invoice: Invoice) -> None:
         """

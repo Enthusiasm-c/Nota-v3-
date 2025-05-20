@@ -73,8 +73,17 @@ def get_ocr_client():
     """Get OpenAI client instance for OCR."""
     try:
         import openai
-        # Use OPENAI_OCR_KEY instead of OPENAI_API_KEY
-        client = openai.OpenAI(api_key=settings.OPENAI_OCR_KEY)
+        # Use OPENAI_OCR_KEY, fallback to OPENAI_API_KEY if not available
+        api_key = settings.OPENAI_OCR_KEY
+        if not api_key:
+            logging.warning("OPENAI_OCR_KEY not set, trying to use OPENAI_API_KEY")
+            api_key = getattr(settings, "OPENAI_API_KEY", "")
+            
+        if not api_key:
+            logging.error("No API key available for OCR client")
+            return None
+            
+        client = openai.OpenAI(api_key=api_key)
         return client
     except (ImportError, Exception) as e:
         logging.error(f"Failed to initialize OpenAI client: {e}")

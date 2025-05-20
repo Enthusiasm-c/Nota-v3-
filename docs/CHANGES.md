@@ -1,5 +1,8 @@
 # Changes Made to Fix Telegram Bot Issues
 
+## 2023-11-25
+- **[FIX]** Исправлена обработка фотографий с использованием OCR: теперь если OPENAI_OCR_KEY не установлен, бот автоматически использует OPENAI_API_KEY
+
 ## Issue 1: Bot Not Processing Photos Correctly
 
 - Fixed the handler registration order in `bot.py` to ensure the photo handler is registered before the fallback handler

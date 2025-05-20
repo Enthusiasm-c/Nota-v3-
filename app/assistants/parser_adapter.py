@@ -27,19 +27,19 @@ def adapt_intent(intent: Dict[str, Any]) -> Dict[str, Any]:
     # Адаптация действий для строк
     if action == "edit_name":
         result["action"] = "set_name"
-        result["line"] = intent.get("line")
+        result["line"] = intent.get("line", 0) - 1
         result["name"] = intent.get("value")
     elif action == "edit_price":
         result["action"] = "set_price"
-        result["line"] = intent.get("line")
+        result["line"] = intent.get("line", 0) - 1
         result["price"] = intent.get("value")
     elif action == "edit_quantity":
         result["action"] = "set_qty"
-        result["line"] = intent.get("line")
+        result["line"] = intent.get("line", 0) - 1
         result["qty"] = intent.get("value")
     elif action == "edit_unit":
         result["action"] = "set_unit"
-        result["line"] = intent.get("line")
+        result["line"] = intent.get("line", 0) - 1
         result["unit"] = intent.get("value")
     elif action == "set_date":
         # Прямое копирование даты

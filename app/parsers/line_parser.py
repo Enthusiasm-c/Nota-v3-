@@ -31,6 +31,18 @@ ERROR_MAPPINGS = {
     "line": "invalid_line_number"
 }
 
+def _convert_to_zero_based(line_num: int) -> int:
+    """
+    Конвертирует номер строки из 1-based в 0-based индекс.
+    
+    Args:
+        line_num: Номер строки (1-based)
+        
+    Returns:
+        int: Индекс строки (0-based)
+    """
+    return line_num - 1
+
 def _parse_price_command(text: str, line_limit: Optional[int] = None) -> Optional[Dict[str, Any]]:
     """
     Парсит команду изменения цены.
@@ -48,13 +60,16 @@ def _parse_price_command(text: str, line_limit: Optional[int] = None) -> Optiona
         
     try:
         # Извлекаем и проверяем номер строки
-        line_num, error = extract_line_number(match)
-        if error:
-            return create_error_response(error, line=0)
+        line_num = int(match.group(1))
+        if line_num < 1:
+            return create_error_response("invalid_line_number")
+            
+        # Конвертируем в 0-based индекс
+        line_idx = _convert_to_zero_based(line_num)
             
         # Проверяем границы строки, если указаны
-        if line_limit is not None and line_num >= line_limit:
-            return create_error_response("line_out_of_range", line=line_num)
+        if line_limit is not None and line_idx >= line_limit:
+            return create_error_response("line_out_of_range", line=line_idx)
             
         # Извлекаем цену
         price_str = match.group(2)
@@ -62,10 +77,10 @@ def _parse_price_command(text: str, line_limit: Optional[int] = None) -> Optiona
         if price is None:
             return create_error_response("invalid_price_value")
             
-        logger.debug(f"Распознана команда изменения цены: строка {line_num+1}, цена {price}")
+        logger.debug(f"Распознана команда изменения цены: строка {line_num}, цена {price}")
         return {
             "action": "edit_price",
-            "line": line_num,
+            "line": line_idx,
             "value": price,
             "source": "local_parser"
         }
@@ -90,23 +105,26 @@ def _parse_name_command(text: str, line_limit: Optional[int] = None) -> Optional
         
     try:
         # Извлекаем и проверяем номер строки
-        line_num, error = extract_line_number(match)
-        if error:
-            return create_error_response(error, line=0)
+        line_num = int(match.group(1))
+        if line_num < 1:
+            return create_error_response("invalid_line_number")
+            
+        # Конвертируем в 0-based индекс
+        line_idx = _convert_to_zero_based(line_num)
             
         # Проверяем границы строки, если указаны
-        if line_limit is not None and line_num >= line_limit:
-            return create_error_response("line_out_of_range", line=line_num)
+        if line_limit is not None and line_idx >= line_limit:
+            return create_error_response("line_out_of_range", line=line_idx)
             
         # Извлекаем название
         name = match.group(2).strip()
         if not name:
             return create_error_response("empty_name_value")
             
-        logger.debug(f"Распознана команда изменения названия: строка {line_num+1}, название '{name}'")
+        logger.debug(f"Распознана команда изменения названия: строка {line_num}, название '{name}'")
         return {
             "action": "edit_name",
-            "line": line_num,
+            "line": line_idx,
             "value": name,
             "source": "local_parser"
         }
@@ -131,13 +149,16 @@ def _parse_qty_command(text: str, line_limit: Optional[int] = None) -> Optional[
         
     try:
         # Извлекаем и проверяем номер строки
-        line_num, error = extract_line_number(match)
-        if error:
-            return create_error_response(error, line=0)
+        line_num = int(match.group(1))
+        if line_num < 1:
+            return create_error_response("invalid_line_number")
+            
+        # Конвертируем в 0-based индекс
+        line_idx = _convert_to_zero_based(line_num)
             
         # Проверяем границы строки, если указаны
-        if line_limit is not None and line_num >= line_limit:
-            return create_error_response("line_out_of_range", line=line_num)
+        if line_limit is not None and line_idx >= line_limit:
+            return create_error_response("line_out_of_range", line=line_idx)
             
         # Извлекаем количество
         qty_str = match.group(2)
@@ -145,10 +166,10 @@ def _parse_qty_command(text: str, line_limit: Optional[int] = None) -> Optional[
         if qty is None:
             return create_error_response("invalid_qty_value")
             
-        logger.debug(f"Распознана команда изменения количества: строка {line_num+1}, количество {qty}")
+        logger.debug(f"Распознана команда изменения количества: строка {line_num}, количество {qty}")
         return {
             "action": "edit_quantity",
-            "line": line_num,
+            "line": line_idx,
             "value": qty,
             "source": "local_parser"
         }
@@ -173,23 +194,26 @@ def _parse_unit_command(text: str, line_limit: Optional[int] = None) -> Optional
         
     try:
         # Извлекаем и проверяем номер строки
-        line_num, error = extract_line_number(match)
-        if error:
-            return create_error_response(error, line=0)
+        line_num = int(match.group(1))
+        if line_num < 1:
+            return create_error_response("invalid_line_number")
+            
+        # Конвертируем в 0-based индекс
+        line_idx = _convert_to_zero_based(line_num)
             
         # Проверяем границы строки, если указаны
-        if line_limit is not None and line_num >= line_limit:
-            return create_error_response("line_out_of_range", line=line_num)
+        if line_limit is not None and line_idx >= line_limit:
+            return create_error_response("line_out_of_range", line=line_idx)
             
         # Извлекаем единицу измерения
         unit = match.group(2).strip()
         if not unit:
             return create_error_response("empty_unit_value")
             
-        logger.debug(f"Распознана команда изменения единицы измерения: строка {line_num+1}, единица '{unit}'")
+        logger.debug(f"Распознана команда изменения единицы измерения: строка {line_num}, единица '{unit}'")
         return {
             "action": "edit_unit",
-            "line": line_num,
+            "line": line_idx,
             "value": unit,
             "source": "local_parser"
         }

@@ -131,7 +131,15 @@ async def handle_invoice_confirm(callback: CallbackQuery, state: FSMContext):
         
         # Generate XML with OpenAI using global client if available
         from app.config import get_ocr_client
-        openai_client = get_ocr_client() or AsyncOpenAI(api_key=os.getenv("OPENAI_OCR_KEY", getattr(settings, "OPENAI_OCR_KEY", "")))
+        openai_client = get_ocr_client()
+        if not openai_client:
+            # Если не удалось получить клиент из глобального кэша, создаем новый
+            from openai import AsyncOpenAI
+            ocr_key = os.getenv("OPENAI_OCR_KEY", getattr(settings, "OPENAI_OCR_KEY", ""))
+            if not ocr_key:
+                logger.warning("OPENAI_OCR_KEY не установлен, пытаемся использовать OPENAI_API_KEY")
+                ocr_key = os.getenv("OPENAI_API_KEY", getattr(settings, "OPENAI_API_KEY", ""))
+            openai_client = AsyncOpenAI(api_key=ocr_key)
         
         # Timer for XML generation to track performance
         start_time = datetime.now()

@@ -18,7 +18,7 @@ class Settings(BaseSettings):
 
     # OpenAI API configuration
     USE_OPENAI_OCR: bool = False
-    OPENAI_OCR_KEY: str = os.getenv("OPENAI_OCR_KEY", "")
+    OPENAI_OCR_KEY: str = os.getenv("OPENAI_OCR_KEY", os.getenv("OPENAI_API_KEY", ""))
     OPENAI_CHAT_KEY: str = os.getenv("OPENAI_CHAT_KEY", "")
     OPENAI_ASSISTANT_ID: str = os.getenv("OPENAI_ASSISTANT_ID", "")
     
@@ -57,11 +57,18 @@ def get_ocr_client():
     try:
         import openai
 
-        if settings.OPENAI_OCR_KEY:
-            _ocr_client = openai.OpenAI(api_key=settings.OPENAI_OCR_KEY)
+        # Используем OPENAI_OCR_KEY, а если его нет - OPENAI_API_KEY
+        ocr_key = settings.OPENAI_OCR_KEY
+        if not ocr_key:
+            logging.warning("OPENAI_OCR_KEY не установлен, пытаемся использовать OPENAI_API_KEY")
+            ocr_key = os.getenv("OPENAI_API_KEY", "")
+        
+        if ocr_key:
+            _ocr_client = openai.OpenAI(api_key=ocr_key)
+            logging.info("OCR клиент инициализирован успешно")
             return _ocr_client
         else:
-            logging.error("OPENAI_OCR_KEY not set; OCR unavailable")
+            logging.error("OPENAI_OCR_KEY и OPENAI_API_KEY не установлены; OCR недоступен")
             return None
     except ImportError:
         logging.error("openai package not installed; OCR unavailable")

@@ -8,15 +8,19 @@ import httpx
 import json
 import logging
 import xml.etree.ElementTree as ET
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from pathlib import Path
+from datetime import datetime, timedelta
 
 from app.utils.api_decorators import with_retry_backoff
-from app.utils.redis_cache import cache_get, cache_set
 
 logger = logging.getLogger(__name__)
 
 SYRVE_PROMPT_PATH = Path(__file__).parent / "assistants" / "prompts" / "syrve.md"
+
+# Константы для работы с токеном
+TOKEN_CACHE_MINUTES = 25  # Время жизни токена в минутах
+TOKEN_REFRESH_THRESHOLD = 5  # За сколько минут до истечения обновлять токен
 
 class SyrveClient:
     """
@@ -42,6 +46,8 @@ class SyrveClient:
         self.password = password
         self.is_password_hashed = is_password_hashed
         self.timeout = 30  # Default timeout in seconds
+        self._token = None
+        self._token_expiry = None
 
     def _get_sha1_password(self) -> str:
         # Если пароль уже хешированный - возвращаем как есть
@@ -49,6 +55,60 @@ class SyrveClient:
             return self.password
         # Иначе хешируем
         return hashlib.sha1(self.password.encode("utf-8")).hexdigest()
+
+    def _is_token_valid(self) -> bool:
+        """Проверяет, действителен ли текущий токен"""
+        if not self._token or not self._token_expiry:
+            return False
+        
+        # Проверяем, не истекает ли токен в ближайшее время
+        current_time = datetime.now()
+        time_until_expiry = (self._token_expiry - current_time).total_seconds() / 60
+        
+        return time_until_expiry > TOKEN_REFRESH_THRESHOLD
+
+    async def _request_new_token(self) -> str:
+        """Запрашивает новый токен у API"""
+        auth_url = f"{self.api_url}/resto/api/auth"
+        pass_hash = self._get_sha1_password()
+        params = {"login": self.login, "pass": pass_hash}
+        
+        try:
+            # Используем verify=False для работы с самоподписанными сертификатами
+            import urllib3
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            
+            async with httpx.AsyncClient(timeout=self.timeout, verify=False) as client:
+                # Сначала пробуем GET
+                try:
+                    response = await client.get(auth_url, params=params)
+                    response.raise_for_status()
+                except httpx.HTTPStatusError as e:
+                    if e.response.status_code in [404, 405, 501, 400]:
+                        # Если GET не поддерживается, пробуем POST
+                        response = await client.post(
+                            auth_url,
+                            data=params,
+                            headers={"Content-Type": "application/x-www-form-urlencoded"}
+                        )
+                        response.raise_for_status()
+                    else:
+                        raise
+                
+                token = response.text.strip()
+                if not token:
+                    raise ValueError("No auth token in response")
+                
+                # Устанавливаем время жизни токена
+                self._token = token
+                self._token_expiry = datetime.now() + timedelta(minutes=TOKEN_CACHE_MINUTES)
+                
+                logger.info(f"Successfully obtained new Syrve token, valid for {TOKEN_CACHE_MINUTES} minutes")
+                return token
+                
+        except Exception as e:
+            logger.error(f"Failed to obtain new token: {str(e)}")
+            raise
 
     async def auth(self) -> str:
         """
@@ -58,68 +118,14 @@ class SyrveClient:
         Raises:
             Exception: If authentication fails
         """
-        # Check if there's a cached token
-        cache_key = f"syrve:key:{self.login}"
-        cached_token = cache_get(cache_key)
-        if cached_token:
-            logger.info("Using cached Syrve auth token")
-            return cached_token
+        # Проверяем локальный токен
+        if self._is_token_valid():
+            logger.debug("Using cached token (expires in %s minutes)", 
+                        (self._token_expiry - datetime.now()).total_seconds() / 60)
+            return self._token
         
-        # Try GET /resto/api/auth with params (login, pass)
-        auth_url = f"{self.api_url}/resto/api/auth"
-        pass_hash = self._get_sha1_password()
-        params = {"login": self.login, "pass": pass_hash}
-        try:
-            # Используем verify=False для работы с самоподписанными сертификатами
-            # и отключаем предупреждения о незащищенных запросах
-            import urllib3
-            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-            
-            async with httpx.AsyncClient(timeout=self.timeout, verify=False) as client:
-                response = await client.get(auth_url, params=params)
-                response.raise_for_status()
-                token = response.text.strip()
-                if not token:
-                    raise ValueError("No auth token in response")
-                logger.info("Successfully authenticated with Syrve API (GET /resto/api/auth)")
-                # Cache the token (45 минут)
-                cache_set(cache_key, token, ex=45*60)
-                return token
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code in [404, 405, 501, 400]:
-                logger.info("GET /resto/api/auth failed, trying POST")
-            else:
-                logger.error(f"GET /resto/api/auth failed with status {e.response.status_code}: {e.response.text}")
-                raise
-        except Exception as e:
-            logger.error(f"GET /resto/api/auth failed: {str(e)}")
-        
-        # Try POST /resto/api/auth with Content-Type: application/x-www-form-urlencoded
-        try:
-            # Повторно отключаем предупреждения о SSL для этого запроса
-            import urllib3
-            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-            
-            async with httpx.AsyncClient(timeout=self.timeout, verify=False) as client:
-                response = await client.post(
-                    auth_url,
-                    data=params,
-                    headers={"Content-Type": "application/x-www-form-urlencoded"}
-                )
-                response.raise_for_status()
-                token = response.text.strip()
-                if not token:
-                    raise ValueError("No auth token in response")
-                logger.info("Successfully authenticated with Syrve API (POST /resto/api/auth)")
-                # Cache the token (45 минут)
-                cache_set(cache_key, token, ex=45*60)
-                return token
-        except httpx.HTTPStatusError as e:
-            logger.error(f"POST /resto/api/auth failed with status {e.response.status_code}: {e.response.text}")
-            raise
-        except Exception as e:
-            logger.error(f"POST /resto/api/auth failed: {str(e)}")
-            raise Exception("Both GET and POST authentication methods failed")
+        # Если нет валидного токена, запрашиваем новый
+        return await self._request_new_token()
 
     async def logout(self, key: str) -> None:
         """
@@ -131,13 +137,13 @@ class SyrveClient:
         """
         logout_url = f"{self.api_url}/resto/api/logout"
         params = {"key": key}
-        cache_key = f"syrve:key:{self.login}"
         try:
             async with httpx.AsyncClient(timeout=self.timeout, verify=False) as client:
                 response = await client.post(logout_url, params=params)
                 response.raise_for_status()
-                # Remove from cache only on success
-                cache_set(cache_key, None)
+                # Очищаем локальный токен
+                self._token = None
+                self._token_expiry = None
                 logger.info("Successfully logged out from Syrve API")
         except Exception as e:
             logger.warning(f"Syrve logout failed: {str(e)}")
