@@ -1,16 +1,7 @@
 """
-Модуль локальных парсеров для быстрой обработки команд без обращения к OpenAI API.
-Эффективно обрабатывает простые команды, такие как изменение даты и редактирование строк.
+Пакет парсеров команд для обработки пользовательских команд.
 """
 
-from app.parsers.local_parser import parse_command, parse_command_async
-from app.parsers.date_parser import parse_date_command, find_date_in_text
-from app.parsers.line_parser import parse_line_command
+from app.parsers.command_parser import parse_command, parse_compound_command
 
-__all__ = [
-    'parse_command',
-    'parse_command_async',
-    'parse_date_command',
-    'find_date_in_text',
-    'parse_line_command'
-] 
+__all__ = ['parse_command', 'parse_compound_command'] 
