@@ -134,8 +134,23 @@ async def process_user_edit(
             return
             
         if intent.get("action") == "unknown":
-            error_message = intent.get("user_message", t("error.parse_command", lang=lang))
-            logger.critical("ОТЛАДКА-ЯДРО: Неизвестный интент: %s" % intent)
+            # Check for specific error from free_parser for invalid numeric value
+            if intent.get("error") == "invalid_numeric_value" and intent.get("source") == "free_parser":
+                field_name = intent.get("field", t("general.field_unknown", lang=lang))
+                original_val = intent.get("original_value", t("general.value_unknown", lang=lang))
+                error_message = t("error.invalid_numeric_value_for_field", 
+                                  lang=lang, 
+                                  field=field_name, 
+                                  original_value=str(original_val)[:50]) # Truncate long values
+            # Handle standardized errors from text_processor/line_parser
+            elif intent.get("user_message_key"): 
+                error_message = t(intent["user_message_key"], 
+                                  lang=lang, 
+                                  **(intent.get("user_message_params", {})))
+            else: # Generic fallback for other unknown intents
+                error_message = intent.get("user_message", t("error.parse_command", lang=lang))
+            
+            logger.critical("ОТЛАДКА-ЯДРО: Неизвестный интент или ошибка парсинга: %s, Сообщение: %s" % (intent, error_message))
             if send_error:
                 await send_error(error_message)
             await set_processing_edit(user_id, False)  # Снимаем блокировку при ошибке
@@ -143,25 +158,70 @@ async def process_user_edit(
 
         # Применяем интент к инвойсу
         logger.critical("ОТЛАДКА-ЯДРО: Применяем интент: %s" % intent)
+        current_invoice_dict = parsed_to_dict(invoice) # Ensure we have a dict for apply_intent
+        
         try:
-            invoice = parsed_to_dict(invoice)
-            new_invoice = apply_intent(invoice, intent)
+            modified_invoice_dict = apply_intent(current_invoice_dict, intent)
             
-            # Проверяем, что new_invoice не None
-            if new_invoice is None:
+            if modified_invoice_dict is None:
                 logger.critical("ОТЛАДКА-ЯДРО: apply_intent вернул None вместо инвойса")
                 if send_error:
-                    await send_error("Ошибка при применении изменений: инвойс не получен")
-                await set_processing_edit(user_id, False)  # Снимаем блокировку при ошибке
+                    await send_error(t("error.apply_intent_failed", lang=lang))
+                await set_processing_edit(user_id, False)
                 return
+            
+            # *** Pydantic VALIDATION STEP ***
+            try:
+                # Need to import ParsedData and ValidationError from pydantic
+                from app.models import ParsedData
+                from pydantic import ValidationError
+
+                validated_invoice_model = ParsedData(**modified_invoice_dict)
+                new_invoice = validated_invoice_model.model_dump() # Use this validated dict
+                logger.critical("ОТЛАДКА-ЯДРО: Интент применен и данные валидны Pydantic. Действие: %s" % intent.get('action'))
+            except ValidationError as e:
+                logger.error(f"Pydantic validation error after applying intent: {intent}. Errors: {e.errors()}", exc_info=True)
+                first_error = e.errors()[0]
+                loc = first_error['loc']
+                problematic_input = first_error.get('input', 'N/A')
+                pydantic_msg = first_error['msg']
                 
-            logger.critical("ОТЛАДКА-ЯДРО: Интент применен, действие: %s" % intent.get('action'))
-        except Exception as e:
-            logger.critical("ОТЛАДКА-ЯДРО: Ошибка при применении интента: %s" % e)
+                simplified_field_name = ""
+                if loc: # Ensure loc is not empty
+                    if len(loc) == 1: # Top-level field like 'date', 'supplier'
+                        field_key = str(loc[0])
+                        simplified_field_name = t(f"field.{field_key}", lang=lang, default_value=field_key.replace('_', ' ').capitalize())
+                    elif loc[0] == 'positions' and len(loc) > 2:
+                        try:
+                            line_number = int(loc[1]) + 1 # Convert 0-indexed to 1-indexed
+                            field_key = str(loc[2])
+                            # Get a translated field name if available, otherwise use the key capitalized
+                            field_display_name = t(f"field.{field_key}", lang=lang, default_value=field_key.replace('_', ' ').capitalize())
+                            simplified_field_name = t("general.field_in_line", lang=lang, field=field_display_name, line_number=line_number)
+                        except (IndexError, ValueError): # Fallback for unexpected loc structure for positions
+                            simplified_field_name = " -> ".join(map(str, loc))
+                    else: # Default fallback for other cases
+                        simplified_field_name = " -> ".join(map(str, loc))
+                else: # If loc is empty for some reason
+                    simplified_field_name = t("general.field_unknown", lang=lang)
+
+                user_friendly_error_msg = t("error.pydantic_validation_detail", lang=lang,
+                                            field=simplified_field_name,
+                                            problem=pydantic_msg,
+                                            input_value=str(problematic_input)[:50]) # Truncate long input values
+
+                if send_error:
+                    await send_error(user_friendly_error_msg)
+                await set_processing_edit(user_id, False)
+                return # Stop processing, do not update state with invalid data
+            # *** End of Pydantic VALIDATION STEP ***
+
+        except Exception as e: # Catch errors from apply_intent or other unexpected issues
+            logger.critical("ОТЛАДКА-ЯДРО: Ошибка при применении интента или Pydantic валидации: %s" % e)
             logger.critical(traceback.format_exc())
             if send_error:
-                await send_error("Ошибка при применении изменений: %s" % e)
-            await set_processing_edit(user_id, False)  # Снимаем блокировку при ошибке
+                await send_error(t("error.apply_intent_failed_generic", lang=lang) + f": {e}")
+            await set_processing_edit(user_id, False)
             return
 
         # Пересчёт совпадений
