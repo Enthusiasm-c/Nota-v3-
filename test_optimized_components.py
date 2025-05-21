@@ -162,7 +162,7 @@ class OptimizationTest(unittest.TestCase):
         
     def test_optimized_matcher(self):
         """Тестирование оптимизированного модуля сопоставления"""
-        from app.utils.optimized_matcher import (
+        from app.matcher import ( # Updated import
             normalize_product_name,
             calculate_string_similarity,
             async_match_positions
