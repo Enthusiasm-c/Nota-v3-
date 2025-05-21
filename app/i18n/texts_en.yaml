@@ -47,15 +47,6 @@ error:
   syrve_duplicate: "This invoice is already in Syrve."
   syrve_error: "Syrve API error: {message}"
   edit_in_progress: "Please wait, another edit is in progress..."
-  # New translations added below
-  invalid_numeric_value_for_field: "The value '{original_value}' is not valid for {field}. Please enter a number."
-  invalid_qty_value: "Invalid quantity: '{value}'. Please enter a number."
-  invalid_price_value: "Invalid price: '{value}'. Please enter a number."
-  line_out_of_range: "Error: The specified line number is out of range."
-  invalid_line_number: "Error: Invalid line number provided."
-  empty_name_value: "Error: The name for the line item cannot be empty."
-  empty_unit_value: "Error: The unit for the line item cannot be empty."
-  pydantic_validation_detail: "Error for field '{field}': {problem}. You entered: '{input_value}'."
 
 example:
   edit_prompt: "What would you like to edit? Examples:\n\n• <i>date April 26</i>\n• <i>line 2 name tomatoes</i>\n• <i>line 3 price 90000</i>\n• <i>line 1 qty 5</i>\n• <i>line 4 unit kg</i>\n• <i>delete 3</i> — delete line\n\nEnter command or <i>cancel</i> to go back."

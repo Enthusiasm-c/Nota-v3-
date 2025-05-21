@@ -96,35 +96,11 @@ def create_error_response(error_code: str, **kwargs) -> Dict[str, Any]:
         Словарь с информацией об ошибке
     """
     result = {
-        "action": "unknown",
+        "action": "unknown", 
         "error": error_code,
-        "source": "line_parser",  # Specific source
-        "user_message_key": f"error.{error_code}"
+        "source": "local_parser"
     }
-    
-    params_for_translation = {}
-    # Populate user_message_params based on error_code and available kwargs
-    # These keys in kwargs are expected to be provided by the calling parser (e.g., line_parser.py)
-    if error_code == "invalid_price_value" or error_code == "invalid_qty_value":
-        if "value" in kwargs:  # The problematic value string
-            params_for_translation["value"] = str(kwargs["value"])[:50]
-    elif error_code == "empty_name_value":
-        if "line_number" in kwargs:  # 1-based line number for user display
-            params_for_translation["line_number"] = kwargs["line_number"]
-    elif error_code == "line_out_of_range":
-        if "line_number" in kwargs:  # The line number user provided
-            params_for_translation["line_number"] = kwargs["line_number"]
-        if "max_lines" in kwargs:  # Max lines in the document
-            params_for_translation["max_lines"] = kwargs["max_lines"]
-    elif error_code == "invalid_line_number":  # e.g. user typed "строка X"
-        if "value" in kwargs:  # The "X" part (problematic line string)
-             params_for_translation["value"] = str(kwargs["value"])[:50]
-    # Add other specific error codes and their expected kwargs for parameters here if needed
-
-    result["user_message_params"] = params_for_translation
-    
-    # Optionally, add other kwargs to the root of the result if they are essential for other logic,
-    # but not for translation parameters. For now, keeping it clean.
+    result.update(kwargs)
     return result
 
 def split_command(text: str) -> List[str]:

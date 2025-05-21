@@ -11,13 +11,13 @@ logger = logging.getLogger(__name__)
 
 def kb_main(lang: str = "en") -> InlineKeyboardMarkup:
     """
-    Creates main menu keyboard.
+    Создает клавиатуру главного меню.
     
     Args:
-        lang: Language code for internationalization
+        lang: Код языка для интернационализации
         
     Returns:
-        InlineKeyboardMarkup with main menu buttons
+        InlineKeyboardMarkup с кнопками главного меню
     """
     logger.debug(f"Creating main menu keyboard with lang={lang}")
     
@@ -25,13 +25,13 @@ def kb_main(lang: str = "en") -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=t("buttons.new_photo", {"default": "New Photo"}, lang), 
+                    text="📷 " + t("buttons.new_photo", {"default": "Новое фото"}, lang), 
                     callback_data="action:new"
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text=t("buttons.help", {"default": "Help"}, lang), 
+                    text="❓ " + t("buttons.help", {"default": "Помощь"}, lang), 
                     callback_data="action:help"
                 )
             ]
@@ -43,19 +43,19 @@ def kb_main(lang: str = "en") -> InlineKeyboardMarkup:
 
 def kb_upload(lang: str = "en") -> ReplyKeyboardMarkup:
     """
-    Creates keyboard for photo upload mode.
+    Создает клавиатуру для режима загрузки фото.
     
     Args:
-        lang: Language code for internationalization
+        lang: Код языка для интернационализации
         
     Returns:
-        ReplyKeyboardMarkup with cancel button
+        ReplyKeyboardMarkup с кнопкой отмены
     """
     logger.debug(f"Creating upload keyboard with lang={lang}")
     
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text=t("buttons.cancel", {"default": "Cancel"}, lang))]
+            [KeyboardButton(text="❌ " + t("buttons.cancel", {"default": "Отмена"}, lang))]
         ],
         resize_keyboard=True,
         one_time_keyboard=True,
@@ -66,19 +66,19 @@ def kb_upload(lang: str = "en") -> ReplyKeyboardMarkup:
 
 def kb_help_back(lang: str = "en") -> ReplyKeyboardMarkup:
     """
-    Creates keyboard for help screen with "Back" button.
+    Создает клавиатуру для экрана помощи с кнопкой "Назад".
     
     Args:
-        lang: Language code for internationalization
+        lang: Код языка для интернационализации
         
     Returns:
-        ReplyKeyboardMarkup with "Back" button
+        ReplyKeyboardMarkup с кнопкой "Назад"
     """
     logger.debug(f"Creating help-back keyboard with lang={lang}")
     
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text=t("buttons.back", {"default": "Back"}, lang))]
+            [KeyboardButton(text="◀️ " + t("buttons.back", {"default": "Назад"}, lang))]
         ],
         resize_keyboard=True,
         one_time_keyboard=True,
@@ -89,13 +89,13 @@ def kb_help_back(lang: str = "en") -> ReplyKeyboardMarkup:
 
 def kb_set_supplier(lang: str = "en") -> InlineKeyboardMarkup:
     """
-    Creates keyboard with supplier setting button.
+    Создает клавиатуру с кнопкой установки поставщика.
     
     Args:
-        lang: Language code for internationalization
+        lang: Код языка для интернационализации
         
     Returns:
-        InlineKeyboardMarkup with supplier setting button
+        InlineKeyboardMarkup с кнопкой установки поставщика
     """
     logger.debug(f"Creating set-supplier keyboard with lang={lang}")
     
@@ -103,7 +103,7 @@ def kb_set_supplier(lang: str = "en") -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=t("buttons.set_supplier", {"default": "Set Supplier"}, lang), 
+                    text="🏢 " + t("buttons.set_supplier", {"default": "Указать поставщика"}, lang), 
                     callback_data="set_supplier"
                 )
             ]
@@ -115,19 +115,20 @@ def kb_set_supplier(lang: str = "en") -> InlineKeyboardMarkup:
 
 def kb_unit_buttons() -> InlineKeyboardMarkup:
     """
-    Creates keyboard with unit buttons.
+    Создает клавиатуру с кнопками единиц измерения.
     
     Returns:
-        InlineKeyboardMarkup with unit buttons
+        InlineKeyboardMarkup с кнопками единиц измерения
     """
     logger.debug("Creating unit buttons keyboard")
     
+    # Добавляем эмодзи для улучшения восприятия
     unit_map = {
-        "kg": "kg",
-        "g": "g",
-        "l": "l",
-        "ml": "ml",
-        "pcs": "pcs"
+        "kg": "⚖️ kg",   # весы
+        "g": "🧂 g",     # щепотка
+        "l": "🥛 l",     # стакан
+        "ml": "💧 ml",   # капля
+        "pcs": "🔢 pcs"  # числа
     }
     
     keyboard = InlineKeyboardMarkup(
@@ -148,7 +149,7 @@ def kb_unit_buttons() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    text="Cancel", 
+                    text="❌ Отмена", 
                     callback_data="cancel:all"
                 )
             ]
@@ -160,13 +161,13 @@ def kb_unit_buttons() -> InlineKeyboardMarkup:
 
 def kb_cancel_all(lang: str = "en") -> InlineKeyboardMarkup:
     """
-    Creates keyboard with only cancel button.
+    Создает клавиатуру только с кнопкой отмены.
     
     Args:
-        lang: Language code for internationalization
+        lang: Код языка для интернационализации
         
     Returns:
-        InlineKeyboardMarkup with cancel button
+        InlineKeyboardMarkup с кнопкой отмены
     """
     logger.debug(f"Creating cancel-all keyboard with lang={lang}")
     
@@ -174,7 +175,7 @@ def kb_cancel_all(lang: str = "en") -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=t("buttons.cancel", {"default": "Cancel"}, lang), 
+                    text="❌ " + t("buttons.cancel", {"default": "Отмена"}, lang), 
                     callback_data="cancel:all"
                 )
             ]
@@ -186,44 +187,45 @@ def kb_cancel_all(lang: str = "en") -> InlineKeyboardMarkup:
 
 def build_main_kb(has_errors: bool = True, lang: str = "en") -> InlineKeyboardMarkup:
     """
-    Creates keyboard for report editing.
+    Создает клавиатуру для редактирования отчета.
     
     Args:
-        has_errors: Flag indicating if there are errors in the report
-        lang: Language code for internationalization
+        has_errors: Флаг, указывающий есть ли ошибки в отчете
+        lang: Код языка для интернационализации
         
     Returns:
-        InlineKeyboardMarkup with edit and confirm/cancel buttons
+        InlineKeyboardMarkup с кнопками редактирования и подтверждения/отмены
     """
     logger.debug(f"Creating main keyboard with has_errors={has_errors}, lang={lang}")
     
-    buttons = []
+    # Кнопка редактирования
+    edit_button = InlineKeyboardButton(
+        text="✏️ " + t("buttons.edit", {"default": "Редактировать"}, lang), 
+        callback_data="edit:free"
+    )
     
-    # Edit button with warning emoji if has errors
-    buttons.append([
-        InlineKeyboardButton(
-            text=f"{'⚠️' if has_errors else '✏️'} {t('buttons.edit', {'default': 'Edit'}, lang)}",
-            callback_data="edit:free"
-        )
-    ])
+    # Кнопка отмены
+    cancel_button = InlineKeyboardButton(
+        text="❌ " + t("buttons.cancel", {"default": "Отмена"}, lang), 
+        callback_data="cancel:all"
+    )
     
-    # Confirm button (always show, but with warning if has errors)
-    buttons.append([
-        InlineKeyboardButton(
-            text=f"{'⚠️' if has_errors else '✅'} {t('buttons.confirm', {'default': 'Confirm'}, lang)}",
-            callback_data="confirm:invoice"
-        )
-    ])
+    # Кнопка подтверждения (только если нет ошибок)
+    confirm_button = InlineKeyboardButton(
+        text="✅ " + t("buttons.confirm", {"default": "Подтвердить"}, lang), 
+        callback_data="confirm:invoice"
+    )
     
-    # Cancel button
-    buttons.append([
-        InlineKeyboardButton(
-            text=f"❌ {t('buttons.cancel', {'default': 'Cancel'}, lang)}",
-            callback_data="cancel:all"
-        )
-    ])
+    # Формируем клавиатуру
+    keyboard_rows = [
+        [edit_button, cancel_button]  # Первый ряд с редактированием и отменой
+    ]
     
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
+    # Добавляем кнопку подтверждения только если нет ошибок
+    if not has_errors:
+        keyboard_rows.append([confirm_button])  # Второй ряд только с подтверждением
+    
+    return InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
 
 
 def build_edit_keyboard(has_errors: bool = True, lang: str = "en") -> InlineKeyboardMarkup:
