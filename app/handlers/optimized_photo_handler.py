@@ -20,7 +20,7 @@ from app.utils.incremental_ui import IncrementalUI
 from app.utils.timing_logger import async_timed
 from app.utils.processing_guard import require_user_free, set_processing_photo, is_processing_photo
 from app.utils.async_ocr import async_ocr
-from app.utils.optimized_matcher import async_match_positions
+from app.matcher import async_match_positions # Updated import
 from app.utils.cached_loader import cached_load_products
 
 from app.formatters.report import build_report
