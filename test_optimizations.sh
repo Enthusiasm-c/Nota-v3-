@@ -109,8 +109,8 @@ test_matching() {
 import time
 import sys
 from app import data_loader
-from app.matcher import match_positions
-from app.utils.optimized_matcher import async_match_positions
+from app.matcher import match_positions # This should point to the new consolidated matcher
+from app.matcher import async_match_positions # Updated import
 import asyncio
 
 def test_matching():

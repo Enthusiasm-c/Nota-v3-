@@ -12,62 +12,10 @@ from app.ocr_prompt import OCR_SYSTEM_PROMPT
 from app.config import settings
 from app.utils.ocr_cache import get_from_cache, save_to_cache
 from app.imgprep.prepare import prepare_for_ocr
+from app.utils.async_ocr import INVOICE_FUNCTION_SCHEMA # Import the schema
 
-
-# Schema for the function call in OpenAI API
-INVOICE_FUNCTION_SCHEMA = {
-    "name": "get_parsed_invoice",
-    "description": "Parse structured data from invoice image",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "supplier": {
-                "type": "string",
-                "description": "Supplier name from the invoice"
-            },
-            "date": {
-                "type": "string",
-                "description": "Invoice date in YYYY-MM-DD format"
-            },
-            "positions": {
-                "type": "array",
-                "description": "List of invoice positions",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "name": {
-                            "type": "string",
-                            "description": "Product name"
-                        },
-                        "qty": {
-                            "type": "number",
-                            "description": "Quantity"
-                        },
-                        "unit": {
-                            "type": "string",
-                            "description": "Unit of measurement"
-                        },
-                        "price": {
-                            "type": "number",
-                            "description": "Price per unit"
-                        },
-                        "total_price": {
-                            "type": "number",
-                            "description": "Total price for this position"
-                        }
-                    },
-                    "required": ["name", "qty"]
-                }
-            },
-            "total_price": {
-                "type": "number",
-                "description": "Total invoice amount"
-            }
-        },
-        "required": ["positions"]
-    }
-}
-
+# INVOICE_FUNCTION_SCHEMA is defined in app.utils.async_ocr.py
+# and should be the single source of truth.
 
 def get_ocr_client():
     """Get OpenAI client instance for OCR."""
@@ -103,205 +51,64 @@ def call_openai_ocr(image_bytes: bytes, _req_id=None, use_cache: bool = True, ti
     Returns:
         ParsedData model with extracted information
     """
-    # Try to get from cache first (fastest path)
-    if use_cache:
+    import asyncio
+    from app.utils.async_ocr import async_ocr as new_async_ocr_utility # Renamed to avoid confusion
+
+    # This synchronous function now calls the new async_ocr_utility from app.utils.async_ocr
+    # All logic like caching, image prep, OpenAI client handling, post-processing 
+    # is handled by new_async_ocr_utility.
+    # The 'use_cache' and 'timeout' parameters are passed to new_async_ocr_utility.
+    # The _req_id parameter is not directly used by new_async_ocr_utility, which has its own request ID generation.
+
+    logging.info(f"Synchronous call_openai_ocr (in app.ocr) is wrapping app.utils.async_ocr.async_ocr. Timeout: {timeout}, Use Cache: {use_cache}")
+    
+    try:
+        # Get or create a new event loop for this synchronous context
         try:
-            cached_data = get_from_cache(image_bytes)
-            if cached_data:
-                logging.info("Using cached OCR result")
-                return cached_data
-        except Exception as e:
-            logging.warning(f"Cache read error: {e}")
-    
-    # Start timer for overall processing
-    start_time = time.time()
-    
-    # Prepare image - optimize for OCR
-    try:
-        optimized_image = prepare_for_ocr(image_bytes)
-        logging.debug("Image optimized for OCR")
-    except Exception as e:
-        logging.warning(f"Image optimization error: {e}, using original image")
-        optimized_image = image_bytes
-    
-    # Get OpenAI client with validation
-    client = get_ocr_client()
-    if not client:
-        raise RuntimeError("OpenAI client not available")
-    
-    # Ensure client has chat attribute
-    if not hasattr(client, 'chat'):
-        raise RuntimeError("Invalid OpenAI client (no chat attribute)")
-    
-    # Convert image to base64 - required for API
-    base64_image = base64.b64encode(optimized_image).decode("utf-8")
-    
-    # Log start of API call
-    api_start_time = time.time()
-    logging.info(f"Starting OCR API call with timeout {timeout}s")
-    
-    # Call OpenAI Vision with timeout
-    import concurrent.futures
-    from concurrent.futures import ThreadPoolExecutor
-    
-    try:
-        # Create thread pool for timeout management
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            # Submit API call to thread pool
-            future = executor.submit(
-                client.chat.completions.create,
-                model="gpt-4o",
-                max_tokens=2048,
-                temperature=0.0,
-                tools=[{"type": "function", "function": INVOICE_FUNCTION_SCHEMA}],
-                tool_choice={"type": "function", "function": {"name": "get_parsed_invoice"}},
-                messages=[
-                    {"role": "system", "content": OCR_SYSTEM_PROMPT},
-                    {"role": "user", "content": [
-                        {"type": "image_url", "image_url": {
-                            "url": f"data:image/jpeg;base64,{base64_image}",
-                            "detail": "high"
-                        }}
-                    ]}
-                ]
+            loop = asyncio.get_event_loop_policy().get_event_loop()
+            if loop.is_running():
+                # If an event loop is already running (e.g., in a Jupyter notebook or another async context),
+                # create a new loop to avoid RuntimeError: Cannot run new tasks from a different thread.
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            else:
+                # If no loop is running, the default get_event_loop() is fine.
+                # Or, to be absolutely safe, always use a new loop for sync calls:
+                # loop = asyncio.new_event_loop()
+                # asyncio.set_event_loop(loop)
+                pass # Current loop is fine if not running
+        except RuntimeError: # pragma: no cover
+            # This might happen if no current event loop is set and policy doesn't create one.
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        parsed_data_result = loop.run_until_complete(
+            new_async_ocr_utility(
+                image_bytes=image_bytes, 
+                req_id=_req_id, # Pass along if new_async_ocr_utility can use it
+                use_cache=use_cache, 
+                timeout=timeout
             )
-            
-            # Wait for result with timeout
-            try:
-                response = future.result(timeout=timeout)
-                # Measure time
-                api_duration = time.time() - api_start_time
-                logging.info(f"OCR API call completed successfully in {api_duration:.2f}s")
-            except concurrent.futures.TimeoutError:
-                # Cancel the future if possible
-                future.cancel()
-                logging.error(f"OCR API call timed out after {timeout}s")
-                raise TimeoutError(f"OCR API call timed out after {timeout}s")
-        
-        # Extract function call result with validation at each step
-        if not response.choices:
-            raise ValueError("Empty response from OpenAI")
-        
-        message = response.choices[0].message
-        if not message.tool_calls or len(message.tool_calls) == 0:
-            raise ValueError("No tool call in response")
-        
-        # Get the first tool call
-        tool_call = message.tool_calls[0]
-        if tool_call.function.name != "get_parsed_invoice":
-            raise ValueError(f"Unexpected function name: {tool_call.function.name}")
-        
-        # Parse JSON arguments
-        import json
-        result_data = json.loads(tool_call.function.arguments)
-        
-        # Convert to Pydantic model
-        parsed_data = ParsedData.model_validate(result_data)
-        
-        # Post-process data
-        processed_data = postprocess_parsed_data(parsed_data)
-        
-        # Cache the result for future use
-        if use_cache:
-            try:
-                save_to_cache(image_bytes, processed_data)
-                logging.debug("OCR result saved to cache")
-            except Exception as e:
-                logging.warning(f"Cache save error: {e}")
-        
-        # Log total processing time
-        total_duration = time.time() - start_time
-        logging.info(f"Total OCR processing completed in {total_duration:.2f}s")
-        
-        return processed_data
-    
-    except TimeoutError as e:
-        logging.error(f"OCR timeout error: {e}")
-        raise RuntimeError(f"OCR operation timed out: {e}")
-    except Exception as e:
-        logging.error(f"OCR API error: {e}")
-        raise RuntimeError(f"Failed to extract data from image: {e}")
-
-
-async def call_openai_ocr_async(image_bytes: bytes, system_prompt: str = None, api_key: Optional[str] = None) -> str:
-    """
-    Async version of the OCR function that returns raw JSON string.
-    Used by the OCR pipeline as a fallback.
-    
-    Args:
-        image_bytes: Raw image bytes
-        system_prompt: Optional custom system prompt
-        api_key: Optional API key to use
-        
-    Returns:
-        JSON string with extracted data
-    """
-    # This is a simplified async version for the pipeline
-    # In a real implementation, this would use proper async client
-    
-    # Get OpenAI client
-    client = get_ocr_client()
-    if not client:
-        raise RuntimeError("OpenAI client not available")
-    
-    # Convert image to base64
-    base64_image = base64.b64encode(image_bytes).decode("utf-8")
-    
-    # Use provided prompt or default
-    prompt = system_prompt or OCR_SYSTEM_PROMPT
-    
-    # Call OpenAI Vision
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            max_tokens=2048,
-            temperature=0.0,
-            tools=[
-                {
-                    "type": "function",
-                    "function": INVOICE_FUNCTION_SCHEMA
-                }
-            ],
-            tool_choice={
-                "type": "function",
-                "function": {"name": "get_parsed_invoice"}
-            },
-            messages=[
-                {
-                    "role": "system",
-                    "content": prompt
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{base64_image}",
-                                "detail": "high"
-                            }
-                        }
-                    ]
-                }
-            ]
         )
+        # loop.close() # Closing the loop can cause issues if it's the main loop or shared.
+                       # Let the caller manage the loop lifecycle if it created it.
+                       # If we created a new_event_loop(), it's safer to close it.
+                       # However, run_until_complete usually handles this.
+        return parsed_data_result
         
-        # Extract function call result
-        if not response.choices:
-            raise ValueError("Empty response from OpenAI")
-        
-        message = response.choices[0].message
-        if not message.tool_calls or len(message.tool_calls) == 0:
-            raise ValueError("No tool call in response")
-        
-        # Get the first tool call
-        tool_call = message.tool_calls[0]
-        if tool_call.function.name != "get_parsed_invoice":
-            raise ValueError(f"Unexpected function name: {tool_call.function.name}")
-        
-        # Return raw JSON string
-        return tool_call.function.arguments
-    
+    except asyncio.TimeoutError:
+        logging.error(f"OCR operation timed out in sync wrapper call_openai_ocr after {timeout}s.")
+        raise RuntimeError(f"OCR operation timed out after {timeout}s (from sync wrapper).")
     except Exception as e:
-        logging.error(f"Async OCR API error: {e}")
-        raise RuntimeError(f"Failed to extract data from image: {e}")
+        logging.error(f"Error in sync wrapper call_openai_ocr for new_async_ocr_utility: {e}", exc_info=True)
+        raise RuntimeError(f"Failed to extract data from image (from sync wrapper call_openai_ocr): {e}")
+
+# Removed call_openai_ocr_async as app.utils.async_ocr.async_ocr is the preferred async version.
+# async def call_openai_ocr_async(image_bytes: bytes, system_prompt: str = None, api_key: Optional[str] = None) -> str:
+#     """
+#     DEPRECATED: Use app.utils.async_ocr.async_ocr instead.
+#     Async version of the OCR function that returns raw JSON string.
+#     Used by the OCR pipeline as a fallback.
+#     """
+#     # ... (original implementation removed) ...
+#     pass

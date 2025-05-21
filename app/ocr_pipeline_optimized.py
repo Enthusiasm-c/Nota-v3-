@@ -24,7 +24,8 @@ from typing import Dict, List, Any
 from app.detectors.table.factory import get_detector
 from app.validators.pipeline import ValidationPipeline
 from paddleocr import PaddleOCR
-from app.ocr import call_openai_ocr_async
+# from app.ocr import call_openai_ocr_async # Replaced by app.utils.async_ocr
+from app.utils.async_ocr import async_ocr as call_openai_ocr_async # Use the one from utils
 from app.ocr_prompt import OCR_SYSTEM_PROMPT
 from app.config import settings
 from app.utils.redis_cache import cache_get, cache_set

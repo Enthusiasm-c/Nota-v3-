@@ -2,8 +2,8 @@ from aiogram import Router, CallbackQuery, Message, F
 import re
 import logging
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
-from app.fsm.states import EditFree
+# from aiogram.fsm.state import State, StatesGroup # State classes are now in app.fsm.states
+from app.fsm.states import EditFree, InvoiceReviewStates, EditPosition # Import new states
 from aiogram.types import ForceReply
 
 
@@ -14,19 +14,19 @@ from app.i18n import t
 
 logger = logging.getLogger(__name__)
 
+# States are now defined in app.fsm.states.py
+# class InvoiceReviewStates(StatesGroup):
+#     review = State()
+#     choose_line = State()
+#     edit_line = State()
 
-class InvoiceReviewStates(StatesGroup):
-    review = State()
-    choose_line = State()
-    edit_line = State()
 
-
-class EditPosition(StatesGroup):
-    waiting_field = State()
-    waiting_name = State()
-    waiting_qty = State()
-    waiting_unit = State()
-    waiting_price = State()
+# class EditPosition(StatesGroup):
+#     waiting_field = State()
+#     waiting_name = State()
+#     waiting_qty = State()
+#     waiting_unit = State()
+#     waiting_price = State()
 
 
 router = Router()

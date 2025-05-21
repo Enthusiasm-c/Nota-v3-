@@ -54,12 +54,15 @@ __all__ = [
     "EditCommand",
     "parse_assistant_output",
     "run_thread_safe",
-    "parse_edit_command",
+    # "parse_edit_command", # Deprecated
     "adapt_intent",  # экспортируем функцию адаптера для удобства
 ]
 
 def parse_edit_command(user_input: str, invoice_lines=None) -> list:
     """
+    DEPRECATED: This function is a legacy regex-based parser.
+    Use app.parsers.command_parser.parse_compound_command instead.
+    
     Универсальный парсер команд для инвойса. Используется как в тестах, так и в run_thread_safe.
     Поддерживает комбинированные команды (несколько команд в одном сообщении).
     
@@ -71,8 +74,15 @@ def parse_edit_command(user_input: str, invoice_lines=None) -> list:
         Список dict'ов с действиями
     """
     import re
+    import warnings
     from datetime import datetime
-    
+
+    warnings.warn(
+        "parse_edit_command is deprecated. Use app.parsers.command_parser.parse_compound_command instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+
     # Проверка на пустой ввод
     if not user_input or not user_input.strip():
         return []
@@ -82,7 +92,7 @@ def parse_edit_command(user_input: str, invoice_lines=None) -> list:
         return []
     
     # Добавляем отладочный вывод
-    print(f"PARSE DEBUG: Processing command '{user_input}'")
+    # print(f"PARSE DEBUG: Processing command '{user_input}'") # Deprecated: remove debug print
     
     # Специальная обработка для известных тестовых шаблонов
     if user_input.strip() == "строка 1 количество пять":
@@ -201,7 +211,7 @@ def parse_edit_command(user_input: str, invoice_lines=None) -> list:
                         results.append({"action": "set_unit", "line": line_num - 1, "unit": field_value})
             
             # Если нашли поля и добавили результаты, продолжаем с следующей частью
-            if len(results) > 0:
+            if field_parts and any(r.get("action") != "unknown" for r in results[len(results)-len(field_parts):]): # check if any field was parsed
                 continue
         
         # --- Проверка на команды с множественными параметрами в одной строке "строка X name Y price Z"
@@ -329,39 +339,42 @@ def parse_edit_command(user_input: str, invoice_lines=None) -> list:
                 }
                 
                 # Check which format we matched
-                if len(date_match.groups()) >= 2 and date_match.group(2):
-                    month_name = date_match.group(2).lower()
+                groups = date_match.groups()
+                if len(groups) >= 2 and isinstance(groups[1], str) and (groups[1].lower() in ru_month_map or groups[1].lower() in en_month_map) : # текстовый месяц
+                    month_name = groups[1].lower()
                     
                     # Check if it's Russian or English month
                     if month_name in ru_month_map:
                         month = ru_month_map[month_name]
                     elif month_name in en_month_map:
                         month = en_month_map[month_name]
-                    else:
+                    else: # Should not happen due to regex
                         raise ValueError(f"Unknown month name: {month_name}")
                         
                     # Get day and set current year
-                    day = int(date_match.group(1))
+                    day = int(groups[0])
                     year = datetime.now().year  # Current year if not specified
                     
                     # If month is in the past and it's not December, assume next year
+                    # This logic might need refinement for edge cases like specifying a past date intentionally
                     current_month = datetime.now().month
-                    if month < current_month and month != 12:
-                        year += 1
-                    
-                elif len(date_match.groups()) >= 3:
-                    if len(date_match.group(3)) == 4:  # DD.MM.YYYY
-                        day = int(date_match.group(1))
-                        month = int(date_match.group(2))
-                        year = int(date_match.group(3))
-                    elif len(date_match.group(1)) == 4:  # YYYY.MM.DD
-                        year = int(date_match.group(1))
-                        month = int(date_match.group(2))
-                        day = int(date_match.group(3))
-                    else:  # DD.MM.YY
-                        day = int(date_match.group(1))
-                        month = int(date_match.group(2))
-                        year = 2000 + int(date_match.group(3))  # Assume 20xx for 2-digit years
+                    if month < current_month and not (month == 12 and current_month != 12) : # if month is past and not Dec of current year
+                         year +=1
+
+                elif len(groups) >= 3: # числовой формат
+                    if len(groups[0]) == 4:  # YYYY.MM.DD or YYYY/MM/DD
+                        year = int(groups[0])
+                        month = int(groups[1])
+                        day = int(groups[2])
+                    elif len(groups[2]) == 4: # DD.MM.YYYY or DD/MM/YYYY
+                        day = int(groups[0])
+                        month = int(groups[1])
+                        year = int(groups[2])
+                    else:  # DD.MM.YY or DD/MM/YY
+                        day = int(groups[0])
+                        month = int(groups[1])
+                        year_short = int(groups[2])
+                        year = 2000 + year_short if year_short < 100 else year_short # Assume 20xx for 2-digit years
                 else:
                     raise ValueError("Invalid date format")
                 
@@ -386,7 +399,7 @@ def parse_edit_command(user_input: str, invoice_lines=None) -> list:
                 supplier = part[idx+len("изменить поставщика на"):].strip()
             elif part.lower().startswith("supplier "):
                 supplier = part[len("supplier "):].strip()
-            else:
+            else: # "change supplier to"
                 idx = part.lower().index("change supplier to")
                 supplier = part[idx+len("change supplier to"):].strip()
             
@@ -403,10 +416,16 @@ def parse_edit_command(user_input: str, invoice_lines=None) -> list:
                 val = val.replace('k', '').replace('к', '')
                 
                 # Check that only one number (invalid format otherwise)
-                if val.count(',') > 1 or val.count('.') > 1:
-                    raise ValueError('invalid number format')
+                if val.count(',') > 1 and val.count('.') > 1: # e.g. 1,2.3,4
+                     raise ValueError('invalid number format mixed separators')
+                if val.count(',') > 1 and '.' in val and val.rfind('.') > val.find(','): # e.g. 1,2,3.4
+                     raise ValueError('invalid number format multiple commas before decimal')
+                if val.count('.') > 1 and ',' in val and val.rfind(',') > val.find('.'): # e.g. 1.2.3,4
+                     raise ValueError('invalid number format multiple dots before comma')
                 
-                total = float(val.replace(',', '.'))
+                val = val.replace(',', '.') # Convert comma to dot for float conversion
+                
+                total = float(val)
                 # Multiply by 1000 if 'k' suffix was present
                 if has_k:
                     total *= 1000
@@ -472,6 +491,10 @@ def parse_edit_command(user_input: str, invoice_lines=None) -> list:
                     continue
                 
                 name = match_name.group(2).strip()
+                # Remove trailing dot if it's the last character and not part of the name itself
+                if name.endswith(".") and not name.endswith("..") :
+                    name = name[:-1].strip()
+
                 results.append({"action": "set_name", "line": line, "name": name})
             except Exception:
                 results.append({"action": "unknown", "error": "invalid_line_or_name"})
@@ -496,13 +519,15 @@ def parse_edit_command(user_input: str, invoice_lines=None) -> list:
                     continue
                 
                 unit = match_unit.group(2).strip()
+                if unit.endswith(".") and not unit.endswith(".."):
+                    unit = unit[:-1].strip()
                 results.append({"action": "set_unit", "line": line, "unit": unit})
             except Exception:
                 results.append({"action": "unknown", "error": "invalid_line_or_unit"})
             continue
     
     # If no commands were recognized and we have reserved keywords, return a special error
-    if not results:
+    if not results and user_input: # only add error if input was not empty
         results.append({"action": "unknown", "error": "no_pattern_match", "user_input": user_input})
     
     return results
@@ -693,11 +718,11 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
     """
     start_time = time.time()
     
-    # ОПТИМИЗАЦИЯ 1: Быстрое распознавание общих паттернов команд через регулярные выражения
-    fast_intent = attempt_fast_intent_recognition(user_input)
-    if fast_intent:
-        logger.info(f"[run_thread_safe_async] Быстрое распознавание команды: {fast_intent.get('action')}")
-        return fast_intent
+    # ОПТИМИЗАЦИЯ 1: Быстрое распознавание общих паттернов команд через регулярные выражения - REMOVED
+    # fast_intent = attempt_fast_intent_recognition(user_input)
+    # if fast_intent:
+    #     logger.info(f"[run_thread_safe_async] Быстрое распознавание команды: {fast_intent.get('action')}")
+    #     return fast_intent
     
     # ОПТИМИЗАЦИЯ 2: Кеширование результатов по нормализованному ключу (удаляем числа, оставляем суть команды)
     # Например, "строка 1 цена 100" и "строка 2 цена 500" дадут одинаковый кеш-ключ "строка X цена Y"
@@ -916,69 +941,69 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
 
 # Вспомогательные функции для оптимизации
 
-def attempt_fast_intent_recognition(user_input: str) -> Optional[Dict[str, Any]]:
-    """
-    Быстрое распознавание часто встречающихся команд без обращения к OpenAI
+# def attempt_fast_intent_recognition(user_input: str) -> Optional[Dict[str, Any]]:
+#     """
+#     Быстрое распознавание часто встречающихся команд без обращения к OpenAI
     
-    Args:
-        user_input: Текстовая команда пользователя
+#     Args:
+#         user_input: Текстовая команда пользователя
         
-    Returns:
-        Dict или None: Распознанное намерение или None, если не удалось распознать
-    """
-    text = user_input.lower()
+#     Returns:
+#         Dict или None: Распознанное намерение или None, если не удалось распознать
+#     """
+#     text = user_input.lower()
     
-    # Распознавание команды редактирования строки (цена)
-    price_match = re.search(r'(строк[аи]?|line|row)\s+(\d+).*?(цен[аыу]|price)\s+(\d+)', text)
-    if price_match:
-        try:
-            line_num = int(price_match.group(2))
-            price = price_match.group(4).strip()
-            return {
-                "action": "set_price",
-                "line_index": line_num - 1,  # Конвертируем в 0-based индекс
-                "value": price
-            }
-        except Exception:
-            pass
+#     # Распознавание команды редактирования строки (цена)
+#     price_match = re.search(r'(строк[аи]?|line|row)\s+(\d+).*?(цен[аыу]|price)\s+(\d+)', text)
+#     if price_match:
+#         try:
+#             line_num = int(price_match.group(2))
+#             price = price_match.group(4).strip()
+#             return {
+#                 "action": "set_price",
+#                 "line_index": line_num - 1,  # Конвертируем в 0-based индекс
+#                 "value": price
+#             }
+#         except Exception:
+#             pass
     
-    # Распознавание команды редактирования строки (количество)
-    qty_match = re.search(r'(строк[аи]?|line|row)\s+(\d+).*?(кол-во|количество|qty|quantity)\s+(\d+)', text)
-    if qty_match:
-        try:
-            line_num = int(qty_match.group(2))
-            qty = qty_match.group(4).strip()
-            return {
-                "action": "set_quantity",
-                "line_index": line_num - 1,  # Конвертируем в 0-based индекс
-                "value": qty
-            }
-        except Exception:
-            pass
+#     # Распознавание команды редактирования строки (количество)
+#     qty_match = re.search(r'(строк[аи]?|line|row)\s+(\d+).*?(кол-во|количество|qty|quantity)\s+(\d+)', text)
+#     if qty_match:
+#         try:
+#             line_num = int(qty_match.group(2))
+#             qty = qty_match.group(4).strip()
+#             return {
+#                 "action": "set_quantity",
+#                 "line_index": line_num - 1,  # Конвертируем в 0-based индекс
+#                 "value": qty
+#             }
+#         except Exception:
+#             pass
     
-    # Распознавание команды редактирования строки (единица измерения)
-    unit_match = re.search(r'(строк[аи]?|line|row)\s+(\d+).*?(ед[\.\s]изм[\.ерение]*|unit)\s+(\w+)', text)
-    if unit_match:
-        try:
-            line_num = int(unit_match.group(2))
-            unit = unit_match.group(4).strip()
-            return {
-                "action": "set_unit",
-                "line_index": line_num - 1,  # Конвертируем в 0-based индекс
-                "value": unit
-            }
-        except Exception:
-            pass
+#     # Распознавание команды редактирования строки (единица измерения)
+#     unit_match = re.search(r'(строк[аи]?|line|row)\s+(\d+).*?(ед[\.\s]изм[\.ерение]*|unit)\s+(\w+)', text)
+#     if unit_match:
+#         try:
+#             line_num = int(unit_match.group(2))
+#             unit = unit_match.group(4).strip()
+#             return {
+#                 "action": "set_unit",
+#                 "line_index": line_num - 1,  # Конвертируем в 0-based индекс
+#                 "value": unit
+#             }
+#         except Exception:
+#             pass
     
-    # Распознавание команды изменения даты
-    date_match = re.search(r'дат[аы]?\s+(\d{1,2})[\s./-](\d{1,2}|января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)', text)
-    if date_match:
-        # Для даты используем адаптер IntentAdapter для корректного форматирования
-        from app.assistants.intent_adapter import adapt_intent
-        return adapt_intent(f"set_date {user_input}")
+#     # Распознавание команды изменения даты
+#     date_match = re.search(r'дат[аы]?\s+(\d{1,2})[\s./-](\d{1,2}|января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)', text)
+#     if date_match:
+#         # Для даты используем адаптер IntentAdapter для корректного форматирования
+#         from app.assistants.intent_adapter import adapt_intent
+#         return adapt_intent(f"set_date {user_input}")
     
-    # Если ничего не распознано, возвращаем None
-    return None
+#     # Если ничего не распознано, возвращаем None
+#     return None
 
 
 def normalize_query_for_cache(query: str) -> str:
