@@ -193,25 +193,39 @@ cat deploy/single_server_setup.md
 
 ### Running tests
 
-Activate your virtual environment if needed:
+This project uses `pytest` for running automated tests.
+
+**1. Activate your virtual environment** (if you haven't already):
 
 ```sh
-source venv/bin/activate
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
-Run all tests:
+**2. Install testing dependencies:**
+
+The testing dependencies, including `pytest`, are listed in `requirements-dev.txt`. Install them using:
+```sh
+pip install -r requirements-dev.txt
+```
+
+**3. Run all tests:**
+
+From the root directory of the project, run the following command:
 
 ```sh
 PYTHONPATH=. pytest
 ```
 
-Or run a specific test (e.g. alias flow):
+**4. Run a specific test file** (optional):
 
+To run tests from a specific file, you can use:
 ```sh
 PYTHONPATH=. pytest tests/test_alias_flow.py
 ```
 
-This will run all unit tests and check that the alias self-learning mechanism works as expected.
+This will run all unit tests in the specified file and check that the alias self-learning mechanism works as expected.
+
+**Note:** As per the instructions for the current task, you should not actually run these test commands now. These instructions are for future reference.
 
 ## Структура
 
