@@ -3,24 +3,29 @@
 применения интентов и пересчёта отчёта для edit_flow и incremental_edit_flow.
 """
 
-import logging
 import asyncio
-from aiogram.types import Message
+import logging
+import time
+import traceback
+from datetime import datetime
+from typing import Dict
+
 from aiogram.fsm.context import FSMContext
+from aiogram.types import Message
+
+from app.converters import parsed_to_dict
+from app.data_loader import load_products
 from app.edit.apply_intent import apply_intent
 from app.formatters import report
-from app.matcher import match_positions
-from app.data_loader import load_products
-from app.converters import parsed_to_dict
 from app.i18n import t
+from app.matcher import match_positions
 from app.utils.processing_guard import is_processing_edit, set_processing_edit
-import traceback
-import time
 
 logger = logging.getLogger(__name__)
 
-# Словарь для хранения блокировок редактирования по user_id
-edit_locks = {}
+# Блокировки для предотвращения одновременного редактирования
+edit_locks: Dict[int, datetime] = {}
+
 
 async def process_user_edit(
     message: Message,
@@ -32,28 +37,35 @@ async def process_user_edit(
     send_error=None,
     run_openai_intent=None,
     fuzzy_suggester=None,
-    edit_state=None
+    edit_state=None,
 ):
     """
     Универсальная функция обработки пользовательского ввода для редактирования инвойса.
     """
-    user_id = getattr(message.from_user, 'id', None)
-    logger.critical("ОТЛАДКА-ЯДРО: process_user_edit вызван для user_id=%s, text='%s'" % (user_id, user_text))
+    user_id = getattr(message.from_user, "id", None)
+    logger.critical(
+        "ОТЛАДКА-ЯДРО: process_user_edit вызван для user_id=%s, text='%s'" % (user_id, user_text)
+    )
 
     # Проверяем, не выполняется ли уже редактирование для этого пользователя
     is_processing = await is_processing_edit(user_id)
-    logger.critical("ОТЛАДКА-ЯДРО: Проверка блокировки: is_processing_edit=%s, user_id=%s" % (is_processing, user_id))
-    
+    logger.critical(
+        "ОТЛАДКА-ЯДРО: Проверка блокировки: is_processing_edit=%s, user_id=%s"
+        % (is_processing, user_id)
+    )
+
     if is_processing:
-        logger.critical("ОТЛАДКА-ЯДРО: Обнаружена блокировка на редактирование для user_id=%s" % user_id)
+        logger.critical(
+            "ОТЛАДКА-ЯДРО: Обнаружена блокировка на редактирование для user_id=%s" % user_id
+        )
         if send_error:
             await send_error(t("error.edit_in_progress", lang=lang))
         return
-    
+
     # Устанавливаем блокировку на редактирование
     await set_processing_edit(user_id, True)
     logger.critical("ОТЛАДКА-ЯДРО: Блокировка установлена для user_id=%s" % user_id)
-    
+
     try:
         # Проверка на отмену
         if user_text.lower() in ["cancel", "отмена"]:
@@ -67,8 +79,10 @@ async def process_user_edit(
         # Получаем данные из состояния
         data = await state.get_data()
         invoice = data.get("invoice")
-        logger.critical("ОТЛАДКА-ЯДРО: Проверка наличия инвойса: %s, user_id=%s" % (bool(invoice), user_id))
-        
+        logger.critical(
+            "ОТЛАДКА-ЯДРО: Проверка наличия инвойса: %s, user_id=%s" % (bool(invoice), user_id)
+        )
+
         if not invoice:
             logger.critical("ОТЛАДКА-ЯДРО: Инвойс отсутствует для user_id=%s" % user_id)
             if send_error:
@@ -88,18 +102,22 @@ async def process_user_edit(
             # Сначала пробуем использовать локальный парсер для быстрой обработки команд
             try:
                 from app.parsers.local_parser import parse_command_async
+
                 local_start_time = time.time()
                 intent = await parse_command_async(user_text)
                 if intent:
                     elapsed = (time.time() - local_start_time) * 1000
-                    logger.critical("ОТЛАДКА-ЯДРО: Результат локального парсера (%0.1f мс): %s" % (elapsed, intent))
+                    logger.critical(
+                        "ОТЛАДКА-ЯДРО: Результат локального парсера (%0.1f мс): %s"
+                        % (elapsed, intent)
+                    )
             except ImportError:
                 logger.critical("ОТЛАДКА-ЯДРО: Локальный парсер не найден, используем OpenAI")
                 intent = None
             except Exception as e:
                 logger.critical("ОТЛАДКА-ЯДРО: Ошибка локального парсера: %s" % e)
                 intent = None
-            
+
             # Если локальный парсер не справился или вернул unknown, используем OpenAI
             if intent is None or intent.get("action") == "unknown":
                 if run_openai_intent:
@@ -108,6 +126,7 @@ async def process_user_edit(
                     logger.critical("ОТЛАДКА-ЯДРО: Результат OpenAI: %s" % intent)
                 else:
                     from app.assistants.client import run_thread_safe_async
+
                     logger.critical("ОТЛАДКА-ЯДРО: Используем OpenAI для текста: '%s'" % user_text)
                     intent = await asyncio.wait_for(run_thread_safe_async(user_text), timeout=20.0)
                     logger.critical("ОТЛАДКА-ЯДРО: Результат OpenAI: %s" % intent)
@@ -132,7 +151,7 @@ async def process_user_edit(
                 await send_error(t("error.parse_command", lang=lang))
             await set_processing_edit(user_id, False)  # Снимаем блокировку при ошибке
             return
-            
+
         if intent.get("action") == "unknown":
             error_message = intent.get("user_message", t("error.parse_command", lang=lang))
             logger.critical("ОТЛАДКА-ЯДРО: Неизвестный интент: %s" % intent)
@@ -146,7 +165,7 @@ async def process_user_edit(
         try:
             invoice = parsed_to_dict(invoice)
             new_invoice = apply_intent(invoice, intent)
-            
+
             # Проверяем, что new_invoice не None
             if new_invoice is None:
                 logger.critical("ОТЛАДКА-ЯДРО: apply_intent вернул None вместо инвойса")
@@ -154,8 +173,8 @@ async def process_user_edit(
                     await send_error("Ошибка при применении изменений: инвойс не получен")
                 await set_processing_edit(user_id, False)  # Снимаем блокировку при ошибке
                 return
-                
-            logger.critical("ОТЛАДКА-ЯДРО: Интент применен, действие: %s" % intent.get('action'))
+
+            logger.critical("ОТЛАДКА-ЯДРО: Интент применен, действие: %s" % intent.get("action"))
         except Exception as e:
             logger.critical("ОТЛАДКА-ЯДРО: Ошибка при применении интента: %s" % e)
             logger.critical(traceback.format_exc())
@@ -167,7 +186,7 @@ async def process_user_edit(
         # Пересчёт совпадений
         logger.critical("ОТЛАДКА-ЯДРО: Пересчитываем совпадения")
         products = load_products()
-        
+
         # Дополнительная проверка на наличие позиций
         if not new_invoice.get("positions"):
             logger.critical("ОТЛАДКА-ЯДРО: В инвойсе нет позиций после применения интента")
@@ -175,29 +194,34 @@ async def process_user_edit(
                 await send_error("Ошибка: после применения изменений в инвойсе отсутствуют позиции")
             await set_processing_edit(user_id, False)  # Снимаем блокировку при ошибке
             return
-            
+
         match_results = match_positions(new_invoice["positions"], products)
-        
+
         # Явно считаем ошибки для более надежного определения статуса
         unknown_count = sum(1 for r in match_results if r.get("status") == "unknown")
         partial_count = sum(1 for r in match_results if r.get("status") == "partial")
-        
+
         # Логируем для отладки
-        logger.critical("ОТЛАДКА-ЯДРО: Результаты: unknown=%s, partial=%s" % (unknown_count, partial_count))
-        
+        logger.critical(
+            "ОТЛАДКА-ЯДРО: Результаты: unknown=%s, partial=%s" % (unknown_count, partial_count)
+        )
+
         # Обновляем состояние с явными счетчиками ошибок
         await state.update_data(
             invoice=new_invoice,
             unknown_count=unknown_count,
             partial_count=partial_count,
-            last_edit_time=asyncio.get_event_loop().time()  # Сохраняем время последнего редактирования
+            last_edit_time=asyncio.get_event_loop().time(),  # Сохраняем время последнего редактирования
         )
         logger.critical("ОТЛАДКА-ЯДРО: Состояние обновлено с новым инвойсом")
-        
+
         # Формируем отчет
         try:
             text, has_errors = report.build_report(new_invoice, match_results)
-            logger.critical("ОТЛАДКА-ЯДРО: Отчет сформирован, has_errors=%s, размер=%s" % (has_errors, len(text)))
+            logger.critical(
+                "ОТЛАДКА-ЯДРО: Отчет сформирован, has_errors=%s, размер=%s"
+                % (has_errors, len(text))
+            )
         except Exception as e:
             logger.critical("ОТЛАДКА-ЯДРО: Ошибка при построении отчета: %s" % e)
             logger.critical(traceback.format_exc())
@@ -205,7 +229,7 @@ async def process_user_edit(
                 await send_error("Ошибка при формировании отчета: %s" % e)
             await set_processing_edit(user_id, False)  # Снимаем блокировку при ошибке
             return
-        
+
         # Fuzzy-сопоставление
         suggestion_shown = False
         for idx, item in enumerate(match_results):
@@ -225,7 +249,7 @@ async def process_user_edit(
         # Снимаем блокировку после успешного завершения
         await set_processing_edit(user_id, False)
         logger.critical("ОТЛАДКА-ЯДРО: Блокировка снята для user_id=%s" % user_id)
-        
+
         return True
 
     except Exception as e:

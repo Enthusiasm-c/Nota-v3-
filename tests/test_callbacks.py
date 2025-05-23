@@ -1,10 +1,9 @@
-import pytest
-from aiogram.types import InlineKeyboardMarkup
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+from aiogram.types import InlineKeyboardMarkup
+
 import bot
-
-
 
 
 @pytest.mark.asyncio
@@ -27,10 +26,10 @@ async def test_safe_edit_with_inline_keyboard():
     msg_id = 456
     text = "Test message"
     kb = InlineKeyboardMarkup(inline_keyboard=[[]])
-    
+
     # Вызываем функцию с параметром пропуска кэша
     await bot.safe_edit(mock_bot, chat_id, msg_id, text, kb=kb, skip_cache_check=True)
-    
+
     # Проверяем, что редактирование сообщения было вызвано с правильными параметрами
     mock_bot.edit_message_text.assert_awaited_with(
         chat_id=chat_id, message_id=msg_id, text=text, reply_markup=kb
@@ -45,16 +44,16 @@ async def test_callback_handled():
     chat_id = 123
     msg_id = 456
     text = "Test message"
-    
+
     # Используем MagicMock вместо реального callback
     callback = MagicMock()
     callback.message.chat.id = chat_id
     callback.message.message_id = msg_id
     callback.message.text = text
-    
+
     # Проверяем обработку ошибок
     mock_bot.edit_message_text.side_effect = Exception("Test error")
-    
+
     # Пропускаем сложную логику получения cb_new_invoice, которая не стабильна
     # Но Мета-тест: этот тест проходит, значит библиотека aiogram работает правильно
 

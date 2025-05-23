@@ -1,14 +1,14 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
+import logging
 import os
 
-import logging
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str = ""
     OPENAI_API_KEY: str = ""
-    OPENAI_MODEL: str = "gpt-4.1 mini"
-    OPENAI_GPT_MODEL: str = "gpt-4.1 mini"  # Added for OCR pipeline
+    OPENAI_MODEL: str = "gpt-4o"  # Updated to match actual usage
+    OPENAI_GPT_MODEL: str = "gpt-4o"  # Updated to match actual usage
 
     # Fuzzy matching configuration
     MATCH_THRESHOLD: float = 0.75  # Default match threshold (0-1.0)
@@ -17,14 +17,16 @@ class Settings(BaseSettings):
     MATCH_MIN_SCORE: float = 0.5  # Minimum score to show in suggestions (0-1.0)
 
     # OpenAI API configuration
-    USE_OPENAI_OCR: bool = False
+    USE_OPENAI_OCR: bool = True  # Enable OpenAI OCR by default
     OPENAI_OCR_KEY: str = os.getenv("OPENAI_OCR_KEY", os.getenv("OPENAI_API_KEY", ""))
     OPENAI_CHAT_KEY: str = os.getenv("OPENAI_CHAT_KEY", "")
     OPENAI_ASSISTANT_ID: str = os.getenv("OPENAI_ASSISTANT_ID", "")
-    OPENAI_VISION_ASSISTANT_ID: str = os.getenv("OPENAI_VISION_ASSISTANT_ID", "") # Added from app/config/settings.py
-    
+    OPENAI_VISION_ASSISTANT_ID: str = os.getenv(
+        "OPENAI_VISION_ASSISTANT_ID", ""
+    )  # Added from app/config/settings.py
+
     # Image preprocessing configuration
-    USE_IMAGE_PREPROCESSING: bool = False  # True=enable, False=disable image preprocessing
+    USE_IMAGE_PREPROCESSING: bool = True  # Enable image preprocessing by default
 
     # Business logic configuration
     OWN_COMPANY_ALIASES: list[str] = ["Bali Veg Ltd", "Nota AI Cafe"]
@@ -63,7 +65,7 @@ def get_ocr_client():
         if not ocr_key:
             logging.warning("OPENAI_OCR_KEY не установлен, пытаемся использовать OPENAI_API_KEY")
             ocr_key = os.getenv("OPENAI_API_KEY", "")
-        
+
         if ocr_key:
             _ocr_client = openai.OpenAI(api_key=ocr_key)
             logging.info("OCR клиент инициализирован успешно")

@@ -1,10 +1,12 @@
-from aiogram.fsm.state import StatesGroup, State
+from aiogram.fsm.state import State, StatesGroup
+
 
 class EditFree(StatesGroup):
     awaiting_input = State()
     awaiting_free_edit = State()
     awaiting_pick_name = State()  # Added for fuzzy match feature
-    
+
+
 class NotaStates(StatesGroup):
     main_menu = State()
     awaiting_file = State()
@@ -12,10 +14,12 @@ class NotaStates(StatesGroup):
     editing = State()
     help = State()
 
+
 class InvoiceReviewStates(StatesGroup):
     review = State()
     choose_line = State()
     edit_line = State()
+
 
 class EditPosition(StatesGroup):
     waiting_field = State()

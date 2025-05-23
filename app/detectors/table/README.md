@@ -58,25 +58,25 @@ from app.ocr import call_openai_ocr
 async def process_invoice_with_table_detection(image_bytes):
     # Инициализируем детектор
     detector = get_detector()
-    
+
     # Извлекаем ячейки таблицы
     cells = detector.extract_cells(image_bytes)
-    
+
     # Обрабатываем каждую ячейку через OCR
     results = []
     for cell in cells:
         # Извлекаем изображение ячейки (в будущей реализации)
         # cell_image = cell.get('image')
-        
+
         # Обрабатываем через OCR (пока используем bbox)
         # cell_result = await call_openai_ocr(cell_image)
-        
+
         # Сохраняем результат с координатами
         # results.append({
         #    'bbox': cell.get('bbox'),
         #    'text': cell_result
         # })
-        
+
     return results
 ```
 
@@ -86,4 +86,4 @@ async def process_invoice_with_table_detection(image_bytes):
 
 1. Создайте новый класс-наследник от `TableDetector`
 2. Реализуйте методы `detect()` и `extract_cells()`
-3. Добавьте новый метод в фабрику `get_detector()` 
+3. Добавьте новый метод в фабрику `get_detector()`

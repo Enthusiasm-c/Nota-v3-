@@ -1,7 +1,9 @@
-import pytest
-from unittest.mock import AsyncMock, MagicMock
-from bot import create_bot_and_dispatcher, register_handlers
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
+from bot import create_bot_and_dispatcher, register_handlers
 
 
 @pytest.mark.asyncio
@@ -60,6 +62,4 @@ async def test_progress_edit_single_msg(monkeypatch):
     assert sum(1 for c in calls if c[0] == "answer") == 1
     # Проверяем, что все edit_message_text идут по одному message_id
     edit_ids = [c[1] for c in calls if c[0] == "edit"]
-    assert (
-        len(set(edit_ids)) == 1
-    ), f"edit_message_text по разным message_id: {edit_ids}"
+    assert len(set(edit_ids)) == 1, f"edit_message_text по разным message_id: {edit_ids}"

@@ -1,8 +1,10 @@
-import pytest
-from unittest.mock import AsyncMock, MagicMock
-from bot import create_bot_and_dispatcher, register_handlers
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 from aiogram.fsm.context import FSMContext
+
+from bot import create_bot_and_dispatcher, register_handlers
 
 
 @pytest.mark.asyncio
@@ -12,11 +14,13 @@ async def test_edit_keyboard_inline(monkeypatch):
     и содержит только Edit для проблемных строк и Cancel.
     """
     pytest.skip("Пропускаем тест из-за изменений в архитектуре UI и обработчиков фото")
-    
+
     # Оригинальный код теста, который не выполняется из-за skip
     # Мокаем токен бота перед созданием
-    monkeypatch.setattr("app.config.settings.TELEGRAM_BOT_TOKEN", "1234567890:ABCDEFGHIJKLMNOPQRSTUVWXYZ")
-    
+    monkeypatch.setattr(
+        "app.config.settings.TELEGRAM_BOT_TOKEN", "1234567890:ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    )
+
     bot, dp = create_bot_and_dispatcher()
     register_handlers(dp, bot)
     # --- Мокаем методы ---
@@ -86,24 +90,25 @@ async def test_edit_keyboard_inline(monkeypatch):
                 if handler.callback.__module__ == "app.handlers.incremental_photo_handler":
                     photo_handler = handler.callback
                     break
-    
+
     # Если не нашли в подроутерах, ищем в основном диспетчере
     if photo_handler is None:
         for handler in dp.message.handlers:
-            if hasattr(handler.callback, "__module__") and "photo_handler" in handler.callback.__module__:
+            if (
+                hasattr(handler.callback, "__module__")
+                and "photo_handler" in handler.callback.__module__
+            ):
                 photo_handler = handler.callback
                 break
-    
+
     assert photo_handler is not None
-    
+
     # Создаем мок для FSMContext
     mock_state = AsyncMock(spec=FSMContext)
     mock_state.get_data.return_value = {}
-    
+
     # Вызываем обработчик с состоянием
     await photo_handler(fake_msg, state=mock_state)
     # Проверяем, что edit_message_text был только у одного message_id
     edit_ids = [c[1] for c in calls if c[0] == "edit"]
-    assert (
-        len(set(edit_ids)) == 1
-    ), f"edit_message_text по разным message_id: {edit_ids}"
+    assert len(set(edit_ids)) == 1, f"edit_message_text по разным message_id: {edit_ids}"

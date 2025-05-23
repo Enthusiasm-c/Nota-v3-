@@ -1,7 +1,9 @@
-import pytest
-from app.formatters.report import build_report
 from types import SimpleNamespace
+
+import pytest
 from aiogram.exceptions import TelegramBadRequest
+
+from app.formatters.report import build_report
 
 
 @pytest.mark.asyncio
@@ -56,33 +58,35 @@ async def test_formatter_with_telegram_exception():
     Проверяет обработку исключения TelegramBadRequest при отправке сообщений
     с HTML-форматированием, содержащих специальные символы.
     """
-    
+
     # Бот, который выбрасывает исключение при первой попытке отправки
     class FailingBot:
         def __init__(self):
             self.attempts = 0
             self.sent = []
-        
+
         async def send_message(self, chat_id, text, parse_mode=None):
             self.attempts += 1
             if self.attempts == 1 and parse_mode == "HTML":
                 # Симулируем ошибку парсинга HTML
-                raise TelegramBadRequest(method="sendMessage", message="Bad Request: can't parse entities")
-            
+                raise TelegramBadRequest(
+                    method="sendMessage", message="Bad Request: can't parse entities"
+                )
+
             # Если сюда дошли, значит это вторая попытка или без форматирования
             self.sent.append((chat_id, text, parse_mode))
             return SimpleNamespace(message_id=123)
-    
+
     bot = FailingBot()
-    
+
     # Данные с опасными символами
-    parsed = SimpleNamespace(supplier='Опасные символы: <>[](){}\\/|', date="2024-05-03")
+    parsed = SimpleNamespace(supplier="Опасные символы: <>[](){}\\/|", date="2024-05-03")
     match_results = [
         {"name": "Продукт с <тегами>", "qty": 1, "unit": "шт", "price": 100, "status": "ok"},
     ]
-    
+
     text, _ = build_report(parsed, match_results)
-    
+
     # Симулируем обработку ошибки как в safe_edit
     try:
         await bot.send_message(42, text, parse_mode="HTML")
@@ -90,12 +94,11 @@ async def test_formatter_with_telegram_exception():
         # Должны попасть сюда на первой попытке
         # Вторая попытка - без форматирования
         await bot.send_message(42, text, parse_mode=None)
-    
+
     # Проверяем, что было две попытки
     assert bot.attempts == 2, "Should have made two attempts"
-    
+
     # Проверяем, что вторая попытка была без форматирования
     assert len(bot.sent) == 1, "Second attempt should have succeeded"
     _, _, second_parse_mode = bot.sent[0]
     assert second_parse_mode is None, "Second attempt should be without parse_mode"
-

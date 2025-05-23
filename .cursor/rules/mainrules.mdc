@@ -1,0 +1,130 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+---
+
+description: Fixed project architecture and coding practices for the Telegram tasting-platform bot.
+globs:
+
+* "\*\*/\*.py"
+  alwaysApply: true
+
+---
+
+# 1. Code Structure
+
+The project follows a strict structure to maintain clarity and organization. **Do not** deviate from these directories or naming conventions without explicit approval.
+
+## 1.1 Project Root Directory
+
+* **`app/`** – core application logic
+
+  * **`assistants/`** – AI-assistant integration (OpenAI, thread management)
+  * **`core/`** – general core utilities (e.g. OCR helpers)
+  * **`config/`** – configuration files and settings
+  * **`detectors/`** – image element detection (e.g. table detection)
+  * **`edit/`** – invoice-editing logic
+  * **`formatters/`** – data presentation & export modules (e.g. `report.py`)
+  * **`fsm/`** – finite-state-machine definitions for conversation flows
+  * **`handlers/`** – Aiogram message & callback handlers
+  * **`i18n/`** – YAML localization files
+  * **`imgprep/`** – image-preparation utilities for OCR
+  * **`keyboards/`** – UI keyboard generators (currently `app/keyboards.py`)
+  * **`models/`** – Pydantic data models
+  * **`ocr_helpers/`** – OCR pipeline helpers
+  * **`parsers/`** – input/data parsers
+  * **`scripts/`** – utility scripts not part of main bot logic
+  * **`services/`** – external-service clients (e.g. Syrve)
+  * **`utils/`** – shared helper functions
+  * **`validators/`** – data-validation logic
+  * **`main.py` / `bot.py`** – application entry point
+* **`tests/`** – automated tests
+
+  * **`unit/`**, **`integration/`**, **`e2e/`** – test tiers
+* **`scripts/`** (root) – operational/dev scripts (deployment, maintenance)
+* **`docs/`** – project documentation
+* **`prompts/`** – prompt templates for AI models
+* **`requirements.txt`**, **`Dockerfile`**, **`docker-compose.yml`**, **`.gitignore`**, **`CONTRIBUTING_GUIDELINES.md`** – standard root artefacts
+
+## 1.2 Module & File Organization
+
+* Keep related logic together – group cohesive functions/classes in one module.
+* **Naming conventions**
+
+  * *Files:* `lower_snake_case.py`
+  * *Classes:* `CamelCase`
+  * *Functions/vars:* `lower_snake_case`
+* Organize `handlers/` by feature/flow if they grow large (`invoice_handlers.py`, etc.).
+* Create dedicated utility modules instead of bloated `utils.py`.
+
+## 1.3 General Principles
+
+* **Modularity** – components must be reusable.
+* **Single Responsibility** – one purpose per class/function.
+* **Readability** – self-documenting code, concise comments.
+* **Consistency** – follow existing patterns and style.
+
+# 2. Technological Stack (Fixed)
+
+* **Python ≥ 3.9**
+* **Frameworks/Libraries**
+
+  * Aiogram (async Telegram API)
+  * Pydantic
+  * OpenAI Python SDK
+  * PaddleOCR
+  * NumPy
+  * Pillow (PIL)
+* **Data & Cache**
+
+  * Redis for caching OCR results and threads
+* **DevOps**
+
+  * Docker / Docker Compose
+  * Git / GitHub
+* **Dependencies**
+
+  * Maintain exact versions in `requirements.txt`.
+
+# 3. New Modules & Logic Duplication Rules
+
+## 3.1 Creating New Modules
+
+* **Explicit approval required** from maintainer *(@denisdomashenko)*.
+* Provide a brief justification covering:
+
+  * Problem solved / new functionality
+  * Why existing modules do not fit
+  * How it integrates into architecture
+* Clearly define scope and responsibility.
+
+## 3.2 Avoiding Logic Duplication
+
+* **Strictly prohibited** to duplicate existing code without prior consent.
+* **Search first** – inspect current codebase before implementing.
+* **Refactor for reuse** – generalize original code instead of copy-paste.
+* Centralize shared utilities in `app/utils/`.
+
+## 3.3 Refactoring Existing Logic
+
+* Minor, isolated refactors are welcome.
+* Significant refactors (multi-module impact or API changes) require maintainer approval.
+
+# 4. Cursor IDE Guidelines
+
+* **Responsible AI usage** – critically review all AI-generated code.
+* **Navigation** – use symbol search, go-to-definition to locate reusable logic.
+* **Git workflow** – clear commit messages, frequent pulls from `main`.
+* **Lint & format** – enforce Flake8/Pylint and Black/Ruff before commits.
+* **Workspace settings** – document any project-specific Cursor config.
+* **Respect structure** – new files/folders only after approval (see §3.1).
+
+# 5. Enforcement Rules for AI Assistant
+
+1. **Do not** create or rename top-level directories/files except those listed in §1.1.
+2. **Do not** add third-party packages beyond the fixed stack in §2 unless explicitly requested.
+3. **Do not** alter existing public class/method names without approval.
+4. **Before** generating code, verify that all imports reference real modules.
+5. If a task conflicts with these rules, **pause** and ask for clarification instead of proceeding.

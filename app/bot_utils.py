@@ -1,7 +1,8 @@
 import logging
-from aiogram.exceptions import TelegramBadRequest
-from typing import Any, Dict
 import re
+from typing import Any, Dict
+
+from aiogram.exceptions import TelegramBadRequest
 
 # In-memory cache for message edits (can be replaced with Redis)
 _edit_cache: Dict[str, Dict[str, Any]] = {}
@@ -46,17 +47,25 @@ async def edit_message_text_safe(bot, chat_id, msg_id, text, kb):
             logger.info(f"Message {msg_id} not found, skipping edit")
             return  # Просто выходим, не пытаясь продолжать редактирование
         elif "can't parse entities" in error_msg:
-            logger.warning("HTML parse error in edit_message_text_safe: %s - in chat_id=%s, msg_id=%s", 
-                          error_msg, chat_id, msg_id)
-            
+            logger.warning(
+                "HTML parse error in edit_message_text_safe: %s - in chat_id=%s, msg_id=%s",
+                error_msg,
+                chat_id,
+                msg_id,
+            )
+
             # Найдем проблемную часть HTML
-            entity_pos_match = re.search(r"can't parse entities: (.*) at byte offset (\d+)", error_msg)
+            entity_pos_match = re.search(
+                r"can't parse entities: (.*) at byte offset (\d+)", error_msg
+            )
             if entity_pos_match:
                 error_type = entity_pos_match.group(1)
                 offset = int(entity_pos_match.group(2))
-                preview = text[max(0, offset-30):min(len(text), offset+30)]
-                logger.error(f"Entity parse error: {error_type} at offset {offset}, preview: {preview}")
-            
+                preview = text[max(0, offset - 30) : min(len(text), offset + 30)]
+                logger.error(
+                    f"Entity parse error: {error_type} at offset {offset}, preview: {preview}"
+                )
+
             try:
                 # Вторая попытка: без форматирования
                 await bot.edit_message_text(
@@ -71,10 +80,10 @@ async def edit_message_text_safe(bot, chat_id, msg_id, text, kb):
                 return
             except TelegramBadRequest as e2:
                 logger.warning("Second attempt failed: %s", e2.message)
-                
+
                 try:
                     # Третья попытка: очищаем текст от HTML-тегов
-                    clean_text = re.sub(r'<[^>]+>', '', text)
+                    clean_text = re.sub(r"<[^>]+>", "", text)
                     await bot.edit_message_text(
                         chat_id=chat_id,
                         message_id=msg_id,
@@ -93,6 +102,7 @@ async def edit_message_text_safe(bot, chat_id, msg_id, text, kb):
     except Exception as e:
         logger.error("Unexpected exception in edit_message_text_safe: %s", e, exc_info=True)
         raise
+
 
 # Для тестов и замены на Redis
 async def clear_edit_cache():

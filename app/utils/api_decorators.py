@@ -65,7 +65,7 @@ import functools
 import logging
 import time
 import uuid
-from typing import Callable, TypeVar, Optional, Any, Dict, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple, TypeVar
 
 
 class FriendlyException(Exception):
@@ -111,41 +111,28 @@ def classify_error(error: Exception) -> Tuple[str, str]:
         )
 
     # Rate limiting
-    if any(
-        x in error_str for x in [
-            "rate limit", "ratelimit", "too many requests", "429"
-        ]
-    ): 
+    if any(x in error_str for x in ["rate limit", "ratelimit", "too many requests", "429"]):
         return (
             ErrorType.RATE_LIMIT,
             "Сервис временно перегружен. Пожалуйста, попробуйте через минуту.",
         )
 
     # Authentication errors
-    if any(
-        x in error_str
-        for x in ["authentication", "auth", "unauthorized", "api key", "401"]
-    ):
+    if any(x in error_str for x in ["authentication", "auth", "unauthorized", "api key", "401"]):
         return (
             ErrorType.AUTHENTICATION,
             "Ошибка авторизации API. Пожалуйста, обратитесь к разработчикам.",
         )
 
     # Validation errors
-    if any(
-        x in error_str for x in [
-            "validation", "invalid", "schema", "format", "400"
-        ]
-    ): 
+    if any(x in error_str for x in ["validation", "invalid", "schema", "format", "400"]):
         return (
             ErrorType.VALIDATION,
             "Неверный формат данных. Проверьте загруженный файл.",
         )
 
     # Server errors
-    if any(
-        x in error_str for x in ["server error", "500", "502", "503", "504"]
-    ):
+    if any(x in error_str for x in ["server error", "500", "502", "503", "504"]):
         return (
             ErrorType.SERVER,
             "Ошибка на стороне сервера. Пожалуйста, попробуйте позже.",
@@ -159,9 +146,7 @@ def classify_error(error: Exception) -> Tuple[str, str]:
         )
 
     # Network errors
-    if any(
-        x in error_str for x in ["network", "connection", "connect", "unreachable"]
-    ):
+    if any(x in error_str for x in ["network", "connection", "connect", "unreachable"]):
         return (
             ErrorType.NETWORK,
             "Проблемы с сетевым подключением. Проверьте соединение.",
@@ -204,35 +189,38 @@ def with_retry_backoff(
             while retries <= max_retries:
                 try:
                     if retries > 0:
-                        logger.info(
-                            f"[{req_id}] Retry {retries}/{max_retries} for {func.__name__}"
-                        )
+                        logger.info(f"[{req_id}] Retry {retries}/{max_retries} for {func.__name__}")
 
                     return func(*args, **kwargs)
 
                 except Exception as e:
                     error_class, friendly_msg = classify_error(e)
-                    
+
                     # Улучшенное логирование для отладки - показываем всю цепочку ошибок
                     logger.error(f"[{req_id}] Exception: {e.__class__.__name__}: {str(e)}")
-                    if hasattr(e, '__cause__') and e.__cause__:
+                    if hasattr(e, "__cause__") and e.__cause__:
                         cause = e.__cause__
-                        logger.error(f"[{req_id}] Caused by: {cause.__class__.__name__}: {str(cause)}")
-                        if hasattr(cause, '__cause__') and cause.__cause__:
+                        logger.error(
+                            f"[{req_id}] Caused by: {cause.__class__.__name__}: {str(cause)}"
+                        )
+                        if hasattr(cause, "__cause__") and cause.__cause__:
                             root = cause.__cause__
-                            logger.error(f"[{req_id}] Root cause: {root.__class__.__name__}: {str(root)}")
-                    
+                            logger.error(
+                                f"[{req_id}] Root cause: {root.__class__.__name__}: {str(root)}"
+                            )
+
                     # Детальный стектрейс
                     import traceback
+
                     logger.error(f"[{req_id}] Full stacktrace:\n{traceback.format_exc()}")
-                    
+
                     # Проверяем, нужно ли повторить попытку для этого типа ошибок
                     # Ошибки валидации никогда не повторяем
                     if error_class == ErrorType.VALIDATION or isinstance(e, ValueError):
                         logger.info(f"[{req_id}] Not retrying validation error: {str(e)}")
                         last_error = e
                         break
-                    
+
                     if error_types and error_class not in error_types:
                         if retries > 0:
                             logger.info(
@@ -241,7 +229,7 @@ def with_retry_backoff(
                         raise
 
                     # Рассчитываем backoff
-                    current_backoff = initial_backoff * (backoff_factor ** retries)
+                    current_backoff = initial_backoff * (backoff_factor**retries)
 
                     # Проверяем, нужно ли повторять попытку
                     if retries < max_retries:
@@ -262,9 +250,7 @@ def with_retry_backoff(
 
             if last_error:
                 error_class, friendly_msg = classify_error(last_error)
-                raise RuntimeError(
-                    f"API error ({error_class}): {friendly_msg}"
-                ) from last_error
+                raise RuntimeError(f"API error ({error_class}): {friendly_msg}") from last_error
 
         return wrapper
 
@@ -303,9 +289,7 @@ def with_async_retry_backoff(
             while retries <= max_retries:
                 try:
                     if retries > 0:
-                        logger.info(
-                            f"[{req_id}] Retry {retries}/{max_retries} for {func.__name__}"
-                        )
+                        logger.info(f"[{req_id}] Retry {retries}/{max_retries} for {func.__name__}")
 
                     return await func(*args, **kwargs)
 
@@ -348,9 +332,7 @@ def with_async_retry_backoff(
             # Никогда не должны сюда попасть, но на всякий случай
             if last_error:
                 raise last_error
-            raise RuntimeError(
-                f"[{req_id}] Unexpected error in retry logic for {func.__name__}"
-            )
+            raise RuntimeError(f"[{req_id}] Unexpected error in retry logic for {func.__name__}")
 
         return wrapper
 
@@ -394,9 +376,7 @@ def with_progress_stages(stages: Dict[str, str]) -> Callable:
                 result = await func(*args, **kwargs)
                 total_time = time.time() - t0
 
-                logger.info(
-                    f"[{req_id}] '{func.__name__}' completed in {total_time:.2f}s"
-                )
+                logger.info(f"[{req_id}] '{func.__name__}' completed in {total_time:.2f}s")
                 return result
 
             except Exception as e:
@@ -417,24 +397,16 @@ def with_progress_stages(stages: Dict[str, str]) -> Callable:
                     )
 
                     # Добавляем информацию о стадии в ошибку
-                    friendly_msg = (
-                        f"Ошибка на этапе '{stage_name}': {friendly_msg}"
-                    )
+                    friendly_msg = f"Ошибка на этапе '{stage_name}': {friendly_msg}"
                 else:
-                    logger.error(
-                        f"[{req_id}] {error_class} error in {func.__name__}: {str(e)}"
-                    )
+                    logger.error(f"[{req_id}] {error_class} error in {func.__name__}: {str(e)}")
 
                 # Обновляем UI с информацией об ошибке, если есть функция
                 if update_progress:
                     try:
-                        await update_progress(
-                            error_message=friendly_msg, stage=error_stage
-                        )
+                        await update_progress(error_message=friendly_msg, stage=error_stage)
                     except Exception as ui_err:
-                        logger.warning(
-                            f"[{req_id}] Failed to update UI with error: {ui_err}"
-                        )
+                        logger.warning(f"[{req_id}] Failed to update UI with error: {ui_err}")
 
                 # Пробрасываем ошибку дальше
                 if isinstance(e, FriendlyException):
@@ -455,7 +427,7 @@ def update_stage(stage: str, context: dict, update_func=None) -> dict:
         stage: Ключ стадии для обновления
         context: Словарь контекста с _stages и _stages_names
         update_func: Необязательная функция для обновления UI
-        
+
     Returns:
         dict: Обновленный словарь контекста для поддержки цепочки вызовов
     """
@@ -472,15 +444,13 @@ def update_stage(stage: str, context: dict, update_func=None) -> dict:
             try:
                 if asyncio.iscoroutinefunction(update_func):
                     # Нельзя напрямую вызвать await, создаем задачу
-                    asyncio.create_task(
-                        update_func(stage=stage, stage_name=stage_name)
-                    )
+                    asyncio.create_task(update_func(stage=stage, stage_name=stage_name))
                 else:
                     update_func(stage=stage, stage_name=stage_name)
             except Exception:
                 # Игнорируем ошибки UI, чтобы не прервать основную логику
                 pass
-    
+
     # Возвращаем контекст для поддержки цепочки вызовов
     return context
 
@@ -494,7 +464,7 @@ async def update_stage_async(stage: str, context: dict, update_func=None) -> dic
         stage: Ключ стадии для обновления
         context: Словарь контекста с _stages и _stages_names
         update_func: Необязательная функция для обновления UI
-        
+
     Returns:
         dict: Обновленный словарь контекста для поддержки цепочки вызовов
     """
@@ -517,6 +487,6 @@ async def update_stage_async(stage: str, context: dict, update_func=None) -> dic
             except Exception:
                 # Игнорируем ошибки UI, чтобы не прервать основную логику
                 pass
-    
+
     # Возвращаем контекст для поддержки цепочки вызовов
     return context

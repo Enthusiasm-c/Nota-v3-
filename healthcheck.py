@@ -1,8 +1,11 @@
-import redis
 import sys
-import psycopg2
+
 import openai
+import psycopg2
+import redis
+
 from app.config import settings
+
 
 def check_redis_health():
     try:
@@ -14,12 +17,15 @@ def check_redis_health():
         print(f"[FAIL] Redis не отвечает: {e}")
         return False
 
+
 def check_postgres_health():
     try:
         # Пример: PG_DSN должен быть в env или settings
-        dsn = getattr(settings, "POSTGRES_DSN", None) or \
-              getattr(settings, "DATABASE_URL", None) or \
-              "dbname=nota user=nota password=nota host=localhost port=5432"
+        dsn = (
+            getattr(settings, "POSTGRES_DSN", None)
+            or getattr(settings, "DATABASE_URL", None)
+            or "dbname=nota user=nota password=nota host=localhost port=5432"
+        )
         conn = psycopg2.connect(dsn, connect_timeout=3)
         conn.close()
         print("[OK] PostgreSQL доступен")
@@ -27,6 +33,7 @@ def check_postgres_health():
     except Exception as e:
         print(f"[FAIL] PostgreSQL не отвечает: {e}")
         return False
+
 
 def check_openai_health():
     try:
@@ -39,6 +46,7 @@ def check_openai_health():
         print(f"[FAIL] OpenAI API не отвечает: {e}")
         return False
 
+
 def main():
     failed = False
     if not check_redis_health():
@@ -50,6 +58,7 @@ def main():
     if failed:
         sys.exit(1)
     print("[OK] Все сервисы работают")
+
 
 if __name__ == "__main__":
     main()

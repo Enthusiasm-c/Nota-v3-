@@ -103,6 +103,7 @@ def test_fuzzy_rescue_in_match_positions():
 
 def test_fuzzy_find_basic():
     from app.matcher import fuzzy_find
+
     products = [
         {"id": "1", "name": "apple"},
         {"id": "2", "name": "banana"},
@@ -121,6 +122,7 @@ def test_fuzzy_find_basic():
 
 def test_normalize_product_name():
     from app.matcher import normalize_product_name
+
     # Множественное число
     assert normalize_product_name("apples") == "apple"
     # Синоним
@@ -135,6 +137,7 @@ def test_normalize_product_name():
 
 def test_calculate_string_similarity():
     from app.matcher import calculate_string_similarity
+
     # Идентичные строки
     assert calculate_string_similarity("apple", "apple") == 1.0
     # Похожие строки

@@ -88,7 +88,7 @@ fi
 echo -e "\n➤ Проверка Docker-конфигурации..."
 if [ -f "Dockerfile" ] && [ -f "docker-compose.yml" ]; then
     echo "✅ Файлы для Docker найдены"
-    
+
     # Опциональная проверка Docker-файлов
     if command -v docker > /dev/null && command -v docker-compose > /dev/null; then
         echo "Проверка Dockerfile..."

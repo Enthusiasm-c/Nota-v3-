@@ -1,8 +1,12 @@
-from app.config import Settings
+import os
+import pytest
+from unittest.mock import Mock, patch, MagicMock
+from app.config import Settings, settings, get_ocr_client, get_chat_client
 
 
-class TestSettings(Settings):
+class MockTestSettings(Settings):
     """Test settings that override default settings for tests."""
+
     # Override OpenAI settings for tests
     OPENAI_API_KEY: str = "test-api-key"
     OPENAI_MODEL: str = "gpt-4o"

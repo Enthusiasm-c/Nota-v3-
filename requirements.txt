@@ -102,7 +102,7 @@ python-levenshtein==0.27.1
     # via -r requirements.in
 pyyaml==6.0.2
     # via vcrpy
-rapidfuzz>=3.0.0
+rapidfuzz==2.13.7
     # via
     #   -r requirements.in
     #   levenshtein
@@ -138,7 +138,7 @@ yarl==1.20.0
     # via
     #   aiohttp
     #   vcrpy
-    
+
 # Added for image processing
 numpy>=1.24.0
 opencv-python>=4.8.0

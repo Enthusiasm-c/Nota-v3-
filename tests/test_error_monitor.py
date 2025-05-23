@@ -1,12 +1,13 @@
-from app.actions import error_monitor
 from datetime import datetime
+
+from app.actions import error_monitor
 
 
 def test_parse_traceback_basic():
     lines = [
         "2024-05-13 12:00:00,123 ERROR: AttributeError: 'Foo' object has no attribute 'bar'",
         '  File "app/foo.py", line 42, in <module>',
-        '    foo.bar()',
+        "    foo.bar()",
     ]
     analyzer = error_monitor.ErrorAnalyzer()
     ctx = analyzer.parse_traceback(lines)
@@ -77,7 +78,7 @@ def test_monitor_log_with_traceback(tmp_path):
     log_content = (
         "2024-05-13 12:00:00,123 ERROR: Something happened\n"
         "Traceback (most recent call last)\n"
-        "  File \"app/foo.py\", line 42, in <module>\n"
+        '  File "app/foo.py", line 42, in <module>\n'
         "    foo.bar()\n"
         "AttributeError: 'Foo' object has no attribute 'bar'\n"
     )
@@ -85,4 +86,4 @@ def test_monitor_log_with_traceback(tmp_path):
     analyzer = error_monitor.ErrorAnalyzer(str(log_path))
     result = analyzer.monitor_log()
     assert result is not None
-    assert "атрибут" in result 
+    assert "атрибут" in result

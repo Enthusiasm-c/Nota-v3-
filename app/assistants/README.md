@@ -18,11 +18,11 @@
 def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
     """
     Безопасный запуск OpenAI Thread с обработкой ошибок и таймаутом.
-    
+
     Args:
         user_input: Текстовая команда пользователя
         timeout: Максимальное время ожидания в секундах
-    
+
     Returns:
         Dict: JSON-объект с результатом разбора команды
     """
@@ -43,10 +43,10 @@ def run_thread_safe(user_input: str, timeout: int = 60) -> Dict[str, Any]:
 def adapt_intent(response: Union[str, Dict[str, Any]]) -> Dict[str, Any]:
     """
     Адаптирует ответ от OpenAI Assistant API в валидный формат команд.
-    
+
     Args:
         response: Ответ от OpenAI (строка или словарь)
-        
+
     Returns:
         Dict: Нормализованная команда
     """

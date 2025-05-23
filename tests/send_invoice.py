@@ -5,23 +5,23 @@
 Тестовый скрипт для отправки накладной в Syrve API
 """
 
-import os
-import sys
+import asyncio
 import json
 import logging
-import asyncio
+import os
+import sys
 from datetime import datetime
+
 from dotenv import load_dotenv
 
 # Добавляем корневую директорию проекта в PYTHONPATH
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app.syrve_client import SyrveClient
 
 # Настройка логирования
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ TEST_INVOICE_DATA = {
             "unit": "kg",
             "price": 120.0,  # Цена в рублях
             "amount": 300.0,
-            "product_id": "61aa6384-2fe2-4d0c-aad8-73c5d5dc79c5"  # Корректный ID продукта из Syrve
+            "product_id": "61aa6384-2fe2-4d0c-aad8-73c5d5dc79c5",  # Корректный ID продукта из Syrve
         },
         {
             "name": "Tenderloin Beef",  # Реальный товар из Syrve
@@ -49,9 +49,9 @@ TEST_INVOICE_DATA = {
             "unit": "kg",
             "price": 250.0,  # Цена в рублях
             "amount": 375.0,
-            "product_id": "6c576c27-928b-45c0-95c4-2df6a98ecae8"  # Корректный ID продукта из Syrve
-        }
-    ]
+            "product_id": "6c576c27-928b-45c0-95c4-2df6a98ecae8",  # Корректный ID продукта из Syrve
+        },
+    ],
 }
 
 
@@ -62,7 +62,7 @@ async def get_store_id(client, auth_token):
         store_id = "1239d270-1bbe-f64f-b7ea-5f00518ef508"  # Корректный ID склада
         logger.info(f"Используем корректный ID склада: {store_id}")
         return store_id
-        
+
         # Для справки сохраняем код попытки получить список складов через API
         # url = f"{client.api_url}/resto/api/corporation/stores"
         # logger.info(f"Запрашиваем список складов: {url}")
@@ -89,7 +89,7 @@ async def get_conception_id(client, auth_token):
         conception_id = "bf3c0590-b204-f634-e054-0017f63ab3e6"
         logger.info(f"Используем стандартный ID концепции: {conception_id}")
         return conception_id
-        
+
         # Попытка получить настройки ресторана через API (может не работать)
         # url = f"{client.api_url}/resto/api/settings/restaurantSettings"
         # async with httpx.AsyncClient(timeout=60.0, verify=False) as http_client:
@@ -113,25 +113,25 @@ async def get_conception_id(client, auth_token):
 def generate_xml(invoice_data):
     """Генерация XML строго по формату Syrve"""
     xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
-    xml += '<document>\n'
-    xml += '  <items>\n'
+    xml += "<document>\n"
+    xml += "  <items>\n"
     for idx, item in enumerate(invoice_data.get("items", []), 1):
-        xml += '    <item>\n'
-        xml += f'      <num>{idx}</num>\n'
+        xml += "    <item>\n"
+        xml += f"      <num>{idx}</num>\n"
         xml += f'      <product>{item["product_id"]}</product>\n'
         xml += f'      <amount>{item["quantity"]:.2f}</amount>\n'
         xml += f'      <price>{item["price"]:.2f}</price>\n'
         xml += f'      <sum>{item["quantity"]*item["price"]:.2f}</sum>\n'
         xml += f'      <store>{invoice_data["store_id"]}</store>\n'
-        xml += '    </item>\n'
-    xml += '  </items>\n'
+        xml += "    </item>\n"
+    xml += "  </items>\n"
     xml += f'  <supplier>{invoice_data["supplier_id"]}</supplier>\n'
     xml += f'  <defaultStore>{invoice_data["store_id"]}</defaultStore>\n'
     if invoice_data.get("invoice_number"):
         xml += f'  <documentNumber>{invoice_data["invoice_number"]}</documentNumber>\n'
     if invoice_data.get("invoice_date"):
         xml += f'  <dateIncoming>{invoice_data["invoice_date"]}T08:00:00</dateIncoming>\n'
-    xml += '</document>'
+    xml += "</document>"
     return xml
 
 
@@ -152,11 +152,7 @@ def prepare_invoice_data(invoice, store_id, conception_id):
         quantity = float(position.get("qty", 0))
         price = float(position.get("price", 0))
         # assert check_product_id_exists(product_id), f"Product ID {product_id} not found in Syrve"
-        items.append({
-            "product_id": product_id,
-            "quantity": quantity,
-            "price": price
-        })
+        items.append({"product_id": product_id, "quantity": quantity, "price": price})
     return {
         "invoice_number": invoice_id,
         "invoice_date": invoice_date,
@@ -164,17 +160,17 @@ def prepare_invoice_data(invoice, store_id, conception_id):
         "supplier_id": supplier_id,
         "store_id": store_id,
         "comment": "Автоматический импорт из NOTA",
-        "items": items
+        "items": items,
     }
 
     """Подготовка данных накладной для генерации XML"""
-    
+
     invoice_id = invoice.get("number", f"TEST-{datetime.now().strftime('%Y%m%d')}-001")
     invoice_date = invoice.get("date", datetime.now().strftime("%Y-%m-%d"))
-    
+
     # Используем переданные ID концепции и склада
     supplier_id = invoice.get("supplier_id", "")
-    
+
     # Обработка позиций
     items = []
     for position in invoice.get("positions", []):
@@ -182,18 +178,14 @@ def prepare_invoice_data(invoice, store_id, conception_id):
         if not product_id:
             logger.warning(f"Пропускаем позицию без ID продукта: {position.get('name')}")
             continue
-            
+
         # Рассчитываем сумму позиции
         quantity = float(position.get("qty", 0))
         # Цена в рублях, а не в миллиединицах, т.к. XML требует большой точности
         price = float(position.get("price", 0)) / 1000
-        
-        items.append({
-            "product_id": product_id,
-            "quantity": quantity,
-            "price": price
-        })
-    
+
+        items.append({"product_id": product_id, "quantity": quantity, "price": price})
+
     return {
         "invoice_number": invoice_id,
         "invoice_date": invoice_date,
@@ -201,63 +193,67 @@ def prepare_invoice_data(invoice, store_id, conception_id):
         "supplier_id": supplier_id,
         "store_id": store_id,
         "comment": "Автоматический импорт из NOTA",
-        "items": items
+        "items": items,
     }
 
 
 async def main():
     """Основная функция для тестирования отправки накладной в Syrve"""
-    
+
     # Создаем клиента Syrve с данными из переменных окружения
     api_url = os.getenv("SYRVE_SERVER_URL")
     login = os.getenv("SYRVE_LOGIN")
     password = os.getenv("SYRVE_PASSWORD")
-    
+
     if not api_url or not login or not password:
-        logger.error("Не заданы обязательные переменные окружения SYRVE_SERVER_URL, SYRVE_LOGIN или SYRVE_PASSWORD")
+        logger.error(
+            "Не заданы обязательные переменные окружения SYRVE_SERVER_URL, SYRVE_LOGIN или SYRVE_PASSWORD"
+        )
         return
-    
+
     logger.info(f"Подключение к Syrve API: {api_url}, пользователь: {login}")
     syrve_client = SyrveClient(api_url, login, password)
-    
+
     try:
         # Авторизация в Syrve API
         logger.info("Авторизация в Syrve API...")
         auth_token = await syrve_client.auth()
         logger.info(f"Получен токен аутентификации: {auth_token[:10]}...")
-        
+
         # Получение ID склада
         store_id = await get_store_id(syrve_client, auth_token)
         if not store_id:
             logger.error("Не удалось получить ID склада")
             return
-        
+
         # Получение ID концепции
         conception_id = await get_conception_id(syrve_client, auth_token)
         if not conception_id:
             logger.error("Не удалось получить ID концепции")
             return
-        
+
         # Подготовка данных накладной
         invoice_data = prepare_invoice_data(TEST_INVOICE_DATA, store_id, conception_id)
         logger.info(f"Подготовлены данные накладной: {json.dumps(invoice_data, indent=2)}")
-        
+
         # Генерация XML
         logger.info("Генерация XML для Syrve...")
         xml = generate_xml(invoice_data)
         logger.info(f"XML сгенерирован: {xml[:200]}...")
-        
+
         # Вывод полного XML для анализа
         logger.info(f"Полный XML для отправки:\n{xml}")
-        
+
         # Отправка накладной в Syrve
         logger.info("Отправка накладной в Syrve...")
         result = None
         try:
             # Проверяем соединение с API
-            logger.info(f"Отправка запроса на URL: {api_url}/resto/api/documents/import/incomingInvoice")
+            logger.info(
+                f"Отправка запроса на URL: {api_url}/resto/api/documents/import/incomingInvoice"
+            )
             logger.info(f"Используемый токен аутентификации: {auth_token[:10]}...")
-            
+
             result = await syrve_client.import_invoice(auth_token, xml)
             logger.info(f"Отправленный XML:\n{xml}")
             if result.get("valid", False):
@@ -267,25 +263,32 @@ async def main():
                 logger.error(f"❌ Ошибка при отправке накладной: {result}")
                 if "errorMessage" in result:
                     logger.error(f"Сообщение об ошибке: {result.get('errorMessage')}")
-                    error_msg = result.get('errorMessage', '')
+                    error_msg = result.get("errorMessage", "")
                     if "User represents store, but no linked store found" in error_msg:
-                        logger.error("⚠️ Ошибка связи пользователя со складом. Пользователь не имеет доступа к указанному складу.")
+                        logger.error(
+                            "⚠️ Ошибка связи пользователя со складом. Пользователь не имеет доступа к указанному складу."
+                        )
                     elif "product == null" in error_msg:
-                        logger.error("⚠️ Товар с указанным ID не найден в системе. Проверьте ID товара.")
+                        logger.error(
+                            "⚠️ Товар с указанным ID не найден в системе. Проверьте ID товара."
+                        )
                     elif "Invalid key for item" in error_msg:
                         logger.error("⚠️ Неверный формат ключа товара. Проверьте формат GUID.")
                     elif "No session assigned to current thread" in error_msg:
-                        logger.error("⚠️ Ошибка сессии на сервере. Попробуйте повторить запрос позже.")
+                        logger.error(
+                            "⚠️ Ошибка сессии на сервере. Попробуйте повторить запрос позже."
+                        )
                 if "additionalInfo" in result:
                     logger.error(f"Дополнительная информация: {result.get('additionalInfo')}")
                 if "response" in result:
                     import re
-                    resp = result.get('response', '')
+
+                    resp = result.get("response", "")
                     logger.info(f"Анализ ответа: {resp[:500]}...")
                     if "<valid>false</valid>" in resp:
                         logger.error("⚠️ XML не прошел валидацию. Проверьте формат и содержимое.")
                     if "<errorInfo>" in resp:
-                        error_info = re.search(r'<errorInfo>(.*?)</errorInfo>', resp)
+                        error_info = re.search(r"<errorInfo>(.*?)</errorInfo>", resp)
                         if error_info:
                             logger.error(f"Детали ошибки валидации: {error_info.group(1)}")
 
@@ -293,7 +296,7 @@ async def main():
             logger.exception(f"Исключение при отправке накладной: {e}")
             if result:
                 logger.error(f"Частичный ответ API: {result}")
-    
+
     except Exception as e:
         logger.exception(f"Ошибка при выполнении скрипта: {e}")
 
