@@ -149,7 +149,9 @@ async def test_process_image_success(
     """Test successful processing of an image through table detection."""
     with patch("app.ocr_pipeline_optimized.get_detector", return_value=mock_table_detector), patch(
         "app.ocr_pipeline_optimized.PaddleOCR", return_value=mock_paddle_ocr
-    ), patch("app.ocr_pipeline_optimized.ValidationPipeline", return_value=mock_validation_pipeline):
+    ), patch(
+        "app.ocr_pipeline_optimized.ValidationPipeline", return_value=mock_validation_pipeline
+    ):
 
         # Initialize pipeline
         pipeline = OCRPipelineOptimized()
@@ -315,7 +317,9 @@ async def test_process_cells_low_confidence(sample_image_bytes):
 async def test_process_with_openai_vision_success(sample_image_bytes):
     """Test successful processing with OpenAI Vision API."""
     # Mock OpenAI Vision API call
-    with patch("app.ocr_pipeline_optimized.call_openai_ocr_async", new_callable=AsyncMock) as mock_call_ocr:
+    with patch(
+        "app.ocr_pipeline_optimized.call_openai_ocr_async", new_callable=AsyncMock
+    ) as mock_call_ocr:
         # Configure mock to return successful result
         mock_call_ocr.return_value = json.dumps(
             {
@@ -346,7 +350,9 @@ async def test_process_with_openai_vision_success(sample_image_bytes):
 async def test_process_with_openai_vision_error(sample_image_bytes):
     """Test error handling with OpenAI Vision API."""
     # Mock OpenAI Vision API call that raises exception
-    with patch("app.ocr_pipeline_optimized.call_openai_ocr_async", new_callable=AsyncMock) as mock_call_ocr:
+    with patch(
+        "app.ocr_pipeline_optimized.call_openai_ocr_async", new_callable=AsyncMock
+    ) as mock_call_ocr:
         # Configure mock to raise exception
         mock_call_ocr.side_effect = Exception("API Error")
 
@@ -368,7 +374,9 @@ async def test_process_with_openai_vision_error(sample_image_bytes):
 async def test_process_with_openai_vision_invalid_json(sample_image_bytes):
     """Test handling of invalid JSON response from OpenAI Vision API."""
     # Mock OpenAI Vision API call
-    with patch("app.ocr_pipeline_optimized.call_openai_ocr_async", new_callable=AsyncMock) as mock_call_ocr:
+    with patch(
+        "app.ocr_pipeline_optimized.call_openai_ocr_async", new_callable=AsyncMock
+    ) as mock_call_ocr:
         # Configure mock to return invalid JSON
         mock_call_ocr.return_value = "This is not JSON"
 
@@ -448,7 +456,7 @@ async def test_process_cell_with_gpt4o(sample_image_bytes):
             # Process the cells
             lines = await pipeline._process_cells(cells, ["en"])
 
-            # Verify that GPT-4o was used  
+            # Verify that GPT-4o was used
             assert len(lines) >= 0  # Basic sanity check
 
 
@@ -470,7 +478,7 @@ async def test_process_cell_with_gpt4o_no_client(sample_image_bytes):
             "ocr",
             return_value=[[((0, 0, 100, 30), ("Low Confidence Text", 0.2))]],
         ):
-            # Process the cells  
+            # Process the cells
             lines = await pipeline._process_cells(cells, ["en"])
 
             # Should fallback gracefully without GPT-4o

@@ -3,7 +3,6 @@
 """
 
 import io
-from typing import Union
 
 from PIL import Image
 from PIL.Image import Resampling
@@ -92,5 +91,4 @@ def clean_ocr_response(text: str) -> str:
     # Удаляем специальные символы в начале и конце
     text = text.strip(".,;:!?-_")
 
-    return text 
- 
+    return text

@@ -1,7 +1,4 @@
-import os
-import pytest
-from unittest.mock import Mock, patch, MagicMock
-from app.config import Settings, settings, get_ocr_client, get_chat_client
+from app.config import Settings
 
 
 class MockTestSettings(Settings):

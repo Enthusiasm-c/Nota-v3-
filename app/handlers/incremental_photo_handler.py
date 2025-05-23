@@ -203,6 +203,9 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
         # Save invoice in state for access in edit mode
         await state.update_data(invoice=ocr_result, lang=lang)
 
+        # ИСПРАВЛЕНО: Сохраняем match_results в state для корректной работы редактирования
+        await state.update_data(match_results=match_results)
+
         # New keyboard - only "Edit", "Cancel" and "Confirm" buttons (if no errors)
         inline_kb = build_main_kb(
             has_errors=True if unknown_count + partial_count > 0 else False, lang=lang

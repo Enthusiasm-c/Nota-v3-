@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 
 from app.parsers.date_parser import parse_date_command
 from app.parsers.line_parser import parse_line_command
+from app.parsers.supplier_parser import parse_supplier_command
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,15 @@ def parse_command(text: str) -> Optional[Dict[str, Any]]:
             f"Локальный парсер обработал команду даты за {elapsed_ms:.1f} мс: {date_result}"
         )
         return date_result
+
+    # Попытка парсинга команды поставщика
+    supplier_result = parse_supplier_command(text)
+    if supplier_result:
+        elapsed_ms = (time.time() - start_time) * 1000
+        logger.info(
+            f"Локальный парсер обработал команду поставщика за {elapsed_ms:.1f} мс: {supplier_result}"
+        )
+        return supplier_result
 
     # Попытка парсинга команды редактирования строки
     line_result = parse_line_command(text)

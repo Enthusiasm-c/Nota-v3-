@@ -1,7 +1,9 @@
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from aiogram.exceptions import TelegramBadRequest
-from app.bot_utils import serialize_kb, edit_message_text_safe, clear_edit_cache, _edit_cache
+
+from app.bot_utils import clear_edit_cache, edit_message_text_safe
 
 
 @pytest.mark.asyncio

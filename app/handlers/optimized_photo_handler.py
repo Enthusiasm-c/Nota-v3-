@@ -49,6 +49,13 @@ async def optimized_photo_handler(message: Message, state: FSMContext):
     """
     Fully optimized photo handler for Nota bot.
     """
+    # ДИАГНОСТИКА: Логируем что фото пришло
+    current_state = await state.get_state()
+    logger.critical(
+        f"📸 PHOTO HANDLER TRIGGERED! user_id={message.from_user.id}, state={current_state}"
+    )
+    print(f"📸 PHOTO HANDLER TRIGGERED! user_id={message.from_user.id}, state={current_state}")
+
     if not message.from_user:
         await message.answer("Error: Could not identify user")
         return
@@ -193,6 +200,9 @@ async def optimized_photo_handler(message: Message, state: FSMContext):
         }
 
         await state.update_data(invoice=ocr_result, lang=lang)
+
+        # ИСПРАВЛЕНО: Сохраняем match_results в state для корректной работы редактирования
+        await state.update_data(match_results=match_results)
 
         try:
             # Generate report with HTML formatting

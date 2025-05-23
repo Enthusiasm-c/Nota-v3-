@@ -16,11 +16,23 @@ __all__ = ["clean_num", "format_price", "format_quantity", "parse_date"]
 
 
 def format_price(
-    value: Optional[Union[str, float, int]], currency: str = "", decimal_places: int = 2
+    value: Optional[Union[str, float, int]],
+    currency: str = "",
+    decimal_places: int = 2,
+    format_style: str = "default",
 ) -> str:
     """
     Форматирует ценовое значение: разделитель тысяч — обычный пробел, без знаков после запятой, опционально валюта.
-    Примеры: 240 000, 5 000, 13 200
+
+    Args:
+        value: Значение для форматирования
+        currency: Валюта (пустая строка по умолчанию)
+        decimal_places: Количество знаков после запятой (не используется для целых чисел)
+        format_style: Стиль форматирования ("default", "indonesian")
+
+    Примеры:
+        default: 240 000, 5 000, 13 200
+        indonesian: 240K rp, 5K rp, 13K rp
     """
     cleaned = clean_num(value)
     if cleaned is None:
@@ -28,9 +40,31 @@ def format_price(
 
     # Форматируем число как целое, без десятичных знаков
     int_value = int(round(cleaned))
-    formatted = str(int_value)
 
-    # Форматируем с пробелами между тысячами
+    # Специальный формат для индонезийских рупий
+    if format_style == "indonesian":
+        if int_value >= 1000:
+            # Форматируем как тысячи с 'K'
+            thousands = int_value // 1000
+            remainder = int_value % 1000
+
+            if remainder == 0:
+                formatted = f"{thousands}K"
+            else:
+                # Если есть остаток, показываем точное значение в тысячах
+                exact_thousands = int_value / 1000
+                formatted = (
+                    f"{exact_thousands:.0f}K"
+                    if exact_thousands.is_integer()
+                    else f"{exact_thousands:.1f}K"
+                )
+
+            return f"{formatted} rp"
+        else:
+            return f"{int_value} rp"
+
+    # Стандартное форматирование с пробелами
+    formatted = str(int_value)
     if len(formatted) > 3:
         # Разделяем число на группы по 3 цифры справа налево и соединяем пробелами
         groups = []

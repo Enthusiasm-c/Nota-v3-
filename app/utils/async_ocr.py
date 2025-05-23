@@ -199,18 +199,53 @@ async def async_ocr(
         if not api_response.get("choices"):
             raise ValueError("Пустой ответ от OpenAI API")
 
+        # НОВОЕ: Логируем полный ответ для диагностики
+        logger.info(f"[{req_id}] === ДИАГНОСТИКА OCR ОТВЕТА ===")
+        logger.info(f"[{req_id}] Количество choices: {len(api_response.get('choices', []))}")
+
         # Извлекаем результат функции
         message = api_response["choices"][0]["message"]
+        logger.info(f"[{req_id}] Message role: {message.get('role')}")
+        logger.info(f"[{req_id}] Message content: {message.get('content', 'null')}")
+        logger.info(f"[{req_id}] Tool calls count: {len(message.get('tool_calls', []))}")
+
         if not message.get("tool_calls") or len(message["tool_calls"]) == 0:
+            logger.error(f"[{req_id}] ПРОБЛЕМА: Ответ не содержит tool_calls!")
+            logger.error(
+                f"[{req_id}] Полный message: {json.dumps(message, ensure_ascii=False, indent=2)}"
+            )
             raise ValueError("Ответ не содержит результат функции")
 
         # Получаем первый tool call
         tool_call = message["tool_calls"][0]
+        logger.info(f"[{req_id}] Function name: {tool_call['function']['name']}")
+
         if tool_call["function"]["name"] != "get_parsed_invoice":
             raise ValueError(f"Неожиданное имя функции: {tool_call['function']['name']}")
 
+        # ВАЖНО: Логируем сырые аргументы функции
+        raw_arguments = tool_call["function"]["arguments"]
+        logger.info(f"[{req_id}] === СЫРОЙ JSON ОТ OPENAI ===")
+        logger.info(f"[{req_id}] Raw arguments (первые 1000 символов):")
+        logger.info(f"[{req_id}] {raw_arguments[:1000]}")
+        if len(raw_arguments) > 1000:
+            logger.info(f"[{req_id}] ... (обрезано, полная длина: {len(raw_arguments)} символов)")
+
         # Парсим JSON аргументы
-        result_data = json.loads(tool_call["function"]["arguments"])
+        result_data = json.loads(raw_arguments)
+
+        # ДИАГНОСТИКА: Логируем распознанные позиции
+        if "positions" in result_data:
+            logger.info(f"[{req_id}] === РАСПОЗНАННЫЕ ПОЗИЦИИ ===")
+            for i, pos in enumerate(result_data["positions"]):
+                name = pos.get("name", "N/A")
+                qty = pos.get("qty", "N/A")
+                price = pos.get("price", "N/A")
+                total = pos.get("total_price", "N/A")
+                logger.info(
+                    f"[{req_id}] Позиция {i+1}: '{name}' | qty: {qty} | price: {price} | total: {total}"
+                )
+        logger.info(f"[{req_id}] === КОНЕЦ ДИАГНОСТИКИ ===")
 
         # Конвертируем в Pydantic модель
         parsed_data = ParsedData.model_validate(result_data)

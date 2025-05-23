@@ -542,4 +542,6 @@ async def test_numeric_parsing_edge_cases():
         OCRPipeline.parse_numeric_value("$ 1,234.56", default=0, is_float=True) == 1234.56
     )  # With currency
 
-    assert OCRPipeline.parse_numeric_value("$ 1,234.56", default=0, is_float=True) == 1234.56  # With currency
+    assert (
+        OCRPipeline.parse_numeric_value("$ 1,234.56", default=0, is_float=True) == 1234.56
+    )  # With currency

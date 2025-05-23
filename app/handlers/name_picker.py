@@ -3,23 +3,19 @@ Handlers for unrecognized product name suggestions with fuzzy matching.
 """
 
 import logging
-from typing import List
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from app.alias import add_alias
-from app.config import settings
 from app.converters import parsed_to_dict
 from app.data_loader import load_products
 from app.edit.apply_intent import set_name
 from app.formatters import report
-from app.fsm.states import EditFree
 from app.i18n import t
-from app.keyboards import build_edit_keyboard, build_main_kb
-from app.matcher import async_match_positions, fuzzy_find, match_positions
-from app.models import Product
+from app.keyboards import build_main_kb
+from app.matcher import fuzzy_find, match_positions
 
 logger = logging.getLogger(__name__)
 
@@ -184,7 +180,7 @@ async def show_fuzzy_suggestions(
     products = load_products()
 
     # Try to find fuzzy matches
-    matches = fuzzy_find(name, products, thresh=thresh)
+    matches = fuzzy_find(name, products, threshold=thresh)
 
     # If no matches found, accept the user input as-is without showing error message
     if not matches:

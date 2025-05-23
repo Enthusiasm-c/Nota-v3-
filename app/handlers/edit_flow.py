@@ -13,6 +13,7 @@ from app.fsm.states import EditFree, NotaStates
 from app.i18n import t
 from app.keyboards import build_main_kb
 from app.matcher import match_positions
+from app.parsers.local_parser import parse_command_async
 from app.utils.logger_config import get_buffered_logger
 
 logger = get_buffered_logger(__name__)
@@ -112,52 +113,30 @@ async def handle_free_edit_text(message: Message, state: FSMContext):
         await state.set_state(NotaStates.main_menu)
 
     # --- Локальный парсер интента (fallback без OpenAI) ---
-    import re
-    import traceback
-
     async def local_intent_parser(text: str):
-        """Простая эвристика для распознавания команды изменения даты.
-        Возвращает интент, совместимый с apply_intent.
-        """
-        logger.critical(f"ОТЛАДКА-ХЕНДЛЕР: Локальный парсер анализирует текст: '{text}'")
-        text_l = text.lower().strip()
+        """Использует полноценный локальный парсер с поддержкой всех команд."""
+        logger.critical(f"ОТЛАДКА-ХЕНДЛЕР: Полноценный парсер анализирует текст: '{text}'")
 
         try:
-            # Пытаемся найти шаблон вида "дата 16.04.2025" или "date 16.04.2025"
-            m = re.search(r"\b(?:дата|date)\s+(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})", text_l)
-            if m:
-                date_value = m.group(1)
-                logger.critical(f"ОТЛАДКА-ХЕНДЛЕР: Локальный парсер нашел дату: {date_value}")
-                return {
-                    "action": "edit_date",
-                    "value": date_value,
-                    "source": "local_parser",
-                    "_debug": "from edit_flow parser",
-                }
+            # Используем полноценный парсер из app.parsers.local_parser
+            result = await parse_command_async(text)
 
-            # Дополнительная проверка - если просто дата без префикса
-            date_only_match = re.match(r"^(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})$", text_l)
-            if date_only_match:
-                date_value = date_only_match.group(1)
+            if result and result.get("action") != "unknown":
+                logger.critical(f"ОТЛАДКА-ХЕНДЛЕР: Полноценный парсер распознал команду: {result}")
+                return result
+            else:
                 logger.critical(
-                    f"ОТЛАДКА-ХЕНДЛЕР: Локальный парсер нашел только дату без префикса: {date_value}"
+                    f"ОТЛАДКА-ХЕНДЛЕР: Полноценный парсер не распознал команду: '{text}'"
                 )
                 return {
-                    "action": "edit_date",
-                    "value": date_value,
+                    "action": "unknown",
+                    "user_message": t("error.parse_command", lang=lang),
                     "source": "local_parser",
-                    "_debug": "from edit_flow parser (date only)",
                 }
-
-            # Неизвестно — вернём unknown, чтобы вызвать стандартную обработку ошибки
-            logger.critical(f"ОТЛАДКА-ХЕНДЛЕР: Локальный парсер не распознал команду: '{text}'")
-            return {
-                "action": "unknown",
-                "user_message": t("error.parse_command", lang=lang),
-                "source": "local_parser",
-            }
         except Exception as e:
-            logger.critical(f"ОТЛАДКА-ХЕНДЛЕР: Исключение в локальном парсере: {e}")
+            logger.critical(f"ОТЛАДКА-ХЕНДЛЕР: Исключение в полноценном парсере: {e}")
+            import traceback
+
             logger.critical(traceback.format_exc())
             return {
                 "action": "unknown",
@@ -206,35 +185,85 @@ async def handle_edit_free(call: CallbackQuery, state: FSMContext):
     Handler for the "✏️ Edit" button.
     Transitions user to free-form editing mode.
     """
-    logger.warning(
-        f"ДИАГНОСТИКА: Нажата кнопка Edit, user_id={call.from_user.id}, chat_id={call.message.chat.id}, message_id={call.message.message_id}"
-    )
-    # Get data from state
-    data = await state.get_data()
-    lang = data.get("lang", "en")
+    logger.critical(f"🛠️ EDIT HANDLER TRIGGERED! user_id={call.from_user.id}")
+    print(f"🛠️ EDIT HANDLER TRIGGERED! user_id={call.from_user.id}")
 
-    # Explicitly save invoice in state when transitioning to edit mode
-    invoice = data.get("invoice")
-    if invoice:
-        await state.update_data(invoice=invoice)
+    try:
+        logger.warning(
+            f"ДИАГНОСТИКА: Нажата кнопка Edit, user_id={call.from_user.id}, chat_id={call.message.chat.id}, message_id={call.message.message_id}"
+        )
 
-    # Transition to input awaiting state
-    await state.set_state(EditFree.awaiting_input)
-    logger.warning(
-        f"ДИАГНОСТИКА: Состояние переведено в EditFree.awaiting_input для user_id={call.from_user.id}"
-    )
+        logger.critical("🛠️ ШАГ 1: Получаем данные из state")
+        print("🛠️ ШАГ 1: Получаем данные из state")
 
-    # Send instruction
-    logger.warning(
-        f"ДИАГНОСТИКА: Отправляю пользователю prompt для свободного редактирования user_id={call.from_user.id}"
-    )
-    await call.message.answer(t("example.edit_prompt", lang=lang), parse_mode="HTML")
+        # Get data from state
+        data = await state.get_data()
+        lang = data.get("lang", "en")
 
-    # Answer callback
-    logger.warning(
-        f"ДИАГНОСТИКА: Callback edit:free успешно обработан для user_id={call.from_user.id}"
-    )
-    await call.answer()
+        logger.critical("🛠️ ШАГ 2: Проверяем наличие инвойса")
+        print("🛠️ ШАГ 2: Проверяем наличие инвойса")
+
+        # Explicitly save invoice in state when transitioning to edit mode
+        invoice = data.get("invoice")
+        if invoice:
+            await state.update_data(invoice=invoice)
+            logger.critical("🛠️ ШАГ 2: ✅ Инвойс найден и сохранен")
+            print("🛠️ ШАГ 2: ✅ Инвойс найден и сохранен")
+        else:
+            logger.critical("🛠️ ШАГ 2: ❌ Инвойс НЕ найден")
+            print("🛠️ ШАГ 2: ❌ Инвойс НЕ найден")
+
+        logger.critical("🛠️ ШАГ 3: Устанавливаем состояние")
+        print("🛠️ ШАГ 3: Устанавливаем состояние")
+
+        # Transition to input awaiting state
+        await state.set_state(EditFree.awaiting_input)
+        logger.warning(
+            f"ДИАГНОСТИКА: Состояние переведено в EditFree.awaiting_input для user_id={call.from_user.id}"
+        )
+        logger.critical("🛠️ ШАГ 3: ✅ Состояние установлено")
+        print("🛠️ ШАГ 3: ✅ Состояние установлено")
+
+        logger.critical("🛠️ ШАГ 4: Отправляем инструкции")
+        print("🛠️ ШАГ 4: Отправляем инструкции")
+
+        # Send instruction
+        logger.warning(
+            f"ДИАГНОСТИКА: Отправляю пользователю prompt для свободного редактирования user_id={call.from_user.id}"
+        )
+        await call.message.answer(t("example.edit_prompt", lang=lang), parse_mode="HTML")
+
+        logger.critical("🛠️ ШАГ 4: ✅ Инструкции отправлены")
+        print("🛠️ ШАГ 4: ✅ Инструкции отправлены")
+
+        logger.critical("🛠️ ШАГ 5: Отвечаем на callback")
+        print("🛠️ ШАГ 5: Отвечаем на callback")
+
+        # Answer callback
+        logger.warning(
+            f"ДИАГНОСТИКА: Callback edit:free успешно обработан для user_id={call.from_user.id}"
+        )
+        await call.answer()
+
+        logger.critical("🛠️ ШАГ 5: ✅ Callback отвечен")
+        print("🛠️ ШАГ 5: ✅ Callback отвечен")
+
+        logger.critical("🛠️ 🎉 EDIT HANDLER ЗАВЕРШЕН УСПЕШНО!")
+        print("🛠️ 🎉 EDIT HANDLER ЗАВЕРШЕН УСПЕШНО!")
+
+    except Exception as e:
+        logger.critical(f"🛠️ ❌ ОШИБКА В EDIT HANDLER: {e}")
+        print(f"🛠️ ❌ ОШИБКА В EDIT HANDLER: {e}")
+        import traceback
+
+        logger.critical(f"🛠️ Трассировка: {traceback.format_exc()}")
+        print(f"🛠️ Трассировка: {traceback.format_exc()}")
+
+        # Все равно отвечаем на callback
+        try:
+            await call.answer("Ошибка обработки")
+        except:
+            pass
 
 
 # Handler for fuzzy-match confirmation

@@ -47,6 +47,13 @@ def build_table(rows):
     """
     from html import escape as html_escape
 
+    logger = logging.getLogger(__name__)
+    logger.critical(f"BUILD_TABLE: Получено {len(rows) if rows else 0} строк для отображения")
+
+    if rows:
+        for i, row in enumerate(rows):
+            logger.critical(f"BUILD_TABLE: Строка {i+1}: {row}")
+
     status_map = {"ok": "✓", "unknown": "❗", "unit_mismatch": "❗", "error": "❗", "manual": ""}
 
     def pad_with_html(text, width):
@@ -123,7 +130,16 @@ def build_table(rows):
 
     table_rows = []
     for idx, row in enumerate(rows, 1):
-        display_name = row.get("matched_name", row.get("name", ""))
+        # ИСПРАВЛЕНО: Правильная проверка matched_name на None и пустоту
+        matched_name = row.get("matched_name")
+        original_name = row.get("name", "")
+
+        # Используем matched_name только если он не None и не пустой
+        if matched_name and str(matched_name).strip():
+            display_name = matched_name
+        else:
+            display_name = original_name
+
         name = html_escape(str(display_name))
         # Обрезаем длинные имена с многоточием
         if len(name) > name_width - 1:
@@ -277,6 +293,76 @@ def count_issues(match_results):
     return sum(1 for item in match_results if item.get("status", "") != "ok")
 
 
+def calculate_total_amount(match_results):
+    """
+    Вычисляет итоговую сумму накладной на основе результатов сопоставления.
+
+    Args:
+        match_results: Список результатов сопоставления позиций
+
+    Returns:
+        float: Итоговая сумма накладной
+    """
+    total = 0.0
+
+    for item in match_results:
+        # Пытаемся получить line_total, если его нет - вычисляем из qty * price
+        line_total = item.get("line_total")
+
+        if line_total is not None:
+            try:
+                total += float(line_total)
+                continue
+            except (ValueError, TypeError):
+                pass
+
+        # Если line_total отсутствует, вычисляем из qty * price
+        qty = item.get("qty")
+        price = item.get("price")
+
+        if qty is not None and price is not None:
+            try:
+                qty_val = float(qty)
+                price_val = float(price)
+                total += qty_val * price_val
+            except (ValueError, TypeError):
+                # Пропускаем позиции с некорректными данными
+                continue
+
+    return total
+
+
+def format_total_summary(match_results):
+    """
+    Форматирует итоговую информацию накладной с итоговой суммой.
+
+    Args:
+        match_results: Список результатов сопоставления позиций
+
+    Returns:
+        str: Отформатированная строка с итоговой информацией
+    """
+
+    def format_price_with_spaces(price_val):
+        """Форматирует цену с пробелами между тысячами"""
+        if price_val is None or price_val == 0:
+            return "0"
+
+        price_str = str(int(round(price_val)))
+        if len(price_str) > 3:
+            groups = []
+            for i in range(len(price_str), 0, -3):
+                start = max(0, i - 3)
+                groups.insert(0, price_str[start:i])
+            return " ".join(groups)
+        return price_str
+
+    total_amount = calculate_total_amount(match_results)
+    formatted_total = format_price_with_spaces(total_amount)
+
+    return f"\n<b>Total Amount: IDR {formatted_total}</b>"
+
+
 def build_report(parsed_data, match_results, escape_html=True, page=1, page_size=40):
     r"""
     Формирует HTML-отчет по инвойсу с пагинацией.
@@ -294,6 +380,8 @@ def build_report(parsed_data, match_results, escape_html=True, page=1, page_size
     Важно: Telegram поддерживает только ограниченное подмножество HTML-тегов:
     <b>, <i>, <u>, <s>, <strike>, <del>, <a>, <code>, <pre>
     """
+    logger = logging.getLogger(__name__)
+
     # Извлекаем основную информацию из разных типов данных
     supplier = getattr(parsed_data, "supplier", None)
     if supplier is None and isinstance(parsed_data, dict):
@@ -317,6 +405,15 @@ def build_report(parsed_data, match_results, escape_html=True, page=1, page_size
     start = (page - 1) * page_size
     end = start + page_size
     rows_to_show = match_results[start:end]
+
+    # ДИАГНОСТИКА: Проверяем что передается в build_table
+    logger.critical(
+        f"BUILD_REPORT: Pagination {page}/{(len(match_results) + page_size - 1) // page_size}, start={start}, end={end}"
+    )
+    logger.critical(
+        f"BUILD_REPORT: len(match_results)={len(match_results)}, len(rows_to_show)={len(rows_to_show)}"
+    )
+    logger.critical(f"BUILD_REPORT: rows_to_show={rows_to_show}")
 
     # Подсчитываем количество ошибок и проблем перед формированием отчёта
     ok_count = 0
@@ -350,6 +447,7 @@ def build_report(parsed_data, match_results, escape_html=True, page=1, page_size
     header_html = build_header(supplier_str, date_str)
     table = build_table(rows_to_show)
     summary_html = build_summary(match_results)
+    total_summary = format_total_summary(match_results)
     # Используем <pre> вместо <code> для Telegram и тестов
-    html_report = f"{header_html}" f"<pre>{table}</pre>\n" f"{summary_html}"
+    html_report = f"{header_html}" f"<pre>{table}</pre>\n" f"{summary_html}" f"{total_summary}"
     return html_report.strip(), has_errors

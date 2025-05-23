@@ -15,11 +15,12 @@ def trace_openai(func):
     Декоратор для трассировки вызовов OpenAI API.
     Добавляет request_id в параметры вызова.
     """
+
     @wraps(func)
     def wrapper(*args, **kwargs):
         request_id = get_request_id()
         if request_id:
-            kwargs['request_id'] = request_id
+            kwargs["request_id"] = request_id
         logger.info(
             "OpenAI call: prompt",
             extra={"trace_id": request_id, "data": {"args": args, "kwargs": kwargs}},

@@ -1,6 +1,17 @@
-import pytest
 from decimal import Decimal
-from app.formatter import escape_md, format_idr, _row, W_IDX, W_NAME, W_QTY, W_UNIT, W_PRICE, W_TOTAL, W_STATUS
+
+from app.formatter import (
+    W_IDX,
+    W_NAME,
+    W_PRICE,
+    W_QTY,
+    W_STATUS,
+    W_TOTAL,
+    W_UNIT,
+    _row,
+    escape_md,
+    format_idr,
+)
 
 
 class TestEscapeMd:
@@ -35,10 +46,10 @@ class TestEscapeMd:
         """Test escaping non-string input."""
         result = escape_md(123)
         assert result == "123"
-        
+
         result = escape_md(None)
         assert result == "None"
-        
+
         result = escape_md([1, 2, 3])
         assert result == r"\[1, 2, 3\]"
 
@@ -125,7 +136,7 @@ class TestRow:
     def test_row_basic(self):
         """Test basic row formatting."""
         result = _row(1, "Apple", 10, "kg", 5000, 50000, "ok")
-        
+
         # Check that all components are present
         assert "1" in result
         assert "Apple" in result
@@ -139,7 +150,7 @@ class TestRow:
         """Test that long names are truncated."""
         long_name = "Very long product name that should be truncated"
         result = _row(1, long_name, 5, "pcs", 1000, 5000, "partial")
-        
+
         # Name should be truncated with ellipsis
         assert "…" in result
         # Should not contain the full long name
@@ -148,7 +159,7 @@ class TestRow:
     def test_row_with_none_values(self):
         """Test row with None price and total."""
         result = _row(2, "Product", 3, "l", None, None, None)
-        
+
         assert "2" in result
         assert "Product" in result
         assert "3" in result
@@ -159,7 +170,7 @@ class TestRow:
     def test_row_with_empty_values(self):
         """Test row with empty string values."""
         result = _row(3, "Item", 1, "unit", "", "", "")
-        
+
         assert "3" in result
         assert "Item" in result
         assert "1" in result
@@ -170,7 +181,7 @@ class TestRow:
     def test_row_with_float_quantities(self):
         """Test row with float quantities."""
         result = _row(4, "Milk", 2.5, "l", 15000, 37500, "ok")
-        
+
         assert "4" in result
         assert "Milk" in result
         assert "2.5" in result
@@ -179,17 +190,17 @@ class TestRow:
     def test_row_with_string_index(self):
         """Test row with string index."""
         result = _row("A", "Product", 1, "pcs", 1000, 1000, "verified")
-        
+
         assert "A" in result
         assert "Product" in result
 
     def test_row_formatting_alignment(self):
         """Test that row has proper formatting and alignment."""
         result = _row(1, "Test", 5, "kg", 10000, 50000, "ok")
-        
+
         # Should be a single line
         assert "\n" not in result
-        
+
         # Should have proper spacing
         assert len(result.split()) >= 6  # At least 6 components
 
@@ -198,7 +209,7 @@ class TestRow:
         # Create name exactly W_NAME characters long
         exact_name = "A" * W_NAME
         result = _row(1, exact_name, 1, "pcs", 1000, 1000, "ok")
-        
+
         # Should not be truncated
         assert "…" not in result
         assert exact_name in result
@@ -208,7 +219,7 @@ class TestRow:
         # Create name one character longer than W_NAME
         over_limit_name = "A" * (W_NAME + 1)
         result = _row(1, over_limit_name, 1, "pcs", 1000, 1000, "ok")
-        
+
         # Should be truncated
         assert "…" in result
         assert over_limit_name not in result
@@ -220,7 +231,7 @@ class TestFormatterConstants:
     def test_width_constants_are_positive(self):
         """Test that all width constants are positive integers."""
         constants = [W_IDX, W_NAME, W_QTY, W_UNIT, W_PRICE, W_TOTAL, W_STATUS]
-        
+
         for const in constants:
             assert isinstance(const, int)
             assert const > 0
@@ -250,9 +261,9 @@ class TestFormatterIntegration:
             unit="kg",
             price=25000,
             total=137500,
-            status="verified"
+            status="verified",
         )
-        
+
         # Should contain all expected elements
         assert "1" in result
         assert "Fresh Apples" in result
@@ -266,7 +277,7 @@ class TestFormatterIntegration:
         """Test markdown escaping with product names containing special chars."""
         special_name = "Coca-Cola [500ml] (Fresh!)"
         escaped = escape_md(special_name)
-        
+
         # Should escape special characters
         assert "\\" in escaped
         assert "[" not in escaped or "\\[" in escaped
@@ -278,7 +289,7 @@ class TestFormatterIntegration:
     def test_zero_values_formatting(self):
         """Test formatting with zero values."""
         result = _row(0, "Free Sample", 0, "", 0, 0, "")
-        
+
         assert "0" in result
         assert "Free Sample" in result
         assert "0 IDR" in result
@@ -287,10 +298,9 @@ class TestFormatterIntegration:
         """Test formatting with very large numbers."""
         large_price = 999999999
         large_total = 9999999990
-        
+
         result = _row(999, "Expensive Item", 10, "pcs", large_price, large_total, "pending")
-        
+
         # Should format large numbers correctly
         assert "999\u2009999\u2009999 IDR" in result
-        assert "9\u2009999\u2009999\u2009990 IDR" in result 
- 
+        assert "9\u2009999\u2009999\u2009990 IDR" in result
