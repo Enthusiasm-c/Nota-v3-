@@ -1,12 +1,45 @@
+"""
+Тесты для логирования с трассировкой.
+"""
+
 import logging
+
 import pytest
+
 from app.assistants.client import run_thread_safe
-from app.trace_context import set_trace_id
+from app.trace_context import get_request_id, reset_request_id, set_request_id
+
+
+@pytest.fixture(autouse=True)
+def cleanup_trace():
+    """
+    Очищает контекст трассировки после каждого теста.
+    """
+    yield
+    reset_request_id()
+
+
+def test_trace_context():
+    """
+    Тест установки и получения ID запроса.
+    """
+    # Изначально ID не установлен
+    assert get_request_id() is None
+
+    # Устанавливаем ID
+    test_id = "test-123"
+    set_request_id(test_id)
+    assert get_request_id() == test_id
+
+    # Сбрасываем ID
+    reset_request_id()
+    assert get_request_id() is None
+
 
 @pytest.fixture(autouse=True)
 def set_test_trace_id():
     # Устанавливаем тестовый trace_id для каждого теста
-    set_trace_id("test-trace-id-12345")
+    set_request_id("test-trace-id-12345")
     yield
 
 

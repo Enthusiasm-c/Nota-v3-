@@ -99,16 +99,16 @@ async def global_error_handler(event, exception):
     """Глобальный обработчик ошибок для предотвращения крашей бота."""
     # Уникальный ID для трассировки в логах
     error_id = f"error_{uuid.uuid4().hex[:8]}"
-    
+
     # Логируем детали ошибки
     logger.error(f"[{error_id}] Перехвачена необработанная ошибка: {exception}")
     logger.error(f"[{error_id}] Тип события: {type(event).__name__}")
-    
+
     # Собираем подробную информацию об ошибке
     import traceback
     trace = traceback.format_exc()
     logger.error(f"[{error_id}] Трассировка:\n{trace}")
-    
+
     # Пытаемся получить информацию о пользователе
     try:
         if hasattr(event, 'from_user') and event.from_user:
@@ -117,11 +117,11 @@ async def global_error_handler(event, exception):
             user_id = event.chat.id
         else:
             user_id = "unknown"
-        
+
         logger.error(f"[{error_id}] Ошибка у пользователя: {user_id}")
     except:
         logger.error(f"[{error_id}] Не удалось определить пользователя")
-    
+
     # Пытаемся отправить сообщение пользователю
     try:
         if hasattr(event, 'answer'):
@@ -130,11 +130,11 @@ async def global_error_handler(event, exception):
             await event.reply("Произошла ошибка. Пожалуйста, попробуйте снова.")
         elif hasattr(event, 'message') and hasattr(event.message, 'answer'):
             await event.message.answer("Произошла ошибка. Пожалуйста, попробуйте снова.")
-        
+
         logger.info(f"[{error_id}] Отправлено сообщение об ошибке пользователю")
     except Exception as e:
         logger.error(f"[{error_id}] Не удалось отправить сообщение об ошибке: {e}")
-    
+
     # Ошибка обработана, бот может продолжать работу
     return True  # Предотвращаем дальнейшее распространение ошибки
 
@@ -142,24 +142,24 @@ async def global_error_handler(event, exception):
 def register_handlers(dp, bot=None):
     """
     Регистрирует обработчики для диспетчера.
-    
+
     Args:
         dp: Диспетчер
         bot: Экземпляр бота (опционально)
     """
     # Регистрируем глобальный обработчик ошибок
     dp.errors.register(global_error_handler)
-    
+
     try:
         # Импортируем роутеры
         from app.handlers.edit_flow import router as edit_flow_router
         from app.handlers.incremental_photo_handler import router as photo_router
         from app.handlers.syrve_handler import router as syrve_router
-        
+
         # Проверяем, не был ли уже добавлен роутер
         if not hasattr(dp, '_registered_routers'):
             dp._registered_routers = set()
-            
+
         # ВАЖНО: Регистрируем роутер обработки фотографий ПЕРВЫМ
         # чтобы он имел приоритет над другими обработчиками
         if 'photo_router' not in dp._registered_routers:
@@ -168,31 +168,31 @@ def register_handlers(dp, bot=None):
             from app.handlers.optimized_photo_handler import router as optimized_photo_router
             dp.include_router(optimized_photo_router)
             logger.info("Зарегистрирован оптимизированный обработчик фотографий")
-            
+
             # Регистрируем роутер редактирования
         if 'edit_flow_router' not in dp._registered_routers:
             dp.include_router(edit_flow_router)
             dp._registered_routers.add('edit_flow_router')
             logger.info("Зарегистрирован обработчик редактирования")
-            
+
         # Регистрируем роутер Syrve для обработки отправки накладных
         if 'syrve_router' not in dp._registered_routers:
             dp.include_router(syrve_router)
             dp._registered_routers.add('syrve_router')
             logger.info("Зарегистрирован обработчик Syrve")
-            
+
         # Регистрируем встроенный обработчик для кнопки cancel (полностью переработанная версия)
         @dp.callback_query(F.data == "cancel:all")
         async def handle_cancel_all(call, state: FSMContext):
             """Обработчик кнопки Cancel с улучшенной обработкой ошибок"""
             # Используем более уникальный ID для трассировки в логах
             op_id = f"cancel_{call.message.message_id}_{int(time.time() * 1000)}"
-            
+
             # Важно: создаем изолированные задачи для каждого этапа
             # чтобы предотвратить блокировку всего обработчика при ошибке
-            
+
             logger.info(f"[{op_id}] START: получен cancel:all callback")
-            
+
             # Шаг 1: Немедленно отвечаем на callback (самый критический шаг)
             async def step1_answer_callback():
                 try:
@@ -201,7 +201,7 @@ def register_handlers(dp, bot=None):
                 except Exception as e:
                     logger.error(f"[{op_id}] STEP1 ERROR: {str(e)}")
                     return False
-                    
+
             # Запускаем первый шаг с коротким таймаутом (2 секунды)
             try:
                 answered = await asyncio.wait_for(step1_answer_callback(), timeout=2)
@@ -213,38 +213,38 @@ def register_handlers(dp, bot=None):
                 logger.error(f"[{op_id}] STEP1 TIMEOUT: callback answer timed out")
             except Exception as e:
                 logger.error(f"[{op_id}] STEP1 UNEXPECTED: {str(e)}")
-                
+
             # Шаг 2: Очищаем все блокировки пользователя
             user_id = call.from_user.id
             try:
                 # Импортируем напрямую для надежности
                 from app.utils.processing_guard import clear_all_locks, set_processing_photo, set_sending_to_syrve
-                
+
                 # Безопасно сбрасываем все флаги в одном месте
                 await set_processing_photo(user_id, False)
                 await set_sending_to_syrve(user_id, False)
-                
+
                 logger.info(f"[{op_id}] STEP2: все флаги блокировок пользователя сброшены")
             except Exception as e:
                 logger.error(f"[{op_id}] STEP2 ERROR: {str(e)}")
-                
+
             # Шаг 3: Сохраняем текущее состояние (для диагностики) и полностью очищаем его
             try:
                 # Читаем текущие данные для диагностики
                 current_state = await state.get_state() or "none"
                 logger.info(f"[{op_id}] STEP3: текущее состояние перед очисткой: {current_state}")
-                
+
                 # Важно: сначала полностью очищаем, затем устанавливаем новое состояние
                 await state.clear()
                 logger.info(f"[{op_id}] STEP3: состояние полностью очищено")
-                
+
                 # Устанавливаем новое базовое состояние
                 await state.set_state(NotaStates.main_menu)
                 logger.info(f"[{op_id}] STEP3: установлено новое состояние: NotaStates.main_menu")
             except Exception as e:
                 logger.error(f"[{op_id}] STEP3 ERROR: ошибка при работе с состоянием: {str(e)}")
                 # Даже при ошибке продолжаем дальше
-            
+
             # Шаг 4: Удаляем клавиатуру предыдущего сообщения (некритично)
             try:
                 await call.message.edit_reply_markup(reply_markup=None)
@@ -252,7 +252,7 @@ def register_handlers(dp, bot=None):
             except Exception as e:
                 logger.warning(f"[{op_id}] STEP4 WARNING: не удалось удалить клавиатуру: {str(e)}")
                 # Некритичная ошибка, продолжаем
-            
+
             # Шаг 5: Отправляем подтверждение пользователю
             try:
                 # Простое сообщение без форматирования для максимальной надежности
@@ -274,15 +274,15 @@ def register_handlers(dp, bot=None):
                     logger.info(f"[{op_id}] STEP5 FALLBACK: отправлено резервное сообщение")
                 except Exception as e2:
                     logger.error(f"[{op_id}] STEP5 FALLBACK ERROR: {str(e2)}")
-            
+
             # Конец обработчика
             logger.info(f"[{op_id}] COMPLETE: обработка cancel:all завершена")
-        
-            
-            
+
+
+
         # Регистрируем команду старт
         dp.message.register(cmd_start, CommandStart())
-        
+
         # Обработчик для кнопки action:new больше не нужен, так как мы убрали эту кнопку из меню
         # Оставляем простую заглушку на случай, если какой-то клиент всё же отправит этот callback
         @dp.callback_query(F.data == "action:new")
@@ -290,17 +290,17 @@ def register_handlers(dp, bot=None):
             """Заглушка для устаревшей кнопки Upload New Invoice"""
             # Немедленно отвечаем на callback и сообщаем, что нужно просто отправить фото
             await call.answer("Просто отправьте новое фото")
-            
+
             # Полностью очищаем состояние и устанавливаем новое
             await state.clear()
             await state.set_state(NotaStates.awaiting_file)
-            
+
             # Отправляем сообщение без кнопок
             await call.message.answer("📱 Просто отправьте фотографию инвойса для обработки.")
-            
+
             logger.info(f"Пользователь {call.from_user.id} использовал устаревшую кнопку upload_new")
 
-                    
+
         # Регистрируем обработчик кнопки подтверждения инвойса
         @dp.callback_query(F.data == "confirm:invoice")
         async def handle_invoice_confirm(call: CallbackQuery, state: FSMContext):
@@ -318,11 +318,11 @@ def register_handlers(dp, bot=None):
                 await call.message.answer("Произошла ошибка при отправке в Syrve. Попробуйте еще раз позже.")
                 # В случае ошибки возвращаемся в режим редактирования
                 await state.set_state(NotaStates.editing)
-        
+
         # Регистрируем fallback-хендлер ПОСЛЕ всех остальных обработчиков,
         # и только для текстовых сообщений, чтобы он не перехватывал фото
         dp.message.register(text_fallback, F.content_type == 'text')
-        
+
         logger.info("Все обработчики зарегистрированы успешно")
     except Exception as e:
         logger.error(f"Ошибка при регистрации обработчиков: {e}")
@@ -355,7 +355,7 @@ async def safe_edit(bot, chat_id, msg_id, text, kb=None, **kwargs):
     """
     Безопасное редактирование сообщения с обработкой ошибок форматирования.
     Использует оптимизированную реализацию с кэшированием и обработкой ошибок.
-    
+
     Args:
         bot: Экземпляр бота
         chat_id: ID чата
@@ -371,7 +371,7 @@ async def safe_edit(bot, chat_id, msg_id, text, kb=None, **kwargs):
         text and text.startswith("\\")
     ):
         text = escape_html(text)
-    
+
     # Вызываем оптимизированную версию функции
     return await optimized_safe_edit(bot, chat_id, msg_id, text, kb, **kwargs)
 
@@ -386,50 +386,50 @@ async def handle_field_edit(message, state: FSMContext):
     Использует декоратор with_async_retry_backoff для автоматической обработки ошибок.
     """
     logger.debug(f"BUGFIX: Starting field edit handler for user {message.from_user.id}")
-    
+
     # Получаем данные из состояния
     data = await state.get_data()
     idx = data.get("edit_idx")
     field = data.get("edit_field")
     msg_id = data.get("msg_id")
     lang = data.get("lang", "en")  # Получаем язык пользователя
-    
+
     # ВАЖНО: очищаем режим редактирования, чтобы следующие сообщения обрабатывались как обычные
     await state.update_data(editing_mode=None)
     logger.debug(f"BUGFIX: Cleared editing_mode in state")
-    
+
     if idx is None or field is None or msg_id is None:
         logger.warning(
             f"Missing required field edit data in state: idx={idx}, field={field}, msg_id={msg_id}"
         )
         await message.answer(t("error.edit_data_not_found", lang=lang))
         return
-    
+
     user_id = message.from_user.id
     key = (user_id, msg_id)
-    
+
     logger.debug(f"BUGFIX: Looking for invoice data with key {key}")
     if key not in user_matches:
         logger.warning(f"No matches found for user {user_id}, message {msg_id}")
         await message.answer(t("error.invoice_data_not_found", lang=lang))
         return
-    
+
     entry = user_matches[key]
     text = message.text.strip()
-    
+
     # Показываем пользователю, что обрабатываем запрос
     processing_msg = await message.answer(t("status.processing_changes", lang=lang))
-    
+
     try:
         logger.debug(
             f"BUGFIX: Processing field edit, text: '{text[:30]}...' (truncated)"
         )
-        
+
         # Обновляем напрямую данные в инвойсе
         old_value = entry["match_results"][idx].get(field, "")
         entry["match_results"][idx][field] = text
         logger.debug(f"BUGFIX: Updated {field} from '{old_value}' to '{text}'")
-        
+
         # Запускаем матчер заново для обновленной строки, если нужно
         if field in ["name", "qty", "unit"]:
             products = data_loader.load_products("data/base_products.csv")
@@ -439,25 +439,25 @@ async def handle_field_edit(message, state: FSMContext):
             logger.debug(
                 f"BUGFIX: Re-matched item, new status: {entry['match_results'][idx].get('status')}"
             )
-        
+
         # Создаем отчет
         parsed_data = entry["parsed_data"]
         report, has_errors = build_report(parsed_data, entry["match_results"], escape_html=True)
-        
+
         # Используем HTML отчет без экранирования
         formatted_report = report
-        
+
         # Отправляем новое сообщение с обновленным отчетом
         try:
             # Проверяем наличие потенциально опасных HTML-тегов
             from app.utils.md import clean_html
             from app.keyboards import build_edit_keyboard
-            
+
             keyboard = build_edit_keyboard(True)
-            
+
             if '<' in formatted_report and '>' in formatted_report:
                 try:
-                    # Пробуем сначала с HTML-форматированием 
+                    # Пробуем сначала с HTML-форматированием
                     result = await message.answer(
                         formatted_report,
                         reply_markup=keyboard,
@@ -491,20 +491,20 @@ async def handle_field_edit(message, state: FSMContext):
                     reply_markup=keyboard,
                     parse_mode="HTML"
                 )
-            
+
             # Обновляем ссылки в user_matches с новым ID сообщения
             new_msg_id = result.message_id
             new_key = (user_id, new_msg_id)
             user_matches[new_key] = entry.copy()
-            
+
             # Удаляем старую запись
             if key in user_matches and key != new_key:
                 del user_matches[key]
-            
+
             logger.debug(f"BUGFIX: Created new report with message_id {new_msg_id}")
-            
+
         except Exception as e:
-            logger.error("Telegram error: %s Text length: %d Text sample: %s", 
+            logger.error("Telegram error: %s Text length: %d Text sample: %s",
                          str(e), len(formatted_report), formatted_report[:200])
             # Пытаемся отправить сообщение без форматирования и без клавиатуры
             try:
@@ -524,7 +524,7 @@ async def handle_field_edit(message, state: FSMContext):
                 except Exception as absolutely_final_e:
                     logger.error(f"Absolutely final fallback failed: {absolutely_final_e}")
                     raise
-        
+
     except Exception as e:
         logger.error(f"Error handling field edit: {str(e)}")
         await message.answer(
@@ -536,7 +536,7 @@ async def handle_field_edit(message, state: FSMContext):
             await bot.delete_message(message.chat.id, processing_msg.message_id)
         except Exception:
             pass
-        
+
         # Возвращаемся в режим редактирования инвойса
         await state.set_state(NotaStates.editing)
 
@@ -544,7 +544,7 @@ async def handle_field_edit(message, state: FSMContext):
 async def cb_confirm(callback: CallbackQuery, state: FSMContext):
     # Делегируем обработку в специализированный обработчик
     from app.handlers.syrve_handler import handle_invoice_confirm
-    
+
     # Используем реальную интеграцию с Syrve
     await handle_invoice_confirm(callback, state)
 
@@ -553,7 +553,7 @@ async def help_command(message, state: FSMContext):
     # Получаем язык пользователя
     data = await state.get_data()
     lang = data.get("lang", "en")
-    
+
     await state.set_state(NotaStates.help)
     await message.answer(
         t("main.bot_help", lang=lang),
@@ -607,7 +607,7 @@ from app.assistants.client import client
 async def confirm_fuzzy_name(callback: CallbackQuery, state: FSMContext):
     """
     Обработчик подтверждения fuzzy-совпадения имени продукта.
-    
+
     Args:
         callback: Callback запрос от кнопки "Да"
         state: Состояние FSM для пользователя
@@ -618,17 +618,17 @@ async def confirm_fuzzy_name(callback: CallbackQuery, state: FSMContext):
     fuzzy_line = data.get("fuzzy_line")
     fuzzy_msg_id = data.get("fuzzy_msg_id")
     lang = data.get("lang", "en")  # Получаем язык пользователя
-    
+
     if not all([fuzzy_match, fuzzy_line is not None, fuzzy_msg_id]):
         await callback.message.answer(t("error.confirm_data_not_found", lang=lang))
         await state.set_state(NotaStates.editing)
         await callback.answer()
         return
-    
+
     # Получаем ключ для доступа к данным инвойса
     user_id = callback.from_user.id
     key = (user_id, fuzzy_msg_id)
-    
+
     if key not in user_matches:
         alt_keys = [k for k in user_matches.keys() if k[0] == user_id]
         if alt_keys:
@@ -638,48 +638,48 @@ async def confirm_fuzzy_name(callback: CallbackQuery, state: FSMContext):
             await state.set_state(NotaStates.editing)
             await callback.answer()
             return
-    
+
     entry = user_matches[key]
-    
+
     # Обновляем имя продукта
     entry["match_results"][fuzzy_line]["name"] = fuzzy_match
-    
+
     # Загружаем базу продуктов для перепроверки совпадения
     products = data_loader.load_products("data/base_products.csv")
-    
+
     # Перезапускаем matcher для обновленной строки
     updated_positions = matcher.match_positions(
-        [entry["match_results"][fuzzy_line]], 
+        [entry["match_results"][fuzzy_line]],
         products
     )
-    
+
     if updated_positions:
         entry["match_results"][fuzzy_line] = updated_positions[0]
-    
+
     # Формируем новый отчет
     report, has_errors = build_report(entry["parsed_data"], entry["match_results"], escape_html=True)
-    
+
     # Отправляем сообщение с обновленным отчетом
     result = await callback.message.answer(
         report,
         reply_markup=build_main_kb(has_errors=has_errors),
         parse_mode="HTML"
     )
-    
+
     # Обновляем ссылку в user_matches с новым ID сообщения
     new_msg_id = result.message_id
     new_key = (user_id, new_msg_id)
     user_matches[new_key] = entry.copy()
-    
+
     # Сохраняем новый message_id в state
     await state.update_data(edit_msg_id=new_msg_id)
-    
+
     # Убираем клавиатуру с кнопками подтверждения
     await callback.message.edit_reply_markup(reply_markup=None)
-    
+
     # Возвращаемся в режим обычного редактирования
     await state.set_state(NotaStates.editing)
-    
+
     # Отвечаем на callback
     await callback.answer()
 
@@ -687,7 +687,7 @@ async def confirm_fuzzy_name(callback: CallbackQuery, state: FSMContext):
 async def reject_fuzzy_name(callback: CallbackQuery, state: FSMContext):
     """
     Обработчик отклонения fuzzy-совпадения имени продукта.
-    
+
     Args:
         callback: Callback запрос от кнопки "Нет"
         state: Состояние FSM для пользователя
@@ -698,17 +698,17 @@ async def reject_fuzzy_name(callback: CallbackQuery, state: FSMContext):
     fuzzy_line = data.get("fuzzy_line")
     fuzzy_msg_id = data.get("fuzzy_msg_id")
     lang = data.get("lang", "en")  # Получаем язык пользователя
-    
+
     if not all([fuzzy_original, fuzzy_line is not None, fuzzy_msg_id]):
         await callback.message.answer(t("error.reject_data_not_found", lang=lang))
         await state.set_state(NotaStates.editing)
         await callback.answer()
         return
-    
+
     # Получаем ключ для доступа к данным инвойса
     user_id = callback.from_user.id
     key = (user_id, fuzzy_msg_id)
-    
+
     if key not in user_matches:
         alt_keys = [k for k in user_matches.keys() if k[0] == user_id]
         if alt_keys:
@@ -718,37 +718,37 @@ async def reject_fuzzy_name(callback: CallbackQuery, state: FSMContext):
             await state.set_state(NotaStates.editing)
             await callback.answer()
             return
-    
+
     entry = user_matches[key]
-    
+
     # Используем оригинальное введенное имя
     entry["match_results"][fuzzy_line]["name"] = fuzzy_original
     entry["match_results"][fuzzy_line]["status"] = "unknown"
-    
+
     # Формируем новый отчет
     report, has_errors = build_report(entry["parsed_data"], entry["match_results"], escape_html=True)
-    
+
     # Отправляем сообщение с обновленным отчетом
     result = await callback.message.answer(
         report,
         reply_markup=build_main_kb(has_errors=has_errors),
         parse_mode="HTML"
     )
-    
+
     # Обновляем ссылку в user_matches с новым ID сообщения
     new_msg_id = result.message_id
     new_key = (user_id, new_msg_id)
     user_matches[new_key] = entry.copy()
-    
+
     # Сохраняем новый message_id в state
     await state.update_data(edit_msg_id=new_msg_id)
-    
+
     # Убираем клавиатуру с кнопками подтверждения
     await callback.message.edit_reply_markup(reply_markup=None)
-    
+
     # Возвращаемся в режим обычного редактирования
     await state.set_state(NotaStates.editing)
-    
+
     # Отвечаем на callback
     await callback.answer()
 
@@ -758,7 +758,7 @@ async def text_fallback(message):
     # Более подробное сообщение с инструкцией
     await message.answer(
         "📸 Пожалуйста, отправьте фотографию инвойса (только изображение).\n\n"
-        "Бот обрабатывает только фотографии, текстовые сообщения не поддерживаются.", 
+        "Бот обрабатывает только фотографии, текстовые сообщения не поддерживаются.",
         parse_mode=None
     )
     # Логируем для отладки
@@ -786,17 +786,17 @@ import os
 
 def _graceful_shutdown(signum, frame):
     logger.info(f"Получен сигнал завершения ({signum}), выполняем graceful shutdown...")
-    
+
     # Устанавливаем общий таймаут в 25 секунд для гарантированного завершения
     # даже если что-то зависнет в процессе shutdown
     def alarm_handler(signum, frame):
         logger.warning("Таймаут graceful shutdown превышен, принудительное завершение")
         sys.exit(1)
-    
+
     # Установка обработчика сигнала и таймера
     old_alarm_handler = signal.signal(signal.SIGALRM, alarm_handler)
     old_alarm_time = signal.alarm(25)  # 25 секунд на все операции
-    
+
     try:
         # 1. Stop background threads first
         logger.info("Останавливаем фоновые потоки...")
@@ -806,7 +806,7 @@ def _graceful_shutdown(signum, frame):
             if hasattr(_local_cache, 'stop_cleanup'):
                 _local_cache.stop_cleanup()
                 logger.info("Поток очистки кэша остановлен")
-            
+
             # Очищаем флаги блокировок пользователей
             from app.utils.processing_guard import clear_all_locks
             clear_all_locks()
@@ -840,7 +840,7 @@ def _graceful_shutdown(signum, frame):
                     logger.warning("Timeout waiting for thread pool shutdown")
                 except Exception as pool_err:
                     logger.error(f"Ошибка при остановке thread pool: {pool_err}")
-            
+
             # Close the OpenAI client connection
             try:
                 from app.config import get_chat_client
@@ -896,11 +896,11 @@ def _graceful_shutdown(signum, frame):
                     for task in pending:
                         if not task.done():
                             task.cancel()
-                    
+
                     # Уменьшаем таймаут с 2 до 1 сек
                     try:
                         gather_task = asyncio.run_coroutine_threadsafe(
-                            asyncio.gather(*pending, return_exceptions=True), 
+                            asyncio.gather(*pending, return_exceptions=True),
                             loop
                         )
                         gather_task.result(timeout=1.0)
@@ -908,13 +908,13 @@ def _graceful_shutdown(signum, frame):
                         logger.warning("Timeout waiting for tasks to cancel")
                     except Exception as e:
                         logger.error(f"Ошибка при отмене задач: {e}")
-                        
+
                 # Now stop the loop
                 loop.stop()
                 logger.info("Event loop остановлен")
         except Exception as loop_err:
             logger.error(f"Ошибка при остановке event loop: {loop_err}")
-        
+
         # Если loop всё ещё активен, то принудительно останавливаем его
         if loop and loop.is_running():
             logger.warning("Event loop всё ещё активен, принудительно останавливаем...")
@@ -925,8 +925,8 @@ def _graceful_shutdown(signum, frame):
     finally:
         # Восстанавливаем предыдущий обработчик сигнала и таймер
         signal.signal(signal.SIGALRM, old_alarm_handler)
-        signal.alarm(old_alarm_time)  
-        
+        signal.alarm(old_alarm_time)
+
         logger.info("Graceful shutdown завершен")
         # Гарантированное завершение процесса
         os._exit(0)
@@ -941,20 +941,20 @@ if __name__ == "__main__":
         parser.add_argument('--test-mode', action='store_true', help='Запуск в тестовом режиме для проверки зависимостей')
         parser.add_argument('--force-restart', action='store_true', help='Принудительно сбросить сессию Telegram API перед запуском')
         args = parser.parse_args()
-        
+
         # Создаем директорию для логов если её нет
         os.makedirs("logs", exist_ok=True)
-        
+
         # Запускаем монитор ошибок
         from app.actions.error_monitor import start_error_monitor
         error_monitor = start_error_monitor("logs/bot.log")
         logger.info("AI Action монитор ошибок запущен")
-        
+
         # Сбрасываем все блокировки пользователей при запуске
         from app.utils.processing_guard import clear_all_locks
         clear_all_locks()
         logger.info("Все блокировки пользователей сброшены при запуске")
-        
+
         # Тестовый режим - просто проверяем зависимости и выходим
         if args.test_mode:
             logger.info("Запущен в тестовом режиме. Проверка зависимостей:")
@@ -965,23 +965,23 @@ if __name__ == "__main__":
             except ImportError as e:
                 logger.error(f"❌ Error importing numpy: {e}")
                 return 1
-            
+
             # Другие проверки оптимизированы - используем try...except вместо if
             try:
                 from PIL import Image
                 logger.info("✅ Pillow imported successfully")
             except ImportError as e:
                 logger.error(f"❌ Error importing Pillow: {e}")
-                
+
             try:
                 from app.utils.async_ocr import async_ocr
                 logger.info("✅ Async OCR module loaded successfully")
             except ImportError as e:
                 logger.error(f"❌ Error importing async_ocr: {e}")
-                
+
             logger.info("✅ All dependencies check passed!")
             return 0
-        
+
         # Стандартный запуск бота
         # Предварительно загружаем данные в кеш асинхронно
         async def preload_data():
@@ -995,15 +995,15 @@ if __name__ == "__main__":
             except Exception as e:
                 logger.warning(f"Ошибка при предварительной загрузке данных: {e}")
                 return False
-                
+
         # Запускаем предварительную загрузку в фоне
         # Сохраняем ссылку на задачу, чтобы она не была собрана сборщиком мусора
         global _preload_task
         _preload_task = asyncio.create_task(preload_data())
-        
+
         # Создаем бота и диспетчер
         bot, dp = create_bot_and_dispatcher()
-        
+
         # Если указан флаг force-restart, выполняем сброс сессии Telegram API
         if args.force_restart:
             try:
@@ -1015,19 +1015,19 @@ if __name__ == "__main__":
                 logger.info("Existing webhook and polling sessions terminated")
             except Exception as e:
                 logger.error(f"Error during forced restart: {e}")
-        
+
         # Регистрируем обработчики
         register_handlers(dp, bot)
-        
+
         # Проверка конфигурации логирования
         root_logger = logging.getLogger()
         logger.debug(f"Logger configuration: {len(root_logger.handlers)} handlers")
-        
+
         # Запускаем бота сразу, не дожидаясь инициализации пула
         logger.info("Starting bot polling...")
         global _polling_task
         _polling_task = asyncio.create_task(dp.start_polling(bot, drop_pending_updates=True))
-        
+
         # Инициализируем пул потоков OpenAI Assistant API в фоновом режиме
         from app.utils.timing_logger import async_timed
         @async_timed(operation_name="openai_pool_init")
@@ -1039,15 +1039,15 @@ if __name__ == "__main__":
                 logger.info("OpenAI thread pool initialized successfully")
             except Exception as e:
                 logger.error(f"Error initializing OpenAI pool: {e}")
-        
+
         # Запускаем инициализацию пула в фоновом режиме
         # Сохраняем ссылку на задачу, чтобы она не была собрана сборщиком мусора
         global _pool_task
         _pool_task = asyncio.create_task(init_openai_pool())
-        
+
         # Выводим информацию о включенных оптимизациях
         logger.info("Bot is now running and ready to process messages!")
-        
+
         try:
             # Запускаем поллинг напрямую, без создания отдельной задачи
             logger.info("Запускаем поллинг напрямую...")

@@ -3,6 +3,7 @@ from app.utils.md import escape_html, escape_v2
 
 def test_escape_html_basic():
     import html
+
     cases = [
         ("<b>bold</b>", "&lt;b&gt;bold&lt;/b&gt;"),
         ("Fish & Chips", "Fish &amp; Chips"),

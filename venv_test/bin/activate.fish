@@ -29,7 +29,7 @@ end
 # Unset irrelevant variables.
 deactivate nondestructive
 
-set -gx VIRTUAL_ENV "/Users/denisdomashenko/nota-optimized/venv_test"
+set -gx VIRTUAL_ENV "/Users/denisdomashenko/Nota-v3-/venv_test"
 
 set -gx _OLD_VIRTUAL_PATH $PATH
 set -gx PATH "$VIRTUAL_ENV/bin" $PATH

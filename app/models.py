@@ -1,9 +1,9 @@
-import sys
 import datetime
-from pydantic import field_validator
+import sys
 from datetime import date
 from typing import Optional, Union
-from pydantic import BaseModel
+
+from pydantic import BaseModel, field_validator
 
 
 class Product(BaseModel):

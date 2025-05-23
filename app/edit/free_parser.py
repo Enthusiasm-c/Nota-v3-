@@ -7,15 +7,40 @@ DATE_PATTERNS = [
     r"invoice date\s*[—-]?\s*(.+)",
 ]
 WORD_NUMS = {
-    "один": 1, "два": 2, "три": 3, "четыре": 4, "пять": 5, "шесть": 6, "семь": 7, "восемь": 8, "девять": 9, "десять": 10,
-    "1": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9, "10": 10
+    "один": 1,
+    "два": 2,
+    "три": 3,
+    "четыре": 4,
+    "пять": 5,
+    "шесть": 6,
+    "семь": 7,
+    "восемь": 8,
+    "девять": 9,
+    "десять": 10,
+    "1": 1,
+    "2": 2,
+    "3": 3,
+    "4": 4,
+    "5": 5,
+    "6": 6,
+    "7": 7,
+    "8": 8,
+    "9": 9,
+    "10": 10,
 }
 FIELD_SYNONYMS = {
-    "название": "name", "наименование": "name", "имя": "name",
-    "кол-во": "qty", "количество": "qty",
-    "единица": "unit", "ед": "unit",
+    "название": "name",
+    "наименование": "name",
+    "имя": "name",
+    "кол-во": "qty",
+    "количество": "qty",
+    "единица": "unit",
+    "ед": "unit",
     "цена": "price",
-    "name": "name", "qty": "qty", "unit": "unit", "price": "price"
+    "name": "name",
+    "qty": "qty",
+    "unit": "unit",
+    "price": "price",
 }
 LINE_EDIT_PATTERN = r"строка\s*(\w+)\s*(name|qty|unit|price|имя|кол-во|единица|цена|название|наименование|количество|ед|единиц[аы]|имя)\s+(.+)"
 REMOVE_PATTERN = r"(удали|игнор)\s*(\d+)"
@@ -74,6 +99,7 @@ def apply_edit(ctx: dict, intent: dict) -> dict:
     Возвращает новый ctx (invoice dict).
     """
     from copy import deepcopy
+
     invoice = deepcopy(ctx)
     positions = invoice.get("positions", [])
     action = intent.get("action")
@@ -104,12 +130,7 @@ def apply_edit(ctx: dict, intent: dict) -> dict:
             qty = parts[-3]
             unit = parts[-2]
             price = parts[-1]
-            positions.append({
-                "name": name,
-                "qty": qty,
-                "unit": unit,
-                "price": price
-            })
+            positions.append({"name": name, "qty": qty, "unit": unit, "price": price})
             invoice["positions"] = positions
     # Для finish и unknown — ничего не делаем
     return invoice

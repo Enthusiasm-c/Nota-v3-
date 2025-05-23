@@ -53,7 +53,7 @@ view_log() {
 search_logs() {
     local pattern=$1
     local log_file=$2
-    
+
     if [ -f "$log_file" ]; then
         echo -e "${GREEN}[+] Поиск '$pattern' в файле ${log_file}${NC}"
         echo -e "${CYAN}=======================================${NC}"
@@ -71,7 +71,7 @@ while true; do
     show_menu
     read -n 1 option
     echo ""
-    
+
     case $option in
         1)
             view_log "$LOG_DIR/errors.log"
@@ -129,4 +129,4 @@ while true; do
             read -n 1 -s -r -p "Нажмите любую клавишу для продолжения..."
             ;;
     esac
-done 
+done

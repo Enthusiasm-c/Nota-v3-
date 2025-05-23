@@ -1,7 +1,8 @@
 import csv
-from typing import List, Dict
-from app.models import Product
+from typing import Dict, List
+
 from app.alias import read_aliases
+from app.models import Product
 
 
 def load_suppliers(path: str = "data/base_suppliers.csv") -> List[Dict]:
@@ -50,9 +51,7 @@ def load_products(
                     name=prod.get("name", ""),
                     alias=alias_l,  # alias — это именно тот alias, который добавлен
                     unit=prod.get("unit", ""),
-                    price_hint=(
-                        float(prod["price_hint"]) if prod.get("price_hint") else None
-                    ),
+                    price_hint=(float(prod["price_hint"]) if prod.get("price_hint") else None),
                 )
             )
 

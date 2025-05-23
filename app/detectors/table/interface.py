@@ -1,5 +1,6 @@
-from typing import List, Dict, Any
 from abc import ABC, abstractmethod
+from typing import Any, Dict, List
+
 
 class TableDetector(ABC):
     @abstractmethod
@@ -16,4 +17,4 @@ class TableDetector(ABC):
         Извлекает содержимое ячеек в виде отдельных изображений или ROI.
         Возвращает список словарей с координатами и байтами ячеек.
         """
-        pass 
+        pass

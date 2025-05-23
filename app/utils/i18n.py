@@ -5,4 +5,4 @@
 
 from app.i18n import t
 
-__all__ = ["t"] 
+__all__ = ["t"]

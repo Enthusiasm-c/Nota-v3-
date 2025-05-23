@@ -1,4 +1,5 @@
 import inspect
+
 from app import matcher
 from app.formatters.report import build_report
 

@@ -1,10 +1,29 @@
+"""
+Контекст для отслеживания запросов.
+"""
+
 import contextvars
 
-# Глобальный contextvar для trace_id
-trace_id_var = contextvars.ContextVar("trace_id", default=None)
+# Контекстная переменная для хранения ID запроса
+request_id_var = contextvars.ContextVar("request_id", default=None)
 
-def set_trace_id(trace_id: str):
-    trace_id_var.set(trace_id)
 
-def get_trace_id() -> str:
-    return trace_id_var.get()
+def get_request_id() -> str:
+    """
+    Получить ID текущего запроса.
+    """
+    return request_id_var.get()
+
+
+def set_request_id(request_id: str) -> None:
+    """
+    Установить ID текущего запроса.
+    """
+    request_id_var.set(request_id)
+
+
+def reset_request_id() -> None:
+    """
+    Сбросить ID текущего запроса.
+    """
+    request_id_var.set(None)

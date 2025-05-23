@@ -2,17 +2,17 @@
 Тесты для проверки обработки массива actions в parse_assistant_output.
 """
 
-from app.assistants.client import parse_assistant_output, EditCommand
+from app.assistants.client import EditCommand, parse_assistant_output
 
 
 def test_parse_assistant_output_with_actions_array():
     """Проверяет, что parse_assistant_output корректно обрабатывает массив actions."""
     # Тестовый JSON с массивом actions
     test_json = """{"actions":[{"action":"set_date","date":"26.04"}]}"""
-    
+
     # Парсинг ответа ассистента
     result = parse_assistant_output(test_json)
-    
+
     # Проверяем, что парсинг сработал корректно
     assert isinstance(result, list)
     assert len(result) == 1
@@ -28,10 +28,10 @@ def test_parse_assistant_output_with_multiple_actions():
         {"action":"set_date","date":"26.04"},
         {"action":"set_price","row":1,"price":100}
     ]}"""
-    
+
     # Парсинг ответа ассистента
     result = parse_assistant_output(test_json)
-    
+
     # Проверяем, что парсинг сработал корректно и вернул оба действия
     assert isinstance(result, list)
     assert len(result) == 2
@@ -45,10 +45,10 @@ def test_parse_assistant_output_with_single_action():
     """Проверяет, что parse_assistant_output по-прежнему корректно обрабатывает одиночное action."""
     # Тестовый JSON с одиночным action
     test_json = """{"action":"set_date","date":"26.04"}"""
-    
+
     # Парсинг ответа ассистента
     result = parse_assistant_output(test_json)
-    
+
     # Проверяем, что парсинг сработал корректно
     assert isinstance(result, list)
     assert len(result) == 1
@@ -63,15 +63,15 @@ def test_parse_assistant_output_with_invalid_actions():
         {"not_an_action":"something"},
         {"action":"set_price","row":1,"price":100}
     ]}"""
-    
+
     # Парсинг ответа ассистента
     result = parse_assistant_output(test_json)
-    
+
     # Проверяем, что парсинг вернул только валидное действие
     assert isinstance(result, list)
     assert len(result) == 1
     assert result[0].action == "set_price"
-    
+
 
 def test_parse_assistant_output_with_no_valid_actions():
     """Проверяет обработку случая, когда нет валидных действий."""
@@ -80,10 +80,10 @@ def test_parse_assistant_output_with_no_valid_actions():
         {"not_an_action":"something"},
         {"another_field":"value"}
     ]}"""
-    
+
     # Парсинг ответа ассистента
     result = parse_assistant_output(test_json)
-    
+
     # Проверяем, что парсинг вернул ошибку
     assert isinstance(result, list)
     assert len(result) == 1

@@ -35,9 +35,11 @@ def test_report_layout_strict():
     assert "UD. WIDI WIGUNA" in report
     assert "Invoice date:" in report
     assert "2025-04-29" in report
+
     # Divider и <pre>
     def pad(text, width):
         return str(text)[:width].ljust(width)
+
     header = f"#  {pad('NAME',14)}{pad('QTY',5)}{pad('UNIT',5)}{pad('PRICE',6)}! "
     assert header in report
     assert "<pre>" in report
@@ -45,10 +47,10 @@ def test_report_layout_strict():
     assert "olive oil or…" in report
     assert "verylongprod…" in report
     # Проверяем, что для ошибочных позиций есть ❗
-    assert report.count('❗') >= 2  # две ошибочные строки
+    assert report.count("❗") >= 2  # две ошибочные строки
     # Проверяем, что для корректной позиции (verylongproductnamethatiswaytoolong) нет ❗ в её строке
     for line in report.splitlines():
-        if "verylongproductnamethatiswaytoolong" in line and '|' in line:
+        if "verylongproductnamethatiswaytoolong" in line and "|" in line:
             assert "❗" not in line
     # Проверяем summary
     assert "❗" in report or "<b>Нет ошибок. Все позиции распознаны корректно.</b>" in report

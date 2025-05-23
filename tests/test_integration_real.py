@@ -1,7 +1,8 @@
+from datetime import date
+
 from app import data_loader, matcher
 from app.formatters.report import build_report
 from app.models import ParsedData, Position
-from datetime import date
 
 
 def test_full_flow_with_real_data():

@@ -1,12 +1,15 @@
-from unittest.mock import patch, MagicMock
-from app.utils import redis_cache
 import json
+from unittest.mock import MagicMock, patch
+
+from app.utils import redis_cache
+
 
 def setup_function(function):
     redis_cache._redis = None
 
+
 def test_cache_set_and_get_mock():
-    with patch('app.utils.redis_cache.redis.Redis.from_url') as mock_from_url:
+    with patch("app.utils.redis_cache.redis.Redis.from_url") as mock_from_url:
         mock_instance = MagicMock()
         mock_from_url.return_value = mock_instance
         key = "test:key"
@@ -20,8 +23,9 @@ def test_cache_set_and_get_mock():
         mock_instance.get.return_value = None
         assert redis_cache.cache_get(key) is None
 
+
 def test_cache_overwrite_mock():
-    with patch('app.utils.redis_cache.redis.Redis.from_url') as mock_from_url:
+    with patch("app.utils.redis_cache.redis.Redis.from_url") as mock_from_url:
         mock_instance = MagicMock()
         mock_from_url.return_value = mock_instance
         key = "test:key2"
@@ -33,7 +37,7 @@ def test_cache_overwrite_mock():
         assert json.loads(mock_instance.get.return_value.decode("utf-8")) == value1
         # сбросить синглтон для повторного мока
         redis_cache._redis = None
-        with patch('app.utils.redis_cache.redis.Redis.from_url') as mock_from_url2:
+        with patch("app.utils.redis_cache.redis.Redis.from_url") as mock_from_url2:
             mock_instance2 = MagicMock()
             mock_from_url2.return_value = mock_instance2
             redis_cache.cache_set(key, value2, ex=5)

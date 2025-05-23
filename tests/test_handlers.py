@@ -1,6 +1,8 @@
-import pytest
-from bot import create_bot_and_dispatcher, register_handlers
 from unittest.mock import AsyncMock
+
+import pytest
+
+from bot import create_bot_and_dispatcher, register_handlers
 
 
 @pytest.mark.asyncio

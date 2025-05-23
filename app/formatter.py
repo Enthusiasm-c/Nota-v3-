@@ -1,5 +1,5 @@
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import Any, Union
 
 # Ширины колонок для табличного отчёта
 W_IDX = 3
@@ -22,29 +22,25 @@ def escape_md(text: str, version: int = 2) -> str:
     return text
 
 
-
-
 def format_idr(val: Any) -> str:
     """Форматирует число в стиль '1 234 567 IDR' с узким пробелом"""
     try:
         if val is None:
             return "—"
         dec = Decimal(str(val))
-        return (
-            f"{dec:,.0f}".replace(",", "\u2009") + " IDR"
-        )
+        return f"{dec:,.0f}".replace(",", "\u2009") + " IDR"
     except (InvalidOperation, ValueError, TypeError):
         return "—"
 
 
 def _row(
-    idx: str | int,
+    idx: Union[str, int],
     name: str,
-    qty: str | int | float,
+    qty: Union[str, int, float],
     unit: str,
     price: Any,
     total: Any,
-    status: str | None,
+    status: Union[str, None],
 ) -> str:
     name = (name[: W_NAME - 1] + "…") if len(name) > W_NAME else name
     price_str = format_idr(price) if price not in (None, "") else "—"

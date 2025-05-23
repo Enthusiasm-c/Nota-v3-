@@ -1,10 +1,11 @@
-import os
-import tempfile
 import logging
+import os
+import shutil
+import tempfile
 import time
-from pathlib import Path
 from contextlib import contextmanager
-from typing import Optional
+from pathlib import Path
+from typing import Generator, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -17,20 +18,74 @@ MAX_FILE_AGE = {
     "test": 2,
 }
 
+
 def ensure_temp_dirs() -> None:
     for dir_path in TMP_DIRS.values():
         os.makedirs(dir_path, exist_ok=True)
         logger.debug(f"Temp directory ensured: {dir_path}")
 
+
 @contextmanager
-def temp_file(prefix: str, suffix: str, dir_type: str = "ocr") -> Path:
-    ensure_temp_dirs()
-    dir_path = TMP_DIRS.get(dir_type, TMP_DIRS["ocr"])
-    file_path = dir_path / f"{prefix}_{int(time.time())}{suffix}"
+def temp_file_path(
+    prefix: str, suffix: str, directory: Optional[str] = None
+) -> Generator[Path, None, None]:
+    """
+    Контекстный менеджер для создания временного файла.
+
+    Args:
+        prefix: Префикс имени файла
+        suffix: Суффикс имени файла
+        directory: Директория для создания файла
+
+    Yields:
+        Path: Путь к временному файлу
+    """
+    temp_dir = directory or tempfile.gettempdir()
+    temp_path = Path(tempfile.mktemp(prefix=prefix, suffix=suffix, dir=temp_dir))
     try:
-        yield file_path
+        yield temp_path
     finally:
-        logger.debug(f"Temp file created: {file_path}")
+        if temp_path.exists():
+            temp_path.unlink()
+
+
+@contextmanager
+def temp_directory(
+    prefix: str = "tmp_", parent_dir: Optional[str] = None
+) -> Generator[Path, None, None]:
+    """
+    Контекстный менеджер для создания временной директории.
+
+    Args:
+        prefix: Префикс имени директории
+        parent_dir: Родительская директория
+
+    Yields:
+        Path: Путь к временной директории
+    """
+    temp_dir = tempfile.mkdtemp(prefix=prefix, dir=parent_dir)
+    try:
+        yield Path(temp_dir)
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def safe_file_write(path: Path, content: bytes) -> None:
+    """
+    Безопасная запись в файл через временный файл.
+
+    Args:
+        path: Путь к файлу
+        content: Содержимое для записи
+    """
+    temp_path = path.with_suffix(path.suffix + ".tmp")
+    try:
+        temp_path.write_bytes(content)
+        temp_path.replace(path)
+    finally:
+        if temp_path.exists():
+            temp_path.unlink()
+
 
 def cleanup_temp_files(force: bool = False) -> int:
     now = time.time()
@@ -53,6 +108,7 @@ def cleanup_temp_files(force: bool = False) -> int:
                     logger.warning(f"Failed to delete temp file {file_path}: {e}")
     return deleted_count
 
+
 def save_test_image(image_bytes: bytes, req_id: str) -> Optional[Path]:
     ensure_temp_dirs()
     test_dir = TMP_DIRS["test"]
@@ -64,4 +120,3 @@ def save_test_image(image_bytes: bytes, req_id: str) -> Optional[Path]:
         return file_path
     except Exception as e:
         logger.error(f"Failed to save test image: {e}")
-        return None 

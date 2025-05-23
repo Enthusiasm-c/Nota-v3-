@@ -149,7 +149,7 @@ tail -f logs/nota.log
 
 ### Memory Issues
 - Check memory usage: `free -m`
-- Consider adding swap: 
+- Consider adding swap:
   ```bash
   sudo fallocate -l 1G /swapfile
   sudo chmod 600 /swapfile

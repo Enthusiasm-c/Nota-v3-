@@ -4,4 +4,4 @@
 
 from .prepare import prepare_for_ocr, resize_image
 
-__all__ = ['prepare_for_ocr', 'resize_image']
+__all__ = ["prepare_for_ocr", "resize_image"]

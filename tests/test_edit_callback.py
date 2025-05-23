@@ -1,5 +1,5 @@
-from app.keyboards import build_main_kb
 from app.formatters.report import build_report
+from app.keyboards import build_main_kb
 
 
 def test_edit_callback_flow():

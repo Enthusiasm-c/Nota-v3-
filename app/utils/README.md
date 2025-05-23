@@ -22,23 +22,23 @@ async def handle_long_process(message: Message):
     # Инициализируем и запускаем UI
     ui = IncrementalUI(message.bot, message.chat.id)
     await ui.start("Начинаем обработку...")
-    
+
     try:
         # Шаг 1: Загрузка данных
         await ui.start_spinner()  # Запуск анимированного спиннера
         data = await load_data()
         ui.stop_spinner()  # Остановка спиннера
         await ui.update("✅ Данные загружены")
-        
+
         # Шаг 2: Обработка данных
         await ui.append("🔄 Обработка данных...")
         await process_data(data)
         await ui.update("✅ Данные обработаны", replace_last=True)
-        
+
         # Шаг 3: Формирование отчета
         await ui.append("📊 Формирование отчета...")
         result = await generate_report(data)
-        
+
         # Добавляем результат с клавиатурой
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[[
@@ -46,12 +46,12 @@ async def handle_long_process(message: Message):
                 InlineKeyboardButton(text="Готово", callback_data="done")
             ]]
         )
-        
+
         # Завершаем UI с финальным сообщением и клавиатурой
         await ui.complete("✅ Обработка завершена!", keyboard)
-        
+
         return result
-        
+
     except Exception as e:
         # В случае ошибки, показываем информативное сообщение
         await ui.error(f"Произошла ошибка: {str(e)}")

@@ -1,6 +1,8 @@
-from app.formatters.report import build_report
-from types import SimpleNamespace
 import html
+from types import SimpleNamespace
+
+from app.formatters.report import build_report
+
 
 def test_build_report_with_escape_html():
     """Проверяет работу build_report с параметром escape_html=True."""
