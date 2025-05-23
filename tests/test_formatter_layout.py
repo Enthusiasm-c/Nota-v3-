@@ -36,7 +36,8 @@ def test_report_layout_strict():
     assert "Invoice date:" in report
     assert "2025-04-29" in report
     # Divider и <pre>
-    pad = lambda text, width: str(text)[:width].ljust(width)
+    def pad(text, width):
+        return str(text)[:width].ljust(width)
     header = f"#  {pad('NAME',14)}{pad('QTY',5)}{pad('UNIT',5)}{pad('PRICE',6)}! "
     assert header in report
     assert "<pre>" in report

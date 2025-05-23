@@ -6,7 +6,7 @@
 #
 aiofiles==24.1.0
     # via aiogram
-aiogram==3.20.0.post0
+aiogram>=3.20.0
     # via -r requirements.in
 aiohappyeyeballs==2.6.1
     # via aiohttp
@@ -64,7 +64,7 @@ multidict==6.4.3
     # via
     #   aiohttp
     #   yarl
-openai==1.77.0
+openai>=1.77.0,<2.0.0
     # via -r requirements.in
 packaging==25.0
     # via pytest
@@ -102,7 +102,7 @@ python-levenshtein==0.27.1
     # via -r requirements.in
 pyyaml==6.0.2
     # via vcrpy
-rapidfuzz==3.13.0
+rapidfuzz>=3.0.0
     # via
     #   -r requirements.in
     #   levenshtein
@@ -138,3 +138,14 @@ yarl==1.20.0
     # via
     #   aiohttp
     #   vcrpy
+    
+# Added for image processing
+numpy>=1.24.0
+opencv-python>=4.8.0
+Pillow>=10.0.0
+
+# Added for caching
+redis>=6.0.0
+
+# Added for HTTP requests
+requests>=2.30.0

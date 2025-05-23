@@ -7,40 +7,27 @@ import logging
 class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str = ""
     OPENAI_API_KEY: str = ""
-    OPENAI_MODEL: str = "gpt-3.5-turbo"
+    OPENAI_MODEL: str = "gpt-4.1 mini"
+    OPENAI_GPT_MODEL: str = "gpt-4.1 mini"  # Added for OCR pipeline
 
     # Fuzzy matching configuration
-    MATCH_THRESHOLD: float = 0.85  # Повышаем порог сравнения с 0.75 до 0.85
+    MATCH_THRESHOLD: float = 0.75  # Default match threshold (0-1.0)
     MATCH_EXACT_BONUS: float = 0.05  # Bonus for substring matches (0-1.0)
-    MATCH_LENGTH_PENALTY: float = 0.15  # Увеличиваем штраф за разницу в длине
-    MATCH_MIN_SCORE: float = 0.6  # Повышаем минимальный порог для предложений
-    
-    # Часто ошибочно распознаваемые слова
-    SIMILAR_WORD_PAIRS: list[tuple[str, str]] = [
-        ("rice", "milk"),
-        ("milk", "rice"),
-        ("cream", "crean"),
-        ("salt", "solt"),
-        ("sugar", "suger")
-    ]
+    MATCH_LENGTH_PENALTY: float = 0.1  # Penalty weight for length differences (0-1.0)
+    MATCH_MIN_SCORE: float = 0.5  # Minimum score to show in suggestions (0-1.0)
 
     # OpenAI API configuration
     USE_OPENAI_OCR: bool = False
-    OPENAI_OCR_KEY: str = os.getenv("OPENAI_OCR_KEY", "")
+    OPENAI_OCR_KEY: str = os.getenv("OPENAI_OCR_KEY", os.getenv("OPENAI_API_KEY", ""))
     OPENAI_CHAT_KEY: str = os.getenv("OPENAI_CHAT_KEY", "")
-    OPENAI_ASSISTANT_ID: str = os.getenv("OPENAI_ASSISTANT_ID", "asst_zkAj2P6JswgpT0Nc2bcsjeIU")
-    OPENAI_VISION_ASSISTANT_ID: str = os.getenv("OPENAI_VISION_ASSISTANT_ID", "")
+    OPENAI_ASSISTANT_ID: str = os.getenv("OPENAI_ASSISTANT_ID", "")
+    OPENAI_VISION_ASSISTANT_ID: str = os.getenv("OPENAI_VISION_ASSISTANT_ID", "") # Added from app/config/settings.py
     
     # Image preprocessing configuration
     USE_IMAGE_PREPROCESSING: bool = False  # True=enable, False=disable image preprocessing
 
     # Business logic configuration
     OWN_COMPANY_ALIASES: list[str] = ["Bali Veg Ltd", "Nota AI Cafe"]
-
-    # Base URL for server (used for image links)
-    BASE_URL: str = os.environ.get("BASE_URL", "")
-
-    MAX_PRODUCTS_IN_PROMPT: int = 50
 
     model_config = SettingsConfigDict(
         extra="allow", env_file=os.getenv("ENV_FILE", ".env"), env_file_encoding="utf-8"
@@ -71,11 +58,18 @@ def get_ocr_client():
     try:
         import openai
 
-        if settings.OPENAI_OCR_KEY:
-            _ocr_client = openai.OpenAI(api_key=settings.OPENAI_OCR_KEY)
+        # Используем OPENAI_OCR_KEY, а если его нет - OPENAI_API_KEY
+        ocr_key = settings.OPENAI_OCR_KEY
+        if not ocr_key:
+            logging.warning("OPENAI_OCR_KEY не установлен, пытаемся использовать OPENAI_API_KEY")
+            ocr_key = os.getenv("OPENAI_API_KEY", "")
+        
+        if ocr_key:
+            _ocr_client = openai.OpenAI(api_key=ocr_key)
+            logging.info("OCR клиент инициализирован успешно")
             return _ocr_client
         else:
-            logging.error("OPENAI_OCR_KEY not set; OCR unavailable")
+            logging.error("OPENAI_OCR_KEY и OPENAI_API_KEY не установлены; OCR недоступен")
             return None
     except ImportError:
         logging.error("openai package not installed; OCR unavailable")

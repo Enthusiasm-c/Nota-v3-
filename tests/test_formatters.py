@@ -1,5 +1,4 @@
-import pytest
-from app.utils.formatters import format_price, format_quantity, parse_date, clean_num
+from app.utils.formatters import format_price, format_quantity, parse_date
 
 def test_format_price():
     """Тестирование форматирования цен в разных форматах."""

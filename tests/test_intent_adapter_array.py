@@ -3,8 +3,6 @@
 Проверяет, что IntentAdapter корректно обрабатывает формат {"actions": [{"action": "..."}]}.
 """
 
-import json
-import pytest
 from app.assistants.intent_adapter import IntentAdapter, adapt_intent
 
 

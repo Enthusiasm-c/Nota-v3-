@@ -7,7 +7,6 @@ Usage:
     python scripts/update_assistant.py
 """
 
-import os
 import sys
 from pathlib import Path
 from openai import OpenAI

@@ -1,15 +1,24 @@
-import logging
+"""
+Monitoring utilities using Prometheus metrics.
+"""
 import time
+import logging
 from collections import deque
 from threading import Lock
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Union, TypeVar, cast
+from typing_extensions import TypedDict
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 # Prometheus metric classes
 try:
-    import prometheus_client as prom
+    from prometheus_client import Counter, Histogram  # type: ignore
     HAS_PROMETHEUS = True
+    PROMETHEUS_AVAILABLE = True
 except ImportError:
     HAS_PROMETHEUS = False
+    PROMETHEUS_AVAILABLE = False
 
 # Monitoring metrics
 METRICS = {}
@@ -23,45 +32,147 @@ LOCAL_METRICS = {
 LOCAL_METRICS_LOCK = Lock()
 LOCAL_METRICS_FLUSH_INTERVAL = 120  # Seconds
 
-# Initialize Prometheus metrics if available
-if HAS_PROMETHEUS:
-    # Counter metrics
-    METRICS["nota_invoices_total"] = prom.Counter(
-        "nota_invoices_total",
-        "Total number of processed invoices",
-        ["status"]  # ok/failed
+# Type for metric labels
+MetricLabels = TypedDict('MetricLabels', {
+    'status': str,
+    'error': str,
+    'supplier': str
+})
+
+# Generic type for metric values
+T = TypeVar('T', Counter, Histogram)
+
+class MetricsManager:
+    """Manager for Prometheus metrics."""
+    
+    def __init__(self) -> None:
+        self.metrics: Dict[str, Union[Counter, Histogram]] = {}
+        
+    def register_counter(
+        self,
+        name: str,
+        description: str,
+        labelnames: Optional[list[str]] = None
+    ) -> None:
+        """
+        Register a new counter metric.
+        
+        Args:
+            name: Metric name
+            description: Metric description
+            labelnames: Optional list of label names
+        """
+        if not PROMETHEUS_AVAILABLE:
+            return
+            
+        if name not in self.metrics:
+            self.metrics[name] = Counter(name, description, labelnames or [])
+            
+    def register_histogram(
+        self,
+        name: str,
+        description: str,
+        labelnames: Optional[list[str]] = None,
+        buckets: Optional[list[float]] = None
+    ) -> None:
+        """
+        Register a new histogram metric.
+        
+        Args:
+            name: Metric name
+            description: Metric description
+            labelnames: Optional list of label names
+            buckets: Optional list of bucket boundaries
+        """
+        if not PROMETHEUS_AVAILABLE:
+            return
+            
+        if name not in self.metrics:
+            self.metrics[name] = Histogram(
+                name,
+                description,
+                labelnames or [],
+                buckets=buckets
+            )
+            
+    def increment_counter(
+        self,
+        name: str,
+        labels: Optional[Dict[str, str]] = None,
+        value: float = 1
+    ) -> None:
+        """
+        Increment a counter metric.
+        
+        Args:
+            name: Metric name
+            labels: Optional metric labels
+            value: Value to increment by
+        """
+        if not PROMETHEUS_AVAILABLE:
+            return
+            
+        metric = self.metrics.get(name)
+        if metric is None:
+            logger.warning(f"Metric {name} not registered")
+            return
+            
+        if not isinstance(metric, Counter):
+            logger.error(f"Metric {name} is not a Counter")
+            return
+            
+        if labels:
+            metric.labels(**labels).inc(value)
+        else:
+            metric.inc(value)
+            
+    def observe_histogram(
+        self,
+        name: str,
+        value: float,
+        labels: Optional[Dict[str, str]] = None
+    ) -> None:
+        """
+        Observe a value in a histogram metric.
+        
+        Args:
+            name: Metric name
+            value: Value to observe
+            labels: Optional metric labels
+        """
+        if not PROMETHEUS_AVAILABLE:
+            return
+            
+        metric = self.metrics.get(name)
+        if metric is None:
+            logger.warning(f"Metric {name} not registered")
+            return
+            
+        if not isinstance(metric, Histogram):
+            logger.error(f"Metric {name} is not a Histogram")
+            return
+            
+        if labels:
+            metric.labels(**labels).observe(value)
+        else:
+            metric.observe(value)
+
+# Global metrics manager instance
+metrics_manager = MetricsManager()
+
+def init_metrics() -> None:
+    """Initialize default metrics."""
+    metrics_manager.register_counter(
+        'invoice_processing_total',
+        'Total number of processed invoices',
+        ['status', 'error', 'supplier']
     )
     
-    METRICS["nota_ocr_requests_total"] = prom.Counter(
-        "nota_ocr_requests_total",
-        "Total number of OCR requests",
-        ["status"]  # ok/error
-    )
-    
-    # Histogram metrics
-    METRICS["nota_ocr_latency_ms"] = prom.Histogram(
-        "nota_ocr_latency_ms",
-        "OCR processing latency in milliseconds",
-        buckets=(500, 1000, 2000, 5000, 10000, 15000, 30000, 60000)
-    )
-    
-    METRICS["nota_ocr_tokens"] = prom.Histogram(
-        "nota_ocr_tokens",
-        "OCR token usage per request",
-        buckets=(1000, 2000, 4000, 6000, 8000, 10000, 15000)
-    )
-    
-    METRICS["assistant_latency_ms"] = prom.Histogram(
-        "assistant_latency_ms",
-        "OpenAI Assistant latency in milliseconds",
-        ["phase"],  # ocr/edits/syrve
-        buckets=(500, 1000, 2000, 5000, 10000, 15000, 30000, 60000)
-    )
-    
-    METRICS["fuzzy_suggestions"] = prom.Histogram(
-        "fuzzy_suggestions",
-        "Number of fuzzy match suggestions per request",
-        buckets=(0, 1, 2, 3, 5, 10)
+    metrics_manager.register_histogram(
+        'invoice_processing_duration_seconds',
+        'Time spent processing invoices',
+        ['supplier'],
+        buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0]
     )
 
 def increment_counter(name: str, labels: Optional[Dict[str, Any]] = None) -> None:
@@ -94,7 +205,7 @@ def increment_counter(name: str, labels: Optional[Dict[str, Any]] = None) -> Non
         return
     
     try:
-        if isinstance(METRICS[name], prom.Counter):
+        if isinstance(METRICS[name], Counter):
             # Get counter with labels
             METRICS[name].labels(**labels).inc()
     except Exception as e:
@@ -135,7 +246,7 @@ def record_histogram(name: str, value: float, labels: Optional[Dict[str, Any]] =
         return
     
     try:
-        if isinstance(METRICS[name], prom.Histogram):
+        if isinstance(METRICS[name], Histogram):
             # Get histogram with labels
             METRICS[name].labels(**labels).observe(value)
     except Exception as e:

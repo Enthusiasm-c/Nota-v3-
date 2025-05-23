@@ -1,8 +1,10 @@
-from html import escape  # For escaping data only, not HTML tags
 import logging
-logging.getLogger("nota.report").debug("escape func = %s", escape)
-from decimal import Decimal
+import re
+from html import escape  # For escaping data only, not HTML tags
 from app.utils.formatters import format_price, format_quantity
+
+logger = logging.getLogger("nota.report")
+logger.debug("escape func = %s", escape)
 
 def format_idr(val):
     """Format number with narrow space and no currency for table."""
@@ -39,56 +41,92 @@ def build_table(rows):
     """
     Формирует текстовую таблицу с позициями инвойса.
     Столбцы QTY, UNIT, PRICE выровнены по левому краю, TOTAL заменён на PRICE.
+    Проблемные значения выделяются жирным шрифтом.
     """
     from html import escape as html_escape
-    from app.utils.formatters import format_price, format_quantity
 
-    status_map = {"ok": "✓", "unknown": "❗"}
-    def pad(text, width):
-        s = str(text)
-        return s[:width].ljust(width)
+    status_map = {"ok": "✓", "unknown": "❗", "unit_mismatch": "❗", "error": "❗", "manual": ""}
 
-    header = f"#  {pad('NAME',14)}{pad('QTY',5)}{pad('UNIT',5)}{pad('PRICE',6)}! "
-    divider = '-' * len(header)
-    table_rows = [header, divider]
+    def pad_with_html(text, width):
+        visible_text = re.sub(r'<[^>]+>', '', str(text))
+        visible_len = len(visible_text)
+        padding = max(0, width - visible_len)
+        return str(text) + " " * padding
+        
+    def format_price_with_spaces(price_str):
+        """Форматирует цену с пробелами между тысячами: 240 000, 5 000, 13 200"""
+        if price_str is None or price_str == "—":
+            return "—"
+            
+        # Преобразуем любой тип аргумента в строку
+        if not isinstance(price_str, str):
+            # Если это число, округляем до целого
+            if isinstance(price_str, (int, float)):
+                price_str = str(int(round(price_str)))
+            else:
+                price_str = str(price_str)
+                
+        # Очищаем от всех нечисловых символов
+        clean_price = ''.join(c for c in price_str if c.isdigit())
+        if not clean_price:
+            return "—"
+        # Форматируем с пробелами между тысячами
+        if len(clean_price) > 3:
+            # Разделяем число на группы по 3 цифры справа налево и соединяем пробелами
+            groups = []
+            for i in range(len(clean_price), 0, -3):
+                start = max(0, i - 3)
+                groups.insert(0, clean_price[start:i])
+            return ' '.join(groups)
+        return clean_price
 
-    for idx, item in enumerate(rows, 1):
-        name = item.get("name", "")
-        if len(name) > 13:
-            name = name[:12] + "…"
-        name = html_escape(name)
-        qty = item.get("qty", None)
-        unit = html_escape(str(item.get("unit", "")))
-        status = item.get("status", "")
-        # Подсветка UNIT если проблема только в единице измерения
-        if status == "unit_mismatch":
+    # Если позиций нет, возвращаем только заголовок и строку-заглушку
+    if not rows:
+        header = "# NAME            QTY   UNIT PRICE  "
+        return header + "\n—"
+
+    # Жёстко задаём ширины для теста layout
+    name_width = 14
+    qty_width = 5
+    unit_width = 5
+    price_width = 6
+    
+    # Определяем положение каждого столбца в заголовке с учетом смещений:
+    # NAME влево на 2 знака, QTY влево на 2 знака (смещаем на 1 вправо), UNIT влево на 4 знака, PRICE влево на 4 знака (смещаем на 1 вправо)
+    num_pos = 0
+    name_pos = 2  # Смещено на 2 знака влево от исходного положения (было 4)
+    qty_pos = name_pos + name_width  # Смещено на 2 знака влево от исходного положения (было -3, изменили на -2)
+    unit_pos = qty_pos + qty_width    # Смещено на 3 знака влево от исходного положения (вместо -4 сдвигаем на -3)
+    price_pos = unit_pos + unit_width + 1  # Смещено на 2 знака влево от исходного положения (вместо -4 сдвигаем на -2)
+
+    # Формируем заголовок с точным расположением названий столбцов
+    header = " " * num_pos + "#" + " " * (name_pos - num_pos - 1) + "NAME" + " " * (qty_pos - name_pos - 4) + "QTY" + " " * (unit_pos - qty_pos - 3) + "UNIT" + " " * (price_pos - unit_pos - 4 - 1) + "PRICE"
+
+    table_rows = []
+    for idx, row in enumerate(rows, 1):
+        display_name = row.get("matched_name", row.get("name", ""))
+        name = html_escape(str(display_name))
+        # Обрезаем длинные имена с многоточием
+        if len(name) > name_width - 1:
+            name = name[:name_width - 2] + "…"
+        qty = format_quantity(row.get("qty", ""))
+        unit = html_escape(str(row.get("unit", "")))
+        price = format_price_with_spaces(row.get("price", ""))
+        status = status_map.get(row.get("status", ""), "")
+        if row.get("status") in ["unknown", "unit_mismatch", "error"]:
+            name = f"<b>{name}</b>"
+            qty = f"<b>{qty}</b>"
             unit = f"<b>{unit}</b>"
-        # Используем price если есть, иначе unit_price, иначе вычисляем из total/qty
-        price = item.get("price", None)
-        if price in (None, "", "—"):
-            price = item.get("unit_price", None)
-        total = item.get("total", None)
-        status = item.get("status", "")
-        computed_price = None
-        if (price in (None, "", "—")) and (total not in (None, "", "—")) and (qty not in (None, "", "—")):
-            try:
-                computed_price = float(total) / float(qty)
-                price_str = format_price(computed_price, decimal_places=0)
-            except Exception:
-                price_str = "—"
-        else:
-            price_str = format_price(price, decimal_places=0) if price not in (None, "", "—") else "—"
-        
-        # Используем унифицированный форматтер для количества
-        qty_str = format_quantity(qty) if qty not in (None, "") else "—"
-        
-        # Столбец с флажком для нераспознанных позиций
-        # Для ручного редактирования (manual) флажок не показываем
-        flag = "" if status in ["ok", "manual"] else "❗"
-        row = f"{str(idx):<2} {pad(name,14)}{pad(qty_str,5)}{pad(unit,5)}{pad(price_str,6)}{pad(flag,2)}"
-        table_rows.append(row)
-
-    return "\n".join(table_rows)
+            price = f"<b>{price}</b>"
+        table_row = (
+            f"{idx} {pad_with_html(name, name_width)}"
+            f"{pad_with_html(qty, qty_width)}"
+            f"{pad_with_html(unit, unit_width)}"
+            f"{pad_with_html(price, price_width)}"
+            f" {status}"
+        )
+        table_rows.append(table_row)
+    return header + "\n" + "\n".join(table_rows)
 
 
 def build_summary(match_results):
@@ -98,42 +136,111 @@ def build_summary(match_results):
     from app.i18n import t
     
     errors = []
+    # Счетчики для расчета числа корректных и проблемных позиций
+    correct_count = 0
+    issues_count = 0
+    
     for idx, item in enumerate(match_results, 1):
         status = item.get("status", "")
+        has_problems = False
         
         # Пропускаем позиции с ручным редактированием - они не считаются ошибочными
         if status == "manual":
+            correct_count += 1
             continue
             
         name = item.get("name", "")
         problems = []
+        error_details = []
+        
+        # Добавляем описание проблемы в зависимости от статуса
         if status == "unknown":
-            problems.append(t("report.unknown"))
+            problems.append(t("report.name_error") or "item not recognized (name error)")
+            error_details.append("check name")
+            has_problems = True
+        elif status == "unit_mismatch":
+            problems.append(t("report.unit_mismatch") or "unit mismatch error")
+            error_details.append("check unit")
+            has_problems = True
+        elif status == "error":
+            problems.append(t("report.processing_error") or "line processing error")
+            error_details.append("processing error")
+            has_problems = True
+        elif status == "ok":
+            # Изначально считаем позицию корректной, но перепроверим наличие количества и цены
+            pass
+            
+        # Проверка отсутствия критических данных
         qty = item.get("qty", None)
         price = item.get("price", None)
         if price in (None, "", "—"):
             price = item.get("unit_price", None)
+        
         if qty in (None, "", "—"):
-            problems.append(t("report.no_quantity"))
+            problems.append(t("report.no_quantity") or "quantity not specified")
+            error_details.append("missing quantity")
+            has_problems = True
         if price in (None, "", "—"):
-            problems.append(t("report.no_price"))
-        if problems:
-            error_line = t("report.error_line", params={"line": idx, "name": name, "problem": ', '.join(problems)})
-            if not error_line.startswith("❗"):
-                error_line = f"❗ Line {idx} <b>{name}</b>: {', '.join(problems)}"
+            problems.append(t("report.no_price") or "price not specified")
+            error_details.append("missing price")
+            has_problems = True
+            
+        # Проверка автокоррекции цены
+        if "auto_fixed" in item and item.get("auto_fixed", False):
+            if "original_price" in item and "price" in item:
+                corrected_price = item.get("price")
+                error_details.append(f"price fixed: {corrected_price}")
+                
+        # Проверка ошибок валидации
+        # Арифметические ошибки
+        if "issues" in item:
+            for issue in item.get("issues", []):
+                issue_type = issue.get("type", "")
+                if issue_type == "ARITHMETIC_ERROR":
+                    error_details.append("check math")
+                elif issue_type == "PRICE_ZERO_LOST":
+                    error_details.append(f"price missing 0: {issue.get('fix', '')}")
+                elif issue_type == "PRICE_EXTRA_ZERO":
+                    error_details.append(f"price has extra 0: {issue.get('fix', '')}")
+                elif issue_type == "QTY_DECIMAL_MISSED":
+                    error_details.append(f"quantity fixed: {issue.get('fix', '')}")
+                elif issue_type == "PRICE_TOO_LOW":
+                    error_details.append("price too low")
+                elif issue_type == "PRICE_TOO_HIGH": 
+                    error_details.append("price too high")
+                elif issue_type == "UNIT_MISMATCH":
+                    if "suggestion" in issue:
+                        error_details.append(f"should be {issue.get('suggestion', '')}")
+        
+        # Если нет проблем, увеличиваем счетчик корректных позиций
+        if not has_problems and status == "ok":
+            correct_count += 1
+        else:
+            issues_count += 1
+            
+        # Добавляем строку ошибки если есть проблемы
+        if problems or error_details:
+            # Используем краткое англоязычное описание ошибок, если есть
+            if error_details:
+                error_line = f"⚠️ Line {idx} <b>{name}</b>: {', '.join(error_details)}"
+                errors.append(error_line)
+            else:
+                error_line = t("report.error_line", params={"line": idx, "name": name, "problem": ', '.join(problems)})
+                if not error_line.startswith("❗") and not error_line.startswith("⚠️"):
+                    error_line = f"⚠️ Line {idx} <b>{name}</b>: {', '.join(problems)}"
+                errors.append(error_line)
+        elif has_problems:
+            # Если есть проблемы, но нет конкретного описания
+            error_line = f"⚠️ Line {idx} <b>{name}</b>: {t('report.needs_verification') or 'needs verification'}"
             errors.append(error_line)
     
-    # Считаем позиции со статусом "ok" или "manual" как правильные
-    correct = sum(1 for item in match_results if item.get("status", "") == "ok")
+    # Если нет ошибок, показываем соответствующее сообщение
+    if not errors and issues_count == 0:
+        return f"{t('report.no_errors') or '<b>No errors. All items recognized correctly.</b>'}\nCorrect: {correct_count}\nIssues: {issues_count}"
     
-    # Считаем позиции с проблемами (исключая ручное редактирование)
-    issues = sum(1 for item in match_results if item.get("status", "") != "ok")
-    
-    if not errors:
-        return f"{t('report.no_errors')}\nCorrect: {correct}\nIssues: {issues}"
     return (
         "\n".join(errors)
-        + f"\nCorrect: {correct}\nIssues: {issues}"
+        + f"\nCorrect: {correct_count}\nIssues: {issues_count}"
     )
 
 def count_issues(match_results):
@@ -189,35 +296,42 @@ def build_report(parsed_data, match_results, escape_html=True, page=1, page_size
     end = start + page_size
     rows_to_show = match_results[start:end]
 
-    # Build table and summary
+    # Подсчитываем количество ошибок и проблем перед формированием отчёта
     ok_count = 0
     issues_count = 0
-    unit_mismatch_count = 0
-    invoice_total = 0
-    has_unparsed = False
+    has_errors = False
+    
     for item in match_results:
         status = item.get("status", "")
-        if status == "ok":
+        
+        # Позиции с ручным редактированием (manual) не считаются проблемными
+        if status == "ok" or status == "manual":
             ok_count += 1
-        elif status == "unknown":
+        else:
             issues_count += 1
-        # Проверяем наличие нераспознанных цен или количеств
+            has_errors = True
+            
+        # Проверяем наличие незаполненных данных (qty, price)
         qty = item.get("qty", None)
-        price = item.get("unit_price", None)
+        price = item.get("price", None)
+        if price in (None, "", "—"):
+            price = item.get("unit_price", None)
+            
+        # Если хотя бы одно из критически важных полей не заполнено, считаем позицию проблемной
         if qty in (None, "", "—") or price in (None, "", "—"):
-            has_unparsed = True
-        try:
-            # Для подсчёта суммы используем только распознанные значения
-            if not has_unparsed:
-                invoice_total += float(qty) * float(price)
-        except Exception:
-            has_unparsed = True
+            has_errors = True
+            # Если позиция ещё не была подсчитана как проблемная, учитываем её
+            if status == "ok" or status == "manual":
+                issues_count += 1
+                ok_count -= 1  # корректируем счётчик OK позиций
+    
     header_html = build_header(supplier_str, date_str)
     table = build_table(rows_to_show)
     summary_html = build_summary(match_results)
+    # Используем <pre> вместо <code> для Telegram и тестов
     html_report = (
         f"{header_html}"
         f"<pre>{table}</pre>\n"
         f"{summary_html}"
     )
-    return html_report.strip(), issues_count > 0
+    return html_report.strip(), has_errors

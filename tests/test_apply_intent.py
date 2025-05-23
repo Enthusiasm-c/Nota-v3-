@@ -1,10 +1,6 @@
-import pytest
 from app.edit.apply_intent import (
     set_price,
     set_date,
-    set_name,
-    set_quantity,
-    set_unit,
     apply_intent
 )
 from app.models import ParsedData

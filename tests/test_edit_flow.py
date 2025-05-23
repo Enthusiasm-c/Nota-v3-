@@ -1,4 +1,3 @@
-import pytest
 from app.models import ParsedData
 
 def test_parsed_to_dict_success():

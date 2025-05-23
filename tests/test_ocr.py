@@ -1,11 +1,10 @@
 import pytest
-pytest_plugins = ["pytest_asyncio"]
 import json
-import os
-import re
 from datetime import date
 from app.ocr import call_openai_ocr, ParsedData, INVOICE_FUNCTION_SCHEMA
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
+
+pytest_plugins = ["pytest_asyncio"]
 
 
 class DummyMessage:
@@ -177,3 +176,51 @@ def test_postprocessing_autocorrect_name():
     assert autocorrect_name("Кревета", allowed) == "Креветка"
     assert autocorrect_name("Лосось", allowed) == "Лосось"
     assert autocorrect_name("Краб", allowed) == "Краб"  # нет похожих, не меняет
+
+
+def test_call_openai_ocr_no_client(monkeypatch):
+    # Мокаем отсутствие клиента
+    monkeypatch.setattr("app.ocr.get_ocr_client", lambda: None)
+    with pytest.raises(RuntimeError):
+        call_openai_ocr(b"123")
+
+
+def test_call_openai_ocr_invalid_api_response(monkeypatch):
+    # Мокаем клиента, который возвращает некорректный ответ
+    class DummyResponse:
+        def __init__(self):
+            self.choices = [type("C", (), {"message": type("M", (), {"tool_calls": []})()})]
+    client = type("Client", (), {"chat": type("Chat", (), {"completions": type("Comp", (), {"create": lambda *a, **k: DummyResponse()})()})()})()
+    monkeypatch.setattr("app.ocr.get_ocr_client", lambda: client)
+    with pytest.raises(Exception):
+        call_openai_ocr(b"123")
+
+
+def test_call_openai_ocr_cache_error(monkeypatch):
+    # Мокаем ошибку при чтении из кеша
+    monkeypatch.setattr("app.ocr.get_from_cache", lambda x: (_ for _ in ()).throw(Exception("cache error")))
+    # Мокаем клиента, чтобы не доходить до реального вызова
+    class DummyResponse:
+        def __init__(self):
+            self.choices = [type("C", (), {"message": type("M", (), {"tool_calls": [type("T", (), {"function": type("F", (), {"name": "get_parsed_invoice", "arguments": "{}"})()})]})()})]
+    client = type("Client", (), {"chat": type("Chat", (), {"completions": type("Comp", (), {"create": lambda *a, **k: DummyResponse()})()})()})()
+    monkeypatch.setattr("app.ocr.get_ocr_client", lambda: client)
+    monkeypatch.setattr("app.ocr.time", type("T", (), {"time": lambda *a, **kw: 0})())
+    monkeypatch.setattr("app.ocr.base64", type("B", (), {"b64encode": lambda *a, **kw: b"xx", "decode": lambda *a, **kw: "xx"})())
+    # Ошибка кеша не должна приводить к падению OCR
+    call_openai_ocr(b"123", use_cache=True)
+
+
+def test_call_openai_ocr_image_opt_error(monkeypatch):
+    # Мокаем ошибку оптимизации изображения
+    monkeypatch.setattr("app.ocr.prepare_for_ocr", lambda *a, **k: (_ for _ in ()).throw(Exception("prep error")))
+    # Мокаем клиента
+    class DummyResponse:
+        def __init__(self):
+            self.choices = [type("C", (), {"message": type("M", (), {"tool_calls": [type("T", (), {"function": type("F", (), {"name": "get_parsed_invoice", "arguments": "{}"})()})]})()})]
+    client = type("Client", (), {"chat": type("Chat", (), {"completions": type("Comp", (), {"create": lambda *a, **k: DummyResponse()})()})()})()
+    monkeypatch.setattr("app.ocr.get_ocr_client", lambda: client)
+    monkeypatch.setattr("app.ocr.time", type("T", (), {"time": lambda *a, **kw: 0})())
+    monkeypatch.setattr("app.ocr.base64", type("B", (), {"b64encode": lambda *a, **kw: b"xx", "decode": lambda *a, **kw: "xx"})())
+    # Ошибка оптимизации не должна приводить к падению OCR
+    call_openai_ocr(b"123")

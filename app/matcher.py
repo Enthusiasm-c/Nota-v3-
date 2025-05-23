@@ -1,448 +1,640 @@
+"""
+Оптимизированная версия модуля сопоставления названий продуктов.
+Включает кеширование, асинхронные операции и улучшенные алгоритмы.
+"""
+
 import logging
-from typing import (
-    List, Dict, Optional, Tuple, Sequence, Hashable, Callable, Any, Union
+import re
+from functools import lru_cache
+from typing import Any, Dict, List, Optional, Tuple, TypedDict, TypeVar, Union
+
+from rapidfuzz import fuzz, process
+
+from app.models import Position, Product
+from app.utils.string_cache import (
+    cached_string_similarity,
+    get_string_similarity_cached,
+    set_string_similarity_cached,
 )
-from app.config import settings
-
-# Используем только rapidfuzz вместо Levenshtein
-try:
-    from rapidfuzz.distance import Levenshtein
-    from rapidfuzz.fuzz import ratio
-
-    def levenshtein_ratio(
-        s1: Sequence[Hashable],
-        s2: Sequence[Hashable],
-        *,
-        processor: Union[Callable[..., Sequence[Hashable]], None] = None,
-        score_cutoff: Union[float, None] = None,
-    ) -> float:
-        # Используем rapidfuzz.fuzz.ratio для вычисления сходства
-        return ratio(s1, s2, processor=processor, score_cutoff=score_cutoff)
-
-    def levenshtein_distance(
-        s1: Sequence[Hashable],
-        s2: Sequence[Hashable],
-        *,
-        weights: Union[tuple[int, int, int], None] = None,
-        processor: Union[Callable[..., Sequence[Hashable]], None] = None,
-        score_cutoff: Union[float, None] = None,
-        score_hint: Union[float, None] = None,
-    ) -> int:
-        # Используем rapidfuzz.distance.Levenshtein.distance для вычисления расстояния
-        return Levenshtein.distance(s1, s2, weights=weights, processor=processor, 
-                                   score_cutoff=score_cutoff, score_hint=score_hint)
-
-    USE_LEVENSHTEIN = True
-except ImportError:
-    from difflib import SequenceMatcher
-
-    def levenshtein_ratio(
-        s1: Sequence[Hashable],
-        s2: Sequence[Hashable],
-        *,
-        processor: Union[Callable[..., Sequence[Hashable]], None] = None,
-        score_cutoff: Union[float, None] = None,
-    ) -> float:
-        a = "".join(map(str, s1))
-        b = "".join(map(str, s2))
-        return SequenceMatcher(None, a, b).ratio()
-
-    def levenshtein_distance(
-        s1: Sequence[Hashable],
-        s2: Sequence[Hashable],
-        *,
-        weights: Union[tuple[int, int, int], None] = None,
-        processor: Union[Callable[..., Sequence[Hashable]], None] = None,
-        score_cutoff: Union[float, None] = None,
-        score_hint: Union[float, None] = None,
-    ) -> int:
-        a = "".join(map(str, s1))
-        b = "".join(map(str, s2))
-        if a == b:
-            return 0
-        if len(a) > 20:
-            a = a[:17] + "..."
-        if len(b) > 20:
-            b = b[:17] + "..."
-        if len(b) == 0:
-            return len(a)
-        if len(a) == 0:
-            return len(b)
-        matrix = [[0 for _ in range(len(b) + 1)] for _ in range(len(a) + 1)]
-        for i in range(len(a) + 1):
-            matrix[i][0] = i
-        for j in range(len(b) + 1):
-            matrix[0][j] = j
-        for i in range(1, len(a) + 1):
-            for j in range(1, len(b) + 1):
-                cost = 0 if a[i - 1] == b[j - 1] else 1
-                matrix[i][j] = min(
-                    matrix[i - 1][j] + 1,
-                    matrix[i][j - 1] + 1,
-                    matrix[i - 1][j - 1] + cost,
-                )
-        return matrix[len(a)][len(b)]
-    USE_LEVENSHTEIN = False
 
 logger = logging.getLogger(__name__)
 
-
-def get_normalized_strings(s1: str, s2: str) -> Tuple[str, str]:
-    if s1 is None:
-        s1 = ""
-    if s2 is None:
-        s2 = ""
-
-    s1 = s1.lower().strip()
-    s2 = s2.lower().strip()
-
-    for char in [",", ".", "-", "_", "(", ")", "/", "\\"]:
-        s1 = s1.replace(char, " ")
-        s2 = s2.replace(char, " ")
-
-    s1 = " ".join(s1.split())
-    s2 = " ".join(s2.split())
-
-    return s1, s2
+T = TypeVar("T")
 
 
-def calculate_string_similarity(s1: str, s2: str) -> float:
-    s1, s2 = get_normalized_strings(s1, s2)
+class ProductVariant(TypedDict):
+    name: str
+    variants: List[str]
+
+
+class MatchResult(TypedDict):
+    name: str
+    score: float
+    original: Dict[str, Any]
+
+
+# Расширенный словарь синонимов и вариантов написания
+PRODUCT_VARIANTS: Dict[str, List[str]] = {
+    "romaine": ["romana", "romaine lettuce", "romaine salad"],
+    "chickpeas": ["chick peas", "chickpea", "chick pea", "garbanzo", "garbanzo beans"],
+    "green bean": ["green beans", "french beans", "string beans"],
+    "english spinach": ["english spinach", "spinach", "baby spinach"],
+    "tomato": ["cherry tomato", "cherry tomatoes", "roma tomato", "roma tomatoes"],
+    "eggplant": ["aubergine", "purple eggplant"],
+    "watermelon": ["water melon", "watermelons", "seedless watermelon"],
+    "chili": ["chilli", "chilies", "chillies", "red chili", "green chili"],
+    "mango": ["mangoes", "champagne mango", "ataulfo mango"],
+    "lettuce": ["iceberg", "iceberg lettuce", "lettuce heads"],
+    "potato": ["potatoes", "white potato", "russet potato"],
+    "onion": ["onions", "white onion", "red onion", "yellow onion"],
+}
+
+# Шаблон для поиска единиц измерения
+UNIT_PATTERN = re.compile(
+    r"(\d+(?:\.\d+)?)\s*((?:kg|g|l|ml|oz|lb|pcs|pack|box|ctn|each|unit|bunch)s?)", re.IGNORECASE
+)
+
+# Кеш для сохранения предварительно вычисленных результатов сопоставления
+_position_match_cache: Dict[Tuple[str, float, bool], Dict[str, Any]] = {}
+
+
+@lru_cache(maxsize=1000)
+def normalize_product_name(name: str) -> str:
+    """
+    Нормализация названия продукта для сопоставления с базой.
+    Сохраняет оригинальную форму слова (единственное/множественное число),
+    но удаляет лишние слова и нормализует регистр.
+
+    Args:
+        name: Исходное название продукта
+
+    Returns:
+        Нормализованное название
+    """
+    if not name:
+        return ""
+
+    if name is None:
+        return ""
+
+    # Приводим к нижнему регистру и удаляем лишние пробелы
+    name = name.lower().strip()
+
+    # Удаляем единицы измерения в конце названия
+    match = UNIT_PATTERN.search(name)
+    if match:
+        name = name.replace(match.group(0), "").strip()
+
+    # Удаляем слова-филлеры, которые не меняют смысл
+    fillers = ["fresh", "organic", "premium", "quality", "natural", "extra"]
+    for filler in fillers:
+        if name.startswith(filler + " "):
+            name = name[len(filler) + 1 :]
+        name = name.replace(" " + filler + " ", " ")
+        if name.endswith(" " + filler):
+            name = name[: -len(filler) - 1]
+
+    # Проверяем на синонимы в словаре PRODUCT_VARIANTS
+    for base_name, variants in PRODUCT_VARIANTS.items():
+        # Точное совпадение с базовым именем
+        if name == base_name:
+            return name
+        # Точное совпадение с вариантами
+        if name in variants:
+            return base_name
+
+    return name
+
+
+def _is_plural_variant(s1: str, s2: str) -> bool:
+    """Проверяет, являются ли строки вариантами единственного/множественного числа"""
     if s1 == s2:
-        return 1.0
+        return False
 
-    # Проверка на совпадение отдельных слов
-    words1 = s1.split()
-    words2 = s2.split()
-    
-    # Если одинаковое количество слов, анализируем каждое слово
-    if len(words1) == len(words2):
-        word_matches = sum(1 for w1, w2 in zip(words1, words2) if w1 == w2)
-        # Если большинство слов совпадают, но не все, увеличиваем вес для проверки
-        if word_matches > 0 and word_matches == len(words1) - 1:
-            # Находим несовпадающее слово и проверяем, не слишком ли оно похоже
-            non_matching_idx = [i for i, (w1, w2) in enumerate(zip(words1, words2)) if w1 != w2][0]
-            word1 = words1[non_matching_idx]
-            word2 = words2[non_matching_idx]
-            
-            # Проверка по списку известных похожих слов
-            for sim_pair in getattr(settings, 'SIMILAR_WORD_PAIRS', []):
-                if (word1, word2) == sim_pair or (word2, word1) == sim_pair:
-                    logger.warning(f"Обнаружена известная проблемная пара слов: '{word1}' и '{word2}' в '{s1}' и '{s2}'")
-                    # Уменьшаем коэффициент сходства для известных проблемных пар
-                    return 0.7  # Достаточно для "partial", но не для "ok"
-            
-            # Особая проверка для других похожих слов
-            if levenshtein_ratio(word1, word2) > 0.7:
-                logger.warning(f"Обнаружены похожие, но разные слова: '{word1}' и '{word2}' в '{s1}' и '{s2}'")
-    
-    ratio = levenshtein_ratio(s1, s2)
-    if s1 in s2 or s2 in s1:
-        ratio = min(ratio + settings.MATCH_EXACT_BONUS, 1.0)
+    # Простые правила для английского языка
+    if s1.endswith("s") and s2 == s1[:-1]:  # cats -> cat
+        return True
+    if s2.endswith("s") and s1 == s2[:-1]:  # cat -> cats
+        return True
+    if s1.endswith("ies") and s2 == s1[:-3] + "y":  # berries -> berry
+        return True
+    if s2.endswith("ies") and s1 == s2[:-3] + "y":  # berry -> berries
+        return True
 
-    max_len = max(len(s1), len(s2))
-    if max_len > 0:
-        len_diff_penalty = abs(len(s1) - len(s2)) / max_len
-        ratio = max(ratio - (len_diff_penalty * settings.MATCH_LENGTH_PENALTY), 0.0)
-
-    return ratio
+    return False
 
 
-def fuzzy_best(name: str, catalog: dict[str, str]) -> tuple[str, float]:
-    name_l = name.lower().strip()
+@cached_string_similarity
+def calculate_string_similarity(s1: Optional[str], s2: Optional[str], **kwargs) -> float:
+    """
+    Вычисляет схожесть двух строк с использованием различных метрик.
 
-    for prod in catalog.keys():
-        prod_l = prod.lower().strip()
-        if name_l == prod_l:
-            return prod, 100.0
+    Args:
+        s1: Первая строка
+        s2: Вторая строка
 
-    candidates = []
-    for prod in catalog.keys():
-        prod_l = prod.lower().strip()
-        similarity = calculate_string_similarity(name_l, prod_l)
-        score = similarity * 100
-        score = max(min(score, 100), 0)
-        candidates.append((prod, score, abs(len(name_l) - len(prod_l))))
+    Returns:
+        Оценка схожести от 0 до 1
+    """
+    # Проверяем на None
+    if s1 is None or s2 is None:
+        return 0.0
 
-    candidates.sort(key=lambda t: (t[1], -t[2], len(t[0])), reverse=True)
+    # Проверяем кеш
+    cached_result = get_string_similarity_cached(s1, s2)
+    if cached_result is not None:
+        return cached_result
 
-    if not candidates:
+    # Нормализуем строки
+    s1_norm = normalize_product_name(s1)
+    s2_norm = normalize_product_name(s2)
+
+    # Если после нормализации строки пустые, возвращаем 0
+    if not s1_norm or not s2_norm:
+        return 0.0
+
+    # Если строки идентичны после нормализации
+    if s1_norm == s2_norm:
+        result = 1.0
+        set_string_similarity_cached(s1, s2, result)
+        return result
+
+    # Используем RapidFuzz для вычисления схожести
+    ratio_score = fuzz.ratio(s1_norm, s2_norm) / 100
+    partial_ratio_score = fuzz.partial_ratio(s1_norm, s2_norm) / 100
+    token_sort_score = fuzz.token_sort_ratio(s1_norm, s2_norm) / 100
+    token_set_score = fuzz.token_set_ratio(s1_norm, s2_norm) / 100
+
+    # Вычисляем взвешенную оценку с приоритетом на token_sort и token_set
+    base_score = (
+        ratio_score * 0.2
+        + partial_ratio_score * 0.2
+        + token_sort_score * 0.3
+        + token_set_score * 0.3
+    )
+
+    # Проверяем на частичное вхождение
+    if s1_norm in s2_norm or s2_norm in s1_norm:
+        base_score = max(base_score, 0.85)
+
+    # Добавляем бонус для множественного числа
+    if _is_plural_variant(s1_norm, s2_norm):
+        base_score = min(1.0, base_score + 0.15)  # Увеличиваем бонус до 0.15
+
+    # Если одна строка является префиксом другой, уменьшаем оценку
+    if len(s1_norm) < len(s2_norm) and s2_norm.startswith(s1_norm):
+        base_score *= 0.8  # Уменьшаем оценку для префиксов
+    elif len(s2_norm) < len(s1_norm) and s1_norm.startswith(s2_norm):
+        base_score *= 0.8  # Уменьшаем оценку для префиксов
+
+    # Сохраняем результат в кеше
+    set_string_similarity_cached(s1, s2, base_score)
+    return base_score
+
+
+# Обертка-скорер для использования в rapidfuzz (ожидает int 0-100)
+def _rapid_similarity(s1: str, s2: str, *, processor=None, score_cutoff=None) -> int:
+    """Совместимый с rapidfuzz scorer, использующий calculate_string_similarity (0-1)"""
+    score = int(calculate_string_similarity(s1, s2) * 100)
+    if score_cutoff is not None and score < score_cutoff:
+        return 0
+    return score
+
+
+async def async_match_positions(
+    items: List[Union[Dict[str, Any], Position]],
+    reference_items: List[Union[Dict[str, Any], Product]],
+    threshold: float = 0.8,
+    key: str = "name",
+) -> List[Dict[str, Any]]:
+    """
+    Асинхронно сопоставляет позиции с референсными данными.
+
+    Args:
+        items: Список позиций для сопоставления (словари или объекты Position)
+        reference_items: Список референсных позиций (словари или объекты Product)
+        threshold: Порог схожести (0-1)
+        key: Ключ для сравнения
+
+    Returns:
+        Список совпадений с полями status и score
+    """
+    results = []
+
+    # Создаем список названий продуктов из базы для быстрого поиска
+    reference_names = []
+    reference_dict = {}
+
+    for ref_item in reference_items:
+        if isinstance(ref_item, dict):
+            ref_name = ref_item.get(key, "").lower().strip()
+            reference_dict[ref_name] = ref_item
+        else:
+            ref_name = getattr(ref_item, key, "").lower().strip()
+            reference_dict[ref_name] = ref_item
+        if ref_name:
+            reference_names.append(ref_name)
+
+    for item in items:
+        # Получаем значение атрибута в зависимости от типа объекта
+        if isinstance(item, dict):
+            item_name = item.get(key, "")
+            if item_name is None:
+                item_name = ""
+            item_name = item_name.lower().strip()
+            item_data = item.copy()
+        else:
+            item_name = getattr(item, key, "")
+            if item_name is None:
+                item_name = ""
+            item_name = item_name.lower().strip()
+            if hasattr(item, "model_dump"):
+                item_data = item.model_dump()
+            else:
+                item_data = {
+                    "name": getattr(item, "name", ""),
+                    "qty": getattr(item, "qty", None),
+                    "unit": getattr(item, "unit", None),
+                    "price": getattr(item, "price", None),
+                    "total": getattr(item, "total", None),
+                }
+
+        if not item_name:
+            results.append({"status": "unknown", "score": 0.0})
+            continue
+
+        # Используем process.extractOne с обновленным API
+        best_match = process.extractOne(
+            item_name, reference_names, scorer=_rapid_similarity, score_cutoff=int(threshold * 100)
+        )
+
+        if best_match:
+            matched_name, score, _ = best_match
+            score = score / 100  # Конвертируем обратно в float 0-1
+            if score >= threshold:
+                ref_item = reference_dict[matched_name]
+
+                # Преобразуем объект Product в словарь, если это объект
+                if isinstance(ref_item, Product):
+                    ref_data = ref_item.model_dump()
+                else:
+                    ref_data = ref_item.copy()
+
+                # Сохраняем все атрибуты исходной позиции
+                result = item_data.copy()
+                # Добавляем атрибуты из найденного совпадения
+                result.update(ref_data)
+                # Добавляем статус и оценку
+                result["status"] = "ok"
+                result["score"] = score
+                results.append(result)
+        else:
+            # Если совпадение не найдено, возвращаем исходные данные с нулевой оценкой
+            result = item_data.copy()
+            result["status"] = "unknown"
+            result["score"] = 0.0
+            results.append(result)
+
+    return results
+
+
+def fuzzy_find(
+    query: str,
+    items: List[Union[Dict[str, Any], Any]],
+    threshold: float = 0.6,
+    key: str = "name",
+    limit: int = 5,
+) -> List[MatchResult]:
+    """
+    Нечеткий поиск по списку элементов.
+
+    Args:
+        query: Строка поиска
+        items: Список элементов для поиска (словари или объекты)
+        threshold: Минимальный порог схожести (0-1)
+        key: Ключ для поиска в словарях
+        limit: Максимальное количество результатов
+
+    Returns:
+        Список найденных элементов с оценками схожести
+    """
+    if not query or not items:
+        return []
+
+    # Нормализуем запрос
+    query = normalize_product_name(query)
+    if not query:
+        return []
+
+    # Создаем список названий для поиска
+    choices = []
+    choice_map = {}
+
+    for item in items:
+        if isinstance(item, dict):
+            name = item.get(key, "")
+        else:
+            name = getattr(item, key, "")
+
+        if name:
+            name = name.lower().strip()
+            choices.append(name)
+            choice_map[name] = item
+
+    # Используем process.extract для поиска совпадений
+    matches = []
+    for choice in choices:
+        score = calculate_string_similarity(query, choice)
+        if score >= threshold:
+            matches.append((choice, score))
+
+    # Сортируем результаты по убыванию оценки
+    matches.sort(key=lambda x: x[1], reverse=True)
+    matches = matches[:limit]
+
+    results = []
+    for name, score in matches:
+        original = choice_map[name]
+
+        result: MatchResult = {
+            "name": name,
+            "score": score,
+            "original": original,  # сохраняем объект как есть
+        }
+        results.append(result)
+
+    return results
+
+
+def fuzzy_best(
+    query: str,
+    items: Union[Dict[str, Any], List[Dict[str, Any]]],
+    threshold: Optional[float] = None,
+) -> Tuple[Optional[Dict[str, Any]], float]:
+    """
+    Находит наиболее похожий элемент в словаре или списке.
+
+    Args:
+        query: Строка поиска
+        items: Словарь или список элементов для поиска
+        threshold: Минимальный порог схожести (0-1)
+
+    Returns:
+        Кортеж (найденный элемент, оценка схожести)
+    """
+    if not query:
         return "", 0.0
 
-    best, score, _ = candidates[0]
-    return best, score
+    # Нормализуем запрос
+    query = normalize_product_name(query)
+    if not query:
+        return "", 0.0
 
+    # Преобразуем входные данные в список для поиска
+    if isinstance(items, dict):
+        choices = list(items.keys())
+        items_dict = items
+    else:
+        choices = [item.get("name", "") for item in items if item.get("name")]
+        items_dict = {item["name"]: item for item in items if item.get("name")}
 
-def fuzzy_find(query: str, products: List[Dict], thresh: float = 0.75) -> List[Dict]:
-    """
-    Find products with similar names using fuzzy matching.
-    
-    Args:
-        query: The search query (product name)
-        products: List of product dictionaries
-        thresh: Similarity threshold (0.0-1.0)
-        
-    Returns:
-        List of matching products with similarity >= threshold
-    """
-    if not query or not products:
-        return []
-    
-    query = query.lower().strip()
-    matches = []
-    
-    for product in products:
-        if isinstance(product, dict):
-            name = product.get("name", "")
-            product_id = product.get("id", "")
-        else:
-            name = getattr(product, "name", "")
-            product_id = getattr(product, "id", "")
-            
-        if not name:
-            continue
-            
-        similarity = calculate_string_similarity(query, name)
-        if similarity >= thresh:
-            matches.append({
-                "name": name,
-                "id": product_id,
-                "score": similarity
-            })
-    
-    # Sort by similarity score (highest first)
-    matches.sort(key=lambda x: x["score"], reverse=True)
-    
-    return matches
+    if not choices:
+        return "", 0.0
 
-
-def match_supplier(supplier_name: str, suppliers: List[Dict], threshold: float = 0.9) -> Dict:
-    """
-    Match supplier name with supplier database using fuzzy matching.
-    
-    Args:
-        supplier_name: Supplier name from the invoice
-        suppliers: List of supplier dictionaries from the database
-        threshold: Similarity threshold (default 0.9 = 90%)
-        
-    Returns:
-        Dictionary with matched supplier data or original name if no match found
-    """
-    if not supplier_name or not suppliers:
-        return {"name": supplier_name, "id": None, "status": "unknown"}
-    
-    normalized_name = supplier_name.lower().strip()
+    # Ищем лучшее совпадение
     best_match = None
-    best_score = -1.0
-    
+    best_score = 0.0
+
+    for choice in choices:
+        score = calculate_string_similarity(query, choice)
+        if threshold is None or score >= threshold:
+            if score > best_score:
+                best_match = choice
+                best_score = score
+
+    if best_match:
+        result = {
+            "name": best_match,
+            "id": (
+                items_dict[best_match]
+                if isinstance(items, dict)
+                else items_dict[best_match].get("id")
+            ),
+        }
+        # Масштабируем score от 0 до 100 для совместимости с тестами
+        return result, best_score * 100
+
+    return "", 0.0
+
+
+def match_supplier(
+    supplier_name: str,
+    suppliers: List[Dict],
+    threshold: Optional[float] = None,
+) -> Dict:
+    """
+    Находит поставщика по названию в списке поставщиков.
+
+    Args:
+        supplier_name: Название поставщика для поиска
+        suppliers: Список поставщиков
+        threshold: Минимальный порог схожести (0-1)
+
+    Returns:
+        Словарь с информацией о найденном поставщике
+    """
+    if not supplier_name:
+        return {"name": supplier_name, "id": None, "code": None, "status": "unknown", "score": 0.0}
+
+    # Создаем список названий для поиска
+    choices = []
+    supplier_map = {}
+
     for supplier in suppliers:
         if isinstance(supplier, dict):
             name = supplier.get("name", "")
-            supplier_id = supplier.get("id", "")
-            code = supplier.get("code", "")
         else:
             name = getattr(supplier, "name", "")
-            supplier_id = getattr(supplier, "id", "")
-            code = getattr(supplier, "code", "")
-            
-        if not name:
-            continue
-            
-        # Check for exact match first (case insensitive)
-        if normalized_name == name.lower().strip():
-            return {
-                "name": name,  # Use the name from the database
-                "id": supplier_id,
-                "code": code,
-                "status": "ok",
-                "score": 1.0
+
+        if name:
+            name_orig = name
+            name = name.lower().strip()
+            choices.append(name)
+            supplier_map[name] = {
+                "name": name_orig,
+                "id": (
+                    supplier.get("id", None)
+                    if isinstance(supplier, dict)
+                    else getattr(supplier, "id", None)
+                ),
+                "code": (
+                    supplier.get("code", None)
+                    if isinstance(supplier, dict)
+                    else getattr(supplier, "code", None)
+                ),
             }
-            
-        # Calculate similarity for fuzzy matching
-        similarity = calculate_string_similarity(normalized_name, name.lower().strip())
-        if similarity > best_score:
-            best_score = similarity
-            best_match = supplier
-    
-    # Check if best match passes the threshold
-    if best_match and best_score >= threshold:
-        return {
-            "name": best_match.get("name", best_match["name"] if isinstance(best_match, dict) else getattr(best_match, "name")),
-            "id": best_match.get("id", best_match["id"] if isinstance(best_match, dict) else getattr(best_match, "id")),
-            "code": best_match.get("code", best_match["code"] if isinstance(best_match, dict) else getattr(best_match, "code", "")),
-            "status": "ok",
-            "score": best_score
-        }
-    
-    # No match found above threshold
-    return {
-        "name": supplier_name,  # Keep the original name
-        "id": None,
-        "status": "unknown",
-        "score": best_score if best_score > -1 else None
-    }
+
+    if not choices:
+        return {"name": supplier_name, "id": None, "code": None, "status": "unknown", "score": 0.0}
+
+    # Используем process.extractOne для поиска лучшего совпадения
+    threshold_local = threshold if threshold is not None else 0.8
+    best_match = process.extractOne(
+        supplier_name,
+        choices,
+        scorer=_rapid_similarity,
+        score_cutoff=int(threshold_local * 100) if threshold_local is not None else None,
+    )
+
+    if best_match:
+        matched_name, score, _ = best_match
+        score = score / 100  # Конвертируем обратно в float 0-1
+        if threshold_local is None or score >= threshold_local:
+            supplier = supplier_map[matched_name]
+            return {
+                "name": supplier["name"],
+                "id": supplier["id"],
+                "code": supplier["code"],
+                "status": "ok",
+                "score": score,
+            }
+
+    return {"name": supplier_name, "id": None, "code": None, "status": "unknown", "score": 0.0}
 
 
 def match_positions(
-    positions: List[Dict],
-    products: List[Dict],
-    threshold: Optional[float] = None,
+    items: List[Union[Dict[str, Any], Position]],
+    reference_items: List[Union[Dict[str, Any], Product]],
+    threshold: float = 0.8,
+    key: str = "name",
     return_suggestions: bool = False,
-) -> List[Dict]:
-    if threshold is None:
-        threshold = settings.MATCH_THRESHOLD
+) -> List[Dict[str, Any]]:
+    """
+    Синхронная версия сопоставления позиций с референсными данными.
+
+    Args:
+        items: Список позиций для сопоставления
+        reference_items: Список референсных позиций
+        threshold: Порог схожести (0-1)
+        key: Ключ для сравнения
+        return_suggestions: Возвращать ли предложения для неизвестных позиций
+
+    Returns:
+        Список совпадений с полями status и score
+    """
+    # Создаем список названий продуктов из базы для быстрого поиска
+    reference_names = []
+    reference_dict = {}
+
+    for ref_item in reference_items:
+        if isinstance(ref_item, dict):
+            ref_name = ref_item.get(key, "").lower().strip()
+        else:
+            ref_name = getattr(ref_item, key, "").lower().strip()
+        if ref_name:
+            reference_names.append(ref_name)
+            reference_dict[ref_name] = ref_item
 
     results = []
-
-    for pos in positions:
-        name = getattr(pos, "name", None)
-        if name is None and isinstance(pos, dict):
-            name = pos.get("name", "")
-
-        qty = getattr(pos, "qty", None)
-        if qty is None and isinstance(pos, dict):
-            qty = pos.get("qty", "")
-
-        unit = getattr(pos, "unit", None)
-        if unit is None and isinstance(pos, dict):
-            unit = pos.get("unit", "")
-
-        best_match = None
-        best_score: float = -1.0
-        status = "unknown"
-        fuzzy_scores = []
-        has_similar_words = False  # Флаг для отметки похожих слов
-        has_color_descriptor = False  # Флаг для цветовых модификаторов
-
-        # Проверка на цветовые модификаторы (green, red, yellow, etc.)
-        normalized_name = name.lower().strip()
-        color_prefixes = ["green", "red", "yellow", "black", "white", "blue", "purple", "brown"]
-        base_name = None
-        
-        # Проверяем, начинается ли название с цветового префикса
-        for color in color_prefixes:
-            if normalized_name.startswith(color + " "):
-                base_name = normalized_name[len(color) + 1:]
-                has_color_descriptor = True
-                logger.info(f"Обнаружен цветовой дескриптор '{color}' в названии '{normalized_name}', базовое название: '{base_name}'")
-                break
-
-        for product in products:
-            if isinstance(product, dict):
-                compare_val = product.get("name", "")
+    for item in items:
+        # Получаем значение атрибута в зависимости от типа объекта
+        if isinstance(item, dict):
+            item_name = item.get(key, "")
+            if item_name is None:
+                item_name = ""
+            item_name = item_name.lower().strip()
+            item_data = item.copy()
+        else:
+            item_name = getattr(item, key, "")
+            if item_name is None:
+                item_name = ""
+            item_name = item_name.lower().strip()
+            if hasattr(item, "model_dump"):
+                item_data = item.model_dump()
             else:
-                compare_val = getattr(product, "name", "")
+                item_data = {
+                    "name": getattr(item, "name", ""),
+                    "qty": getattr(item, "qty", None),
+                    "unit": getattr(item, "unit", None),
+                    "price": getattr(item, "price", None),
+                    "total": getattr(item, "total", None),
+                }
 
-            normalized_compare = compare_val.lower().strip()
-            
-            # Проверка для базового названия (без цвета) если применимо
-            base_similarity = 0.0
-            if has_color_descriptor and base_name:
-                base_similarity = calculate_string_similarity(base_name, normalized_compare)
-                if base_similarity > 0.9:  # Высокий порог для базового имени
-                    logger.info(f"Базовое название '{base_name}' очень похоже на '{normalized_compare}' (score: {base_similarity})")
-            
-            # Проверка на похожие слова
-            words1 = normalized_name.split()
-            words2 = normalized_compare.split()
-            
-            # Если одинаковая структура, но возможно есть похожие слова
-            if len(words1) == len(words2) and len(words1) > 1:
-                word_matches = sum(1 for w1, w2 in zip(words1, words2) if w1 == w2)
-                # Если большинство слов совпадают, но не все, проверяем похожие слова
-                if word_matches > 0 and word_matches == len(words1) - 1:
-                    # Находим несовпадающие слова
-                    non_matching = [(i, w1, w2) for i, (w1, w2) in enumerate(zip(words1, words2)) if w1 != w2]
-                    for idx, word1, word2 in non_matching:
-                        # Специальная проверка для часто путаемых слов
-                        if (word1 in ['rice', 'milk'] and word2 in ['rice', 'milk']) or \
-                           (len(word1) > 2 and len(word2) > 2 and levenshtein_ratio(word1, word2) > 0.7):
-                            logger.warning(f"Похожие слова в '{normalized_name}' и '{normalized_compare}': '{word1}' и '{word2}'")
-                            has_similar_words = True
-            
-            similarity = calculate_string_similarity(
-                normalized_name, normalized_compare
-            )
-            
-            # Если есть цветовой дескриптор и нашлось высокое совпадение с базовым именем,
-            # используем его как запасной вариант
-            score = similarity
-            if has_color_descriptor and base_similarity > 0.9 and base_similarity > similarity:
-                logger.info(f"Использую базовое сравнение для '{normalized_name}': {base_similarity}")
-                score = base_similarity * 0.95  # Чуть ниже порога для обозначения как partial
-                has_similar_words = True
-                
-            fuzzy_scores.append((score, product))
+        if not item_name:
+            result = {"status": "unknown", "score": 0.0}
+            if item_data:
+                result.update(item_data)
+            results.append(result)
+            continue
 
+        # Ищем лучшее совпадение
+        best_score = 0.0
+        best_match = None
+        for ref_name in reference_names:
+            score = calculate_string_similarity(item_name, ref_name)
             if score > best_score:
                 best_score = score
-                best_match = product
+                best_match = ref_name
 
-        # Определяем статус с учетом похожих слов и цветовых дескрипторов
-        if best_score >= threshold:
-            if has_similar_words or has_color_descriptor:
-                status = "partial"  # Если похожие слова или цвета, то частичное совпадение
+        if best_match and best_score >= threshold:
+            ref_item = reference_dict[best_match]
+
+            # Преобразуем объект Product в словарь
+            if isinstance(ref_item, Product):
+                ref_data = ref_item.model_dump()
+            elif hasattr(ref_item, "model_dump"):
+                ref_data = ref_item.model_dump()
+            elif hasattr(ref_item, "__dict__"):
+                ref_data = ref_item.__dict__.copy()
             else:
-                status = "ok"       # Иначе полное совпадение
+                ref_data = ref_item.copy()
+
+            # Сохраняем все атрибуты исходной позиции
+            result = item_data.copy()
+            # Добавляем атрибуты из найденного совпадения
+            result.update(ref_data)
+            # Восстанавливаем оригинальное имя
+            result["name"] = item_data.get("name", "")
+            # Добавляем статус и оценку
+            result["status"] = "ok"
+            result["score"] = best_score
+            # Вычисляем total, если есть qty и price
+            if result.get("qty") is not None and result.get("price") is not None:
+                result["total"] = result["qty"] * result["price"]
+            results.append(result)
         else:
-            status = "unknown"
+            # Если совпадение не найдено или ниже порога
+            result = item_data.copy()
+            result["status"] = "unknown"
+            result["score"] = best_score
 
-        total = None
-        price = None
-        if isinstance(pos, dict):
-            total = pos.get("total")
-            price = pos.get("price")
-        else:
-            total = getattr(pos, "total", None)
-            price = getattr(pos, "price", None)
+            # Добавляем предложения, если требуется
+            if return_suggestions and best_score >= threshold * 0.8:
+                suggestions = []
+                for ref_name in reference_names:
+                    score = calculate_string_similarity(item_name, ref_name)
+                    if score >= threshold * 0.8:
+                        ref_item = reference_dict[ref_name]
+                        if isinstance(ref_item, Product):
+                            sugg_data = ref_item.model_dump()
+                        elif hasattr(ref_item, "model_dump"):
+                            sugg_data = ref_item.model_dump()
+                        elif hasattr(ref_item, "__dict__"):
+                            sugg_data = ref_item.__dict__.copy()
+                        else:
+                            sugg_data = ref_item.copy()
+                        suggestions.append(
+                            {
+                                "name": ref_name,
+                                "score": score,
+                                "data": sugg_data,
+                            }
+                        )
+                if suggestions:
+                    # Сортируем предложения по убыванию оценки и берем top 3
+                    suggestions.sort(key=lambda x: x["score"], reverse=True)
+                    result["suggestions"] = suggestions[:3]
 
-        # Привести qty, total, price к float если возможно
-        try:
-            qty_f = float(qty)
-        except Exception:
-            qty_f = None
-        try:
-            total_f = float(total)
-        except Exception:
-            total_f = None
-        try:
-            price_f = float(price)
-        except Exception:
-            price_f = None
-
-        # price = total/qty если price нет, но есть total и qty
-        if price_f is None and total_f is not None and qty_f not in (None, 0):
-            price_f = total_f / qty_f
-        # line_total = price*qty если line_total нет, но есть price и qty
-        line_total_f = None
-        if price_f is not None and qty_f not in (None, 0):
-            line_total_f = price_f * qty_f
-        elif total_f is not None:
-            line_total_f = total_f
-
-        result = {
-            "name": name,
-            "qty": qty,
-            "unit": unit,
-            "status": status,
-            "score": best_score if best_score else None,
-            "price": price_f,
-            "line_total": line_total_f,
-        }
-
-        if (
-            return_suggestions
-            and status == "unknown"
-        ):
-            fuzzy_scores.sort(
-                reverse=True, key=lambda x: x[0]
-            )
-            result["suggestions"] = [
-                p
-                for s, p in fuzzy_scores[:5]
-                if s > settings.MATCH_MIN_SCORE
-            ]
-
-        results.append(result)
+            results.append(result)
 
     return results

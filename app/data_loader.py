@@ -1,16 +1,12 @@
 import csv
 from typing import List, Dict
-from pathlib import Path
-from functools import lru_cache
 from app.models import Product
+from app.alias import read_aliases
 
 
 def load_suppliers(path: str = "data/base_suppliers.csv") -> List[Dict]:
     with open(path, encoding="utf-8") as f:
         return list(csv.DictReader(f))
-
-
-from app.alias import read_aliases
 
 
 def load_units() -> list:

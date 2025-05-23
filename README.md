@@ -76,14 +76,61 @@ Telegram-бот для автоматической проверки товар�
 
 ## Быстрый старт
 
-1. Установите зависимости:
+### Локальная разработка
+
+1. Клонируйте репозиторий:
+   ```sh
+   git clone https://github.com/your-repo/nota-optimized.git
+   cd nota-optimized
+   ```
+
+2. Создайте и активируйте виртуальное окружение:
+   ```sh
+   python -m venv venv
+   source venv/bin/activate  # На Windows: venv\Scripts\activate
+   ```
+
+3. Установите зависимости:
    ```sh
    pip install -r requirements.txt
    ```
-2. Заполните `.env` (см. пример в `.env.example`)
-3. Запустите бота:
+
+4. Заполните `.env` (см. пример в `.env.example` или используйте `.env.minimal` для минимальной конфигурации)
+   ```sh
+   cp .env.minimal .env
+   # Отредактируйте .env, добавив ваши API ключи
+   ```
+
+5. Запустите проверки и тесты:
+   ```sh
+   ruff check .
+   mypy app
+   pytest -q
+   ```
+
+6. Запустите бота:
    ```sh
    make run-local
+   # или напрямую:
+   # python bot.py
+   ```
+
+### Быстрое развертывание на VPS
+
+Для развертывания на небольшом VPS (1 vCPU, 1 GB RAM) используйте наш скрипт одиночного сервера:
+
+```sh
+# Полное руководство по развертыванию доступно в:
+cat deploy/single_server_setup.md
+```
+
+Основные шаги:
+1. Настройте сервер по инструкции в `deploy/single_server_setup.md`
+2. Установите бота как системный сервис с автоматическим перезапуском
+3. Настройте ротацию логов
+4. Запустите скрипт тестирования для проверки работоспособности:
+   ```sh
+   bash scripts/send_test_invoices.sh
    ```
 
 ### Sprint 1: Inline corrections & self-learning aliases
@@ -139,31 +186,46 @@ Telegram-бот для автоматической проверки товар�
 - [x] Sprint 1: Inline corrections, self-learning aliases
 - [x] Sprint 2: Real OCR integration and cassette-based tests
 - [x] Sprint C-5: GPT-3.5-turbo диалоговое редактирование и TDD
+- [x] Sprint D-1: Walking Skeleton - минимальное production-ready развертывание для 10 инвойсов/день
 - [ ] Sprint 3: Price anomaly alerts, daily Syrve CSV sync
 
 ---
 
 ### Running tests
 
-Activate your virtual environment if needed:
+This project uses `pytest` for running automated tests.
+
+**1. Activate your virtual environment** (if you haven't already):
 
 ```sh
-source venv/bin/activate
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
-Run all tests:
+**2. Install testing dependencies:**
+
+The testing dependencies, including `pytest`, are listed in `requirements-dev.txt`. Install them using:
+```sh
+pip install -r requirements-dev.txt
+```
+
+**3. Run all tests:**
+
+From the root directory of the project, run the following command:
 
 ```sh
 PYTHONPATH=. pytest
 ```
 
-Or run a specific test (e.g. alias flow):
+**4. Run a specific test file** (optional):
 
+To run tests from a specific file, you can use:
 ```sh
 PYTHONPATH=. pytest tests/test_alias_flow.py
 ```
 
-This will run all unit tests and check that the alias self-learning mechanism works as expected.
+This will run all unit tests in the specified file and check that the alias self-learning mechanism works as expected.
+
+**Note:** As per the instructions for the current task, you should not actually run these test commands now. These instructions are for future reference.
 
 ## Структура
 
@@ -213,3 +275,89 @@ This will run all unit tests and check that the alias self-learning mechanism wo
 
 GitHub Actions: `.github/workflows/ci.yml` — тесты и линт при push/pull_request
 Nota-v3-
+
+## Управление процессами
+
+Для управления процессами бота доступны следующие скрипты:
+
+### Запуск бота
+
+- `run_bot.sh` - стандартный запуск бота
+- `run_forever.sh` - запуск с автоматическим перезапуском при ошибках
+- `debug_bot.sh` - запуск в режиме отладки с подробными логами
+
+### Остановка бота
+
+- `stop_service.sh` - корректная остановка бота через systemd (если запущен как сервис)
+- `kill_all_nota_processes.sh` - принудительная остановка всех процессов, связанных с ботом
+- `emergency_stop.sh` - экстренная остановка всех Python-процессов на сервере (использовать только в крайнем случае)
+
+Для безопасной остановки бота рекомендуется использовать скрипт `stop_service.sh`. 
+В случае проблем с остановкой можно использовать `kill_all_nota_processes.sh`.
+Скрипт `emergency_stop.sh` следует использовать только в экстренных случаях, когда все другие методы не работают.
+
+## Модуль интеграции с Syrve API
+
+Для отправки приходных накладных в систему Syrve (iiko) используется модуль `app/services/syrve_invoice_sender.py`.
+
+### Настройка подключения
+
+1. Скопируйте файл `.env.syrve.example` в `.env` и заполните его реальными значениями:
+   ```
+   SYRVE_BASE_URL=https://your-server.syrve.online
+   SYRVE_LOGIN=your_username
+   SYRVE_PASS_SHA1=sha1_hash_of_your_password
+   ```
+
+2. Для генерации SHA1-хеша пароля можно использовать команду:
+   ```
+   echo -n "your_password" | shasum
+   ```
+
+### Использование
+
+```python
+from app.services.syrve_invoice_sender import SyrveClient, Invoice, InvoiceItem
+from decimal import Decimal
+from datetime import date
+
+# Создаем элементы накладной
+items = [
+    InvoiceItem(
+        num=1,
+        product_id="12345678-1234-1234-1234-123456789abc",  # GUID товара в Syrve
+        amount=Decimal("10.5"),
+        price=Decimal("100.00"),
+        sum=Decimal("1050.00")
+    )
+]
+
+# Создаем накладную
+invoice = Invoice(
+    items=items,
+    supplier_id="87654321-4321-4321-4321-cba987654321",  # GUID поставщика
+    default_store_id="11111111-2222-3333-4444-555555555555",  # GUID склада
+    date_incoming=date.today()
+)
+
+# Инициализируем клиент из переменных окружения
+client = SyrveClient.from_env()
+
+# Отправляем накладную
+try:
+    result = client.send_invoice(invoice)
+    if result:
+        print("Накладная успешно импортирована в Syrve")
+except Exception as e:
+    print(f"Ошибка при отправке накладной: {e}")
+```
+
+### Обработка ошибок
+
+Модуль предоставляет специализированные исключения для различных типов ошибок:
+
+- `InvoiceValidationError` - ошибки валидации (неизвестный GUID товара, неверная сумма и т.д.)
+- `InvoiceHTTPError` - ошибки HTTP при взаимодействии с API
+- `InvoiceAuthError` - ошибки аутентификации
+
+Рекомендуется обрабатывать эти исключения, чтобы предоставить пользователю понятное сообщение об ошибке.

@@ -5,6 +5,7 @@ Helper module for registering all handlers with the dispatcher.
 from aiogram import Dispatcher
 from app.handlers.edit_flow import router as edit_flow_router
 from app.handlers.name_picker import router as name_picker_router
+from app.handlers.review_handlers import router as review_router # Import the new router
 
 
 def register_handlers(dp: Dispatcher):
@@ -27,5 +28,10 @@ def register_handlers(dp: Dispatcher):
     if 'edit_flow_router' not in dp._registered_routers:
         dp.include_router(edit_flow_router)
         dp._registered_routers.add('edit_flow_router')
+
+    # Register review_handlers router
+    if 'review_router' not in dp._registered_routers:
+        dp.include_router(review_router)
+        dp._registered_routers.add('review_router')
     
     # Add other routers as needed

@@ -15,6 +15,7 @@ def test_cache_set_and_get_mock():
         mock_instance.set.assert_called_once_with(key, json.dumps(value), ex=2)
         mock_instance.get.return_value = json.dumps(value).encode("utf-8")
         result = redis_cache.cache_get(key)
+        assert result == value, "Cache get should return the original value"
         assert json.loads(mock_instance.get.return_value.decode("utf-8")) == value
         mock_instance.get.return_value = None
         assert redis_cache.cache_get(key) is None

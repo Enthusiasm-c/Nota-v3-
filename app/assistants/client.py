@@ -15,7 +15,8 @@ from app.config import settings
 from app.assistants.trace_openai import trace_openai
 from app.utils.redis_cache import cache_get, cache_set
 from app.assistants.intent_adapter import adapt_intent
-from app.assistants.thread_pool import get_thread, initialize_pool
+from app.assistants.thread_pool import get_thread
+from app.utils.monitor import parse_action_monitor
 
 from pydantic import BaseModel, ValidationError, field_validator
 from functools import wraps
@@ -49,18 +50,19 @@ class EditCommand(BaseModel):
                 raise ValueError(f"row must be >= 1 for action {action}")
         return v
 
-from app.utils.monitor import parse_action_monitor
-
 __all__ = [
     "EditCommand",
     "parse_assistant_output",
     "run_thread_safe",
-    "parse_edit_command",
+    # "parse_edit_command", # Deprecated
     "adapt_intent",  # экспортируем функцию адаптера для удобства
 ]
 
 def parse_edit_command(user_input: str, invoice_lines=None) -> list:
     """
+    DEPRECATED: This function is a legacy regex-based parser.
+    Use app.parsers.command_parser.parse_compound_command instead.
+    
     Универсальный парсер команд для инвойса. Используется как в тестах, так и в run_thread_safe.
     Поддерживает комбинированные команды (несколько команд в одном сообщении).
     
@@ -72,9 +74,15 @@ def parse_edit_command(user_input: str, invoice_lines=None) -> list:
         Список dict'ов с действиями
     """
     import re
+    import warnings
     from datetime import datetime
-    import logging
-    
+
+    warnings.warn(
+        "parse_edit_command is deprecated. Use app.parsers.command_parser.parse_compound_command instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+
     # Проверка на пустой ввод
     if not user_input or not user_input.strip():
         return []
@@ -84,7 +92,7 @@ def parse_edit_command(user_input: str, invoice_lines=None) -> list:
         return []
     
     # Добавляем отладочный вывод
-    print(f"PARSE DEBUG: Processing command '{user_input}'")
+    # print(f"PARSE DEBUG: Processing command '{user_input}'") # Deprecated: remove debug print
     
     # Специальная обработка для известных тестовых шаблонов
     if user_input.strip() == "строка 1 количество пять":
@@ -203,7 +211,7 @@ def parse_edit_command(user_input: str, invoice_lines=None) -> list:
                         results.append({"action": "set_unit", "line": line_num - 1, "unit": field_value})
             
             # Если нашли поля и добавили результаты, продолжаем с следующей частью
-            if len(results) > 0:
+            if field_parts and any(r.get("action") != "unknown" for r in results[len(results)-len(field_parts):]): # check if any field was parsed
                 continue
         
         # --- Проверка на команды с множественными параметрами в одной строке "строка X name Y price Z"
@@ -331,39 +339,42 @@ def parse_edit_command(user_input: str, invoice_lines=None) -> list:
                 }
                 
                 # Check which format we matched
-                if len(date_match.groups()) >= 2 and date_match.group(2):
-                    month_name = date_match.group(2).lower()
+                groups = date_match.groups()
+                if len(groups) >= 2 and isinstance(groups[1], str) and (groups[1].lower() in ru_month_map or groups[1].lower() in en_month_map) : # текстовый месяц
+                    month_name = groups[1].lower()
                     
                     # Check if it's Russian or English month
                     if month_name in ru_month_map:
                         month = ru_month_map[month_name]
                     elif month_name in en_month_map:
                         month = en_month_map[month_name]
-                    else:
+                    else: # Should not happen due to regex
                         raise ValueError(f"Unknown month name: {month_name}")
                         
                     # Get day and set current year
-                    day = int(date_match.group(1))
+                    day = int(groups[0])
                     year = datetime.now().year  # Current year if not specified
                     
                     # If month is in the past and it's not December, assume next year
+                    # This logic might need refinement for edge cases like specifying a past date intentionally
                     current_month = datetime.now().month
-                    if month < current_month and month != 12:
-                        year += 1
-                    
-                elif len(date_match.groups()) >= 3:
-                    if len(date_match.group(3)) == 4:  # DD.MM.YYYY
-                        day = int(date_match.group(1))
-                        month = int(date_match.group(2))
-                        year = int(date_match.group(3))
-                    elif len(date_match.group(1)) == 4:  # YYYY.MM.DD
-                        year = int(date_match.group(1))
-                        month = int(date_match.group(2))
-                        day = int(date_match.group(3))
-                    else:  # DD.MM.YY
-                        day = int(date_match.group(1))
-                        month = int(date_match.group(2))
-                        year = 2000 + int(date_match.group(3))  # Assume 20xx for 2-digit years
+                    if month < current_month and not (month == 12 and current_month != 12) : # if month is past and not Dec of current year
+                         year +=1
+
+                elif len(groups) >= 3: # числовой формат
+                    if len(groups[0]) == 4:  # YYYY.MM.DD or YYYY/MM/DD
+                        year = int(groups[0])
+                        month = int(groups[1])
+                        day = int(groups[2])
+                    elif len(groups[2]) == 4: # DD.MM.YYYY or DD/MM/YYYY
+                        day = int(groups[0])
+                        month = int(groups[1])
+                        year = int(groups[2])
+                    else:  # DD.MM.YY or DD/MM/YY
+                        day = int(groups[0])
+                        month = int(groups[1])
+                        year_short = int(groups[2])
+                        year = 2000 + year_short if year_short < 100 else year_short # Assume 20xx for 2-digit years
                 else:
                     raise ValueError("Invalid date format")
                 
@@ -388,7 +399,7 @@ def parse_edit_command(user_input: str, invoice_lines=None) -> list:
                 supplier = part[idx+len("изменить поставщика на"):].strip()
             elif part.lower().startswith("supplier "):
                 supplier = part[len("supplier "):].strip()
-            else:
+            else: # "change supplier to"
                 idx = part.lower().index("change supplier to")
                 supplier = part[idx+len("change supplier to"):].strip()
             
@@ -405,10 +416,16 @@ def parse_edit_command(user_input: str, invoice_lines=None) -> list:
                 val = val.replace('k', '').replace('к', '')
                 
                 # Check that only one number (invalid format otherwise)
-                if val.count(',') > 1 or val.count('.') > 1:
-                    raise ValueError('invalid number format')
+                if val.count(',') > 1 and val.count('.') > 1: # e.g. 1,2.3,4
+                     raise ValueError('invalid number format mixed separators')
+                if val.count(',') > 1 and '.' in val and val.rfind('.') > val.find(','): # e.g. 1,2,3.4
+                     raise ValueError('invalid number format multiple commas before decimal')
+                if val.count('.') > 1 and ',' in val and val.rfind(',') > val.find('.'): # e.g. 1.2.3,4
+                     raise ValueError('invalid number format multiple dots before comma')
                 
-                total = float(val.replace(',', '.'))
+                val = val.replace(',', '.') # Convert comma to dot for float conversion
+                
+                total = float(val)
                 # Multiply by 1000 if 'k' suffix was present
                 if has_k:
                     total *= 1000
@@ -417,7 +434,7 @@ def parse_edit_command(user_input: str, invoice_lines=None) -> list:
                 continue
             except Exception:
                 results.append({"action": "unknown", "error": "invalid_total_value"})
-                continue
+            continue
         
         # --- Price ---
         match_price = (
@@ -474,6 +491,10 @@ def parse_edit_command(user_input: str, invoice_lines=None) -> list:
                     continue
                 
                 name = match_name.group(2).strip()
+                # Remove trailing dot if it's the last character and not part of the name itself
+                if name.endswith(".") and not name.endswith("..") :
+                    name = name[:-1].strip()
+
                 results.append({"action": "set_name", "line": line, "name": name})
             except Exception:
                 results.append({"action": "unknown", "error": "invalid_line_or_name"})
@@ -496,15 +517,17 @@ def parse_edit_command(user_input: str, invoice_lines=None) -> list:
                 elif invoice_lines is not None and (line < 0 or line >= invoice_lines):
                     results.append({"action": "unknown", "error": "line_out_of_range", "line": line})
                     continue
-                    
+                
                 unit = match_unit.group(2).strip()
+                if unit.endswith(".") and not unit.endswith(".."):
+                    unit = unit[:-1].strip()
                 results.append({"action": "set_unit", "line": line, "unit": unit})
             except Exception:
                 results.append({"action": "unknown", "error": "invalid_line_or_unit"})
             continue
     
     # If no commands were recognized and we have reserved keywords, return a special error
-    if not results:
+    if not results and user_input: # only add error if input was not empty
         results.append({"action": "unknown", "error": "no_pattern_match", "user_input": user_input})
     
     return results
@@ -552,7 +575,7 @@ def parse_assistant_output(raw: str) -> List[EditCommand]:
     
     for i, obj in enumerate(actions):
         if not isinstance(obj, dict):
-            logger.error(f"[parse_assistant_output] Action не dict", extra={"data": {"index": i, "item": obj}})
+            logger.error("[parse_assistant_output] Action не dict", extra={"data": {"index": i, "item": obj}})
             continue  # Пропускаем некорректный элемент, но продолжаем обработку
             
         if "action" not in obj:
@@ -563,10 +586,10 @@ def parse_assistant_output(raw: str) -> List[EditCommand]:
             cmds.append(EditCommand(**obj))
             logger.info(f"[parse_assistant_output] Добавлена команда {obj.get('action')} из элемента {i}")
         except ValidationError as ve:
-            logger.error(f"[parse_assistant_output] Validation error", extra={"data": {"index": i, "item": obj, "error": str(ve)}})
+            logger.error("[parse_assistant_output] Validation error", extra={"data": {"index": i, "item": obj, "error": str(ve)}})
             # Продолжаем обработку остальных элементов
         except ValueError as ve:
-            logger.error(f"[parse_assistant_output] Validation error (row check)", extra={"data": {"index": i, "item": obj, "error": str(ve)}})
+            logger.error("[parse_assistant_output] Validation error (row check)", extra={"data": {"index": i, "item": obj, "error": str(ve)}})
             # Продолжаем обработку остальных элементов
     
     # Если не удалось получить ни одной команды, возвращаем ошибку
@@ -695,11 +718,11 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
     """
     start_time = time.time()
     
-    # ОПТИМИЗАЦИЯ 1: Быстрое распознавание общих паттернов команд через регулярные выражения
-    fast_intent = attempt_fast_intent_recognition(user_input)
-    if fast_intent:
-        logger.info(f"[run_thread_safe_async] Быстрое распознавание команды: {fast_intent.get('action')}")
-        return fast_intent
+    # ОПТИМИЗАЦИЯ 1: Быстрое распознавание общих паттернов команд через регулярные выражения - REMOVED
+    # fast_intent = attempt_fast_intent_recognition(user_input)
+    # if fast_intent:
+    #     logger.info(f"[run_thread_safe_async] Быстрое распознавание команды: {fast_intent.get('action')}")
+    #     return fast_intent
     
     # ОПТИМИЗАЦИЯ 2: Кеширование результатов по нормализованному ключу (удаляем числа, оставляем суть команды)
     # Например, "строка 1 цена 100" и "строка 2 цена 500" дадут одинаковый кеш-ключ "строка X цена Y"
@@ -745,12 +768,12 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
         # Добавляем сообщение пользователя с повторными попытками при ошибках API
         logger.info(f"[run_thread_safe_async] Adding user message: '{user_input}'")
         try:
-            message = await retry_openai_call(
+            await retry_openai_call(
                 client.beta.threads.messages.create,
                 thread_id=thread_id,
                 role="user",
                 content=user_input,
-                max_retries=2,
+                max_retries=3,  # Увеличиваем с 2 до 3
                 initial_backoff=1.0
             )
         except Exception as e:
@@ -761,9 +784,9 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
                 "user_message": "Не удалось отправить сообщение. Пожалуйста, попробуйте позже."
             }
 
-        # ОПТИМИЗАЦИЯ 3: Уменьшаем таймаут для запросов редактирования до 30 секунд
-        actual_timeout = min(30, timeout)
-        
+        # ОПТИМИЗАЦИЯ 3: Устанавливаем таймаут не менее 45 секунд для обеспечения надежности
+        timeout = max(45, timeout)  # Увеличиваем минимальный таймаут с 30 до 45 секунд
+
         # Запускаем ассистента с повторными попытками
         logger.info(f"[run_thread_safe_async] Creating run with assistant ID: {cached_assistant_id}")
         try:
@@ -771,7 +794,7 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
                 client.beta.threads.runs.create,
                 thread_id=thread_id,
                 assistant_id=cached_assistant_id,
-                max_retries=2,
+                max_retries=3,  # Увеличиваем с 2 до 3
                 initial_backoff=1.0
             )
             run_id = run.id
@@ -789,11 +812,77 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
         latency_monitor.record_latency(latency * 1000)
         logger.info(f"assistant_latency_ms={int(latency*1000)}")
         
-        # Остальной код остаётся без изменений, включая обработку ответа
-        # ...
-
-        # Когда получаем результат, кешируем его для будущих схожих запросов
-        if run.status == "completed":
+        # НОВЫЙ КОД: Ожидание завершения запроса с дополнительными проверками
+        max_wait_iterations = 8  # Максимальное количество итераций ожидания
+        wait_iteration = 0
+        status = run.status
+        
+        # Ожидаем, пока run не завершится или не упадет с ошибкой
+        while status in ["queued", "in_progress"] and wait_iteration < max_wait_iterations:
+            # Увеличиваем время ожидания с каждой итерацией
+            wait_time = 1.0 * (1.5 ** wait_iteration)  # Экспоненциальное увеличение времени ожидания
+            logger.info(f"[run_thread_safe_async] Waiting for run completion, status={status}, iteration={wait_iteration}, wait_time={wait_time:.1f}s")
+            await asyncio.sleep(wait_time)
+            
+            # Получаем обновленный статус
+            try:
+                run = await retry_openai_call(
+                    client.beta.threads.runs.retrieve,
+                    thread_id=thread_id,
+                    run_id=run_id,
+                    max_retries=2
+                )
+                status = run.status
+                logger.info(f"[run_thread_safe_async] Updated run status: {status}")
+                
+                # Обработка статуса requires_action (требуется интеграция с инструментами)
+                if status == "requires_action":
+                    # Получаем требуемые действия
+                    required_action = run.required_action
+                    if required_action and required_action.type == "submit_tool_outputs":
+                        tool_calls = required_action.submit_tool_outputs.tool_calls
+                        logger.info(f"[run_thread_safe_async] Requires action with {len(tool_calls)} tool calls")
+                        
+                        # Отправляем пустой ответ на запрос инструментов
+                        tool_outputs = []
+                        for tool_call in tool_calls:
+                            tool_outputs.append({
+                                "tool_call_id": tool_call.id,
+                                "output": "{}"  # Пустой JSON как ответ на вызов инструмента
+                            })
+                        
+                        # Отправляем ответы инструментов
+                        logger.info("[run_thread_safe_async] Submitting empty tool outputs")
+                        try:
+                            run = await retry_openai_call(
+                                client.beta.threads.runs.submit_tool_outputs,
+                                thread_id=thread_id,
+                                run_id=run_id,
+                                tool_outputs=tool_outputs,
+                                max_retries=2
+                            )
+                            status = run.status
+                            logger.info(f"[run_thread_safe_async] After submit_tool_outputs: {status}")
+                            
+                            # Добавляем дополнительное время ожидания после отправки tool outputs
+                            # т.к. статус может стать queued и требовать обработки
+                            # Сбрасываем счетчик итераций, чтобы дать больше времени после tool outputs
+                            wait_iteration = 0
+                            
+                        except Exception as e:
+                            logger.error(f"[run_thread_safe_async] Error submitting tool outputs: {e}")
+                            status = "error"
+                    else:
+                        logger.warning("[run_thread_safe_async] Unhandled required_action type")
+                        status = "error"
+            except Exception as e:
+                logger.error(f"[run_thread_safe_async] Error retrieving run status: {e}")
+                status = "error"  # Помечаем как ошибку, чтобы выйти из цикла
+            
+            wait_iteration += 1
+        
+        # Проверяем итоговый статус
+        if status == "completed":
             # После успешного получения результата
             try:
                 messages = await retry_openai_call(
@@ -818,10 +907,29 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
                     return result
             except Exception as e:
                 logger.exception(f"[run_thread_safe_async] Error handling successful run: {e}")
+                return {
+                    "action": "unknown", 
+                    "error": str(e),
+                    "user_message": "An error occurred while processing your request. Please try again."
+                }
         
-        # Остальной код для обработки ошибок остаётся без изменений
-        # ...
-
+        # УЛУЧШЕНИЕ: Более информативное сообщение об ошибке в зависимости от статуса
+        error_messages = {
+            "queued": "Запрос находится в очереди слишком долго. Пожалуйста, попробуйте еще раз через несколько секунд.",
+            "in_progress": "Запрос обрабатывается слишком долго. Пожалуйста, попробуйте еще раз.",
+            "failed": "Не удалось обработать ваш запрос из-за ошибки. Пожалуйста, попробуйте еще раз.",
+            "cancelled": "Запрос был отменен. Пожалуйста, попробуйте еще раз.",
+            "expired": "Время обработки запроса истекло. Пожалуйста, попробуйте еще раз.",
+            "requires_action": "Запрос требует дополнительных действий. Пожалуйста, попробуйте еще раз с другой формулировкой."
+        }
+        
+        user_message = error_messages.get(status, "Не удалось обработать ваш запрос. Пожалуйста, попробуйте еще раз.")
+        
+        return {
+            "action": "unknown",
+            "error": f"run_status_{status}",
+            "user_message": user_message
+        }
     except Exception as e:
         logger.exception(f"[run_thread_safe_async] Error in OpenAI Assistant API call: {e}")
         return {
@@ -833,69 +941,69 @@ async def run_thread_safe_async(user_input: str, timeout: int = 60) -> Dict[str,
 
 # Вспомогательные функции для оптимизации
 
-def attempt_fast_intent_recognition(user_input: str) -> Optional[Dict[str, Any]]:
-    """
-    Быстрое распознавание часто встречающихся команд без обращения к OpenAI
+# def attempt_fast_intent_recognition(user_input: str) -> Optional[Dict[str, Any]]:
+#     """
+#     Быстрое распознавание часто встречающихся команд без обращения к OpenAI
     
-    Args:
-        user_input: Текстовая команда пользователя
+#     Args:
+#         user_input: Текстовая команда пользователя
         
-    Returns:
-        Dict или None: Распознанное намерение или None, если не удалось распознать
-    """
-    text = user_input.lower()
+#     Returns:
+#         Dict или None: Распознанное намерение или None, если не удалось распознать
+#     """
+#     text = user_input.lower()
     
-    # Распознавание команды редактирования строки (цена)
-    price_match = re.search(r'(строк[аи]?|line|row)\s+(\d+).*?(цен[аыу]|price)\s+(\d+)', text)
-    if price_match:
-        try:
-            line_num = int(price_match.group(2))
-            price = price_match.group(4).strip()
-            return {
-                "action": "set_price",
-                "line_index": line_num - 1,  # Конвертируем в 0-based индекс
-                "value": price
-            }
-        except Exception:
-            pass
+#     # Распознавание команды редактирования строки (цена)
+#     price_match = re.search(r'(строк[аи]?|line|row)\s+(\d+).*?(цен[аыу]|price)\s+(\d+)', text)
+#     if price_match:
+#         try:
+#             line_num = int(price_match.group(2))
+#             price = price_match.group(4).strip()
+#             return {
+#                 "action": "set_price",
+#                 "line_index": line_num - 1,  # Конвертируем в 0-based индекс
+#                 "value": price
+#             }
+#         except Exception:
+#             pass
     
-    # Распознавание команды редактирования строки (количество)
-    qty_match = re.search(r'(строк[аи]?|line|row)\s+(\d+).*?(кол-во|количество|qty|quantity)\s+(\d+)', text)
-    if qty_match:
-        try:
-            line_num = int(qty_match.group(2))
-            qty = qty_match.group(4).strip()
-            return {
-                "action": "set_quantity",
-                "line_index": line_num - 1,  # Конвертируем в 0-based индекс
-                "value": qty
-            }
-        except Exception:
-            pass
+#     # Распознавание команды редактирования строки (количество)
+#     qty_match = re.search(r'(строк[аи]?|line|row)\s+(\d+).*?(кол-во|количество|qty|quantity)\s+(\d+)', text)
+#     if qty_match:
+#         try:
+#             line_num = int(qty_match.group(2))
+#             qty = qty_match.group(4).strip()
+#             return {
+#                 "action": "set_quantity",
+#                 "line_index": line_num - 1,  # Конвертируем в 0-based индекс
+#                 "value": qty
+#             }
+#         except Exception:
+#             pass
     
-    # Распознавание команды редактирования строки (единица измерения)
-    unit_match = re.search(r'(строк[аи]?|line|row)\s+(\d+).*?(ед[\.\s]изм[\.ерение]*|unit)\s+(\w+)', text)
-    if unit_match:
-        try:
-            line_num = int(unit_match.group(2))
-            unit = unit_match.group(4).strip()
-            return {
-                "action": "set_unit",
-                "line_index": line_num - 1,  # Конвертируем в 0-based индекс
-                "value": unit
-            }
-        except Exception:
-            pass
+#     # Распознавание команды редактирования строки (единица измерения)
+#     unit_match = re.search(r'(строк[аи]?|line|row)\s+(\d+).*?(ед[\.\s]изм[\.ерение]*|unit)\s+(\w+)', text)
+#     if unit_match:
+#         try:
+#             line_num = int(unit_match.group(2))
+#             unit = unit_match.group(4).strip()
+#             return {
+#                 "action": "set_unit",
+#                 "line_index": line_num - 1,  # Конвертируем в 0-based индекс
+#                 "value": unit
+#             }
+#         except Exception:
+#             pass
     
-    # Распознавание команды изменения даты
-    date_match = re.search(r'дат[аы]?\s+(\d{1,2})[\s./-](\d{1,2}|января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)', text)
-    if date_match:
-        # Для даты используем адаптер IntentAdapter для корректного форматирования
-        from app.assistants.intent_adapter import adapt_intent
-        return adapt_intent(f"set_date {user_input}")
+#     # Распознавание команды изменения даты
+#     date_match = re.search(r'дат[аы]?\s+(\d{1,2})[\s./-](\d{1,2}|января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)', text)
+#     if date_match:
+#         # Для даты используем адаптер IntentAdapter для корректного форматирования
+#         from app.assistants.intent_adapter import adapt_intent
+#         return adapt_intent(f"set_date {user_input}")
     
-    # Если ничего не распознано, возвращаем None
-    return None
+#     # Если ничего не распознано, возвращаем None
+#     return None
 
 
 def normalize_query_for_cache(query: str) -> str:

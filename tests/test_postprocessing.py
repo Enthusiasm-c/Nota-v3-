@@ -1,4 +1,3 @@
-import pytest
 import logging
 from app.postprocessing import clean_num, autocorrect_name, postprocess_parsed_data
 from app.models import ParsedData, Position

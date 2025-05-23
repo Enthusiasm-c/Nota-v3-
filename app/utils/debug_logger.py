@@ -8,14 +8,14 @@ import os
 import traceback
 from datetime import datetime, date
 from functools import wraps
+import importlib.util
 
 # Импортируем ParsedData для типизации
 from app.models import ParsedData
 
 # --- Опциональный импорт psutil ---
 try:
-    import psutil
-    PSUTIL_AVAILABLE = True
+    PSUTIL_AVAILABLE = bool(importlib.util.find_spec('psutil'))
 except ImportError:
     PSUTIL_AVAILABLE = False
 

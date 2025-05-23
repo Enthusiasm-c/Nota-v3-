@@ -1,6 +1,7 @@
 import logging
 import time
 import pytest
+from unittest.mock import patch
 from app.assistants.client import parse_assistant_output
 from app.utils.monitor import parse_action_monitor, latency_monitor
 
@@ -34,13 +35,10 @@ def test_monitor_not_triggered_for_few_errors(caplog):
     assert not alerts, 'ALERT не должен срабатывать при <5 ошибках'
 
 
-from unittest.mock import patch
-
 def test_latency_monitor_triggers_alert_on_p95():
     # Очистить очередь латентности
     latency_monitor.latencies.clear()
     # Добавить 100 значений: 95 по 1000мс, 5 по 9001мс (p95 = 9001)
-    import time
     now = time.time()
     latencies = [(now, 1000)]*94 + [(now, 9001)]*6
     latency_monitor.latencies.clear()

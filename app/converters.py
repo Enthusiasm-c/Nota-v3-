@@ -1,4 +1,3 @@
-from app.models import ParsedData
 
 def parsed_to_dict(p) -> dict:
     """Универсальный конвертер ParsedData или dict -> dict (Pydantic v2)."""

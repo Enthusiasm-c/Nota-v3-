@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 
 """
-Скрипт для предобработки изображения накладной
-Использует модуль prepare_for_ocr из проекта Nota
+Скрипт для обработки изображения накладной
+Просто копирует изображение без предобработки, так как модуль предобработки был удален
 """
 
 import os
@@ -20,7 +20,7 @@ sys.path.append(current_dir)
 
 # Парсер аргументов командной строки
 def parse_args():
-    parser = argparse.ArgumentParser(description="Предобработка изображения накладной")
+    parser = argparse.ArgumentParser(description="Обработка изображения накладной")
     parser.add_argument("input", type=str, help="Путь к исходному изображению")
     parser.add_argument("--output", "-o", type=str, help="Путь для сохранения обработанного изображения")
     parser.add_argument("--save-steps", "-s", action="store_true", help="Сохранять промежуточные шаги обработки")
@@ -48,34 +48,24 @@ def main():
     print(f"Обработанное изображение будет сохранено: {output_path}")
     
     try:
-        # Импортируем модуль предобработки из проекта
-        print("Импорт модуля предобработки...")
-        
-        try:
-            from app.imgprep.prepare import prepare_for_ocr
-            print("Модуль предобработки успешно импортирован")
-        except ImportError as e:
-            print(f"Ошибка импорта модуля предобработки: {e}")
-            print("Убедитесь, что вы находитесь в корневой директории проекта и виртуальное окружение активировано")
-            return 1
-        
         # Если нужно сохранить оригинальное изображение
         if args.save_steps:
             orig_copy = os.path.join(tmp_dir, "0_original.jpg")
             shutil.copy(args.input, orig_copy)
             print(f"Копия оригинала сохранена: {orig_copy}")
         
-        # Применяем предобработку
-        print("Применяем предобработку...")
+        print("Копирование изображения без предобработки...")
         start_time = time.time()
-        processed_bytes = prepare_for_ocr(args.input, use_preprocessing=True)
-        elapsed = time.time() - start_time
-        print(f"Предобработка завершена за {elapsed:.2f} сек")
         
-        # Сохраняем результат
-        with open(output_path, 'wb') as f:
-            f.write(processed_bytes)
-        print(f"Обработанное изображение сохранено: {output_path}")
+        # Открываем изображение и сохраняем в нужном формате
+        input_image = Image.open(args.input)
+        if output_path.lower().endswith('.webp'):
+            input_image.save(output_path, 'WEBP')
+        else:
+            input_image.save(output_path)
+            
+        elapsed = time.time() - start_time
+        print(f"Копирование завершено за {elapsed:.2f} сек")
         
         # Открываем для проверки
         try:
@@ -87,7 +77,7 @@ def main():
         return 0
     
     except Exception as e:
-        print(f"Ошибка при предобработке: {str(e)}")
+        print(f"Ошибка при обработке изображения: {str(e)}")
         traceback.print_exc()
         return 1
 

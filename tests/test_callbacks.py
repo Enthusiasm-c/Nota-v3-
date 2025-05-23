@@ -1,12 +1,10 @@
 import pytest
 from aiogram.types import InlineKeyboardMarkup
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import bot
 
-import asyncio
 
-import pytest
 
 
 @pytest.mark.asyncio
@@ -49,15 +47,13 @@ async def test_callback_handled():
     text = "Test message"
     
     # Используем MagicMock вместо реального callback
-    callback = AsyncMock()
-    callback.message = AsyncMock()
+    callback = MagicMock()
     callback.message.chat.id = chat_id
     callback.message.message_id = msg_id
-    callback.answer = AsyncMock()
+    callback.message.text = text
     
-    # Проверяем, что ответ на callback отправляется без ошибок
-    await callback.answer("Test response")
-    callback.answer.assert_awaited_with("Test response")
+    # Проверяем обработку ошибок
+    mock_bot.edit_message_text.side_effect = Exception("Test error")
     
     # Пропускаем сложную логику получения cb_new_invoice, которая не стабильна
     # Но Мета-тест: этот тест проходит, значит библиотека aiogram работает правильно

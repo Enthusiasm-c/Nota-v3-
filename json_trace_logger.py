@@ -1,14 +1,13 @@
+from dataclasses import is_dataclass, asdict
+import os
 import logging
 import json
 import sys
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
 from app.trace_context import get_trace_id
-import os
 
 LOG_PATH = os.path.join(os.path.dirname(__file__), "logs", "assistant_trace.log")
-
-from dataclasses import is_dataclass, asdict
 
 class JsonTraceFormatter(logging.Formatter):
     def format(self, record):

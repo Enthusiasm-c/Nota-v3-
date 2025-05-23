@@ -5,7 +5,6 @@ import json
 import threading
 from app.handlers.tracing_log_middleware import _default
 import logging
-from functools import lru_cache
 from typing import Dict, Any, Optional, Tuple
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")

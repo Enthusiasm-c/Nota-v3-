@@ -5,9 +5,7 @@
 
 import asyncio
 import logging
-import os
-import time
-from typing import List, Optional, Set
+from typing import List, Set
 import random
 from app.utils.redis_cache import cache_get, cache_set
 
@@ -194,3 +192,24 @@ def release_thread(thread_id: str) -> None:
         thread_ids.append(thread_id)
         cache_set(POOL_KEY, ",".join(thread_ids), ex=THREAD_TTL)
         logger.debug(f"Поток {thread_id} возвращен в пул, размер пула: {len(thread_ids)}")
+
+async def shutdown_thread_pool() -> None:
+    """
+    Gracefully shuts down the thread pool and releases resources.
+    Should be called during application shutdown.
+    """
+    logger.info("Shutting down OpenAI thread pool")
+    
+    try:
+        # Clear pool from Redis
+        pool = cache_get(POOL_KEY)
+        if pool:
+            logger.info("Clearing thread pool from Redis")
+            cache_set(POOL_KEY, "", ex=1)  # Set empty with 1s TTL (effectively delete)
+    except Exception as e:
+        logger.error(f"Error clearing thread pool from Redis: {e}")
+    
+    # Wait a moment to ensure any pending operations complete
+    await asyncio.sleep(0.5)
+    
+    logger.info("Thread pool shutdown complete")

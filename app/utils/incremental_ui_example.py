@@ -15,22 +15,83 @@ from aiogram.fsm.context import FSMContext
 from app.utils.incremental_ui import IncrementalUI
 from app.i18n import t
 
-logger = logging.getLogger(__name__)
-router = Router()
+import re
+from typing import List
 
-def split_message(text, max_length=4096):
+router = Router()
+logger = logging.getLogger(__name__)
+
+def split_message(text: str, max_length: int = 4000) -> List[str]:
     """
-    Разбивает длинный текст на части, не превышающие max_length символов.
+    Разделяет длинное сообщение на части для Telegram API.
+    
+    Telegram имеет ограничение в 4096 символов на сообщение.
+    Эта функция разделяет длинные сообщения на части с учетом
+    HTML-форматирования и смысловых блоков.
+    
+    Args:
+        text: Исходный текст сообщения
+        max_length: Максимальная длина части (по умолчанию 4000 для запаса)
+        
+    Returns:
+        Список частей сообщения для последовательной отправки
     """
+    if len(text) <= max_length:
+        return [text]
+    
     parts = []
-    while len(text) > max_length:
-        split_at = text.rfind('\n', 0, max_length)
-        if split_at == -1:
-            split_at = max_length
-        parts.append(text[:split_at])
-        text = text[split_at:]
-    if text:
-        parts.append(text)
+    current_part = ""
+    
+    # Разделяем по строкам для сохранения смысловых блоков
+    lines = text.split('\n')
+    
+    # Добавляем строки в текущую часть до достижения лимита
+    for line in lines:
+        # Если текущая часть + новая строка превышают лимит
+        if len(current_part) + len(line) + 1 > max_length:
+            # Если текущая строка сама по себе слишком длинная
+            if len(line) > max_length:
+                # Разбиваем длинную строку на части
+                for i in range(0, len(line), max_length - 10):
+                    chunk = line[i:i + max_length - 10]
+                    
+                    # Проверяем незакрытые HTML-теги
+                    open_tags = re.findall(r'<([a-z]+)[^>]*>', chunk)
+                    close_tags = re.findall(r'</([a-z]+)>', chunk)
+                    
+                    unclosed_tags = []
+                    for tag in open_tags:
+                        if tag not in [t for t in close_tags]:
+                            unclosed_tags.append(tag)
+                    
+                    # Закрываем незакрытые теги
+                    if unclosed_tags:
+                        for tag in reversed(unclosed_tags):
+                            chunk += f"</{tag}>"
+                            
+                    if current_part:
+                        parts.append(current_part)
+                        current_part = ""
+                    
+                    # Открываем теги заново в следующей части
+                    next_chunk = ""
+                    for tag in unclosed_tags:
+                        next_chunk += f"<{tag}>"
+                    
+                    parts.append(chunk)
+                    current_part = next_chunk
+            else:
+                # Добавляем текущую часть в список и начинаем новую
+                parts.append(current_part)
+                current_part = line + '\n'
+        else:
+            # Добавляем строку к текущей части
+            current_part += line + '\n'
+    
+    # Добавляем последнюю часть, если она не пуста
+    if current_part:
+        parts.append(current_part)
+    
     return parts
 
 # Пример 1: Базовое использование с простыми обновлениями

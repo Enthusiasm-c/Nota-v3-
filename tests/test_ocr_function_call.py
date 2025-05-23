@@ -2,7 +2,7 @@ import pytest
 import vcr
 from app import ocr
 from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import AsyncMock
 
 CASSETTE_PATH = str(Path(__file__).parent / "vcr_cassettes" / "ocr_function_call.yaml")
 SAMPLE_IMAGE = str(Path(__file__).parent / "sample_invoice.jpg")
@@ -21,47 +21,35 @@ async def test_openai_function_call(monkeypatch):
             "OPENAI_VISION_ASSISTANT_ID": "test-assistant-id"
         })(),
     )
-    # Prepare a valid mock OpenAI response (sync mocks for run_in_executor)
-    from unittest.mock import MagicMock
-    thread = MagicMock()
+    # Prepare a valid mock OpenAI response
+    # Мокаем структуру клиента OpenAI Vision Assistant
+    thread = AsyncMock()
     thread.id = "thread-id"
-    run = MagicMock()
+    threads = AsyncMock()
+    threads.create = AsyncMock(return_value=thread)
+    message_create = AsyncMock()
+    threads.messages = AsyncMock()
+    threads.messages.create = message_create
+    run = AsyncMock()
     run.id = "run-id"
-    run_status = MagicMock()
-    run_status.status = 'completed'
-    message = MagicMock()
+    runs = AsyncMock()
+    runs.create = AsyncMock(return_value=run)
+    runs.retrieve = AsyncMock(return_value=AsyncMock(status='completed'))
+    threads.runs = runs
+    threads.runs.create = runs.create
+    threads.runs.retrieve = runs.retrieve
+    threads.runs.cancel = AsyncMock()
+    message = AsyncMock()
     message.role = "assistant"
     message.content = [type("C", (), {"type": "text", "text": '{"supplier": "Test Supplier", "positions": [{"name": "Tuna loin", "qty": 1, "unit": "kg", "price": 100.0}]}'})()]
-    messages = MagicMock()
+    messages = AsyncMock()
     messages.data = [message]
-
-    # Мокаем клиент и все нужные методы
-    class DummyThreads:
-        def create(self):
-            return thread
-        class messages:
-            @staticmethod
-            def create(**kwargs):
-                return None
-            @staticmethod
-            def list(**kwargs):
-                return messages
-        class runs:
-            @staticmethod
-            def create(**kwargs):
-                return run
-            @staticmethod
-            def retrieve(**kwargs):
-                return run_status
-            @staticmethod
-            def cancel(**kwargs):
-                return None
-    class DummyBeta:
-        threads = DummyThreads()
-    class DummyClient:
-        beta = DummyBeta()
-    monkeypatch.setattr("app.ocr.get_ocr_client", lambda: DummyClient())
-
+    threads.messages.list = AsyncMock(return_value=messages)
+    beta = AsyncMock()
+    beta.threads = threads
+    client = AsyncMock()
+    client.beta = beta
+    monkeypatch.setattr("app.ocr.get_ocr_client", lambda: client)
     with open(SAMPLE_IMAGE, "rb") as f:
         img_bytes = f.read()
     with vcr.use_cassette(CASSETTE_PATH):

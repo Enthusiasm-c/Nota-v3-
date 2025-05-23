@@ -3,7 +3,6 @@ Optimized utilities for Telegram message editing.
 """
 
 import time
-import re
 import logging
 from typing import Dict, Any, Optional, Union
 from aiogram import Bot
@@ -54,7 +53,7 @@ async def optimized_safe_edit(
     
     # Check cache to avoid duplicate edits
     if not skip_cache_check and cache_key in _message_cache and _message_cache[cache_key].get("timestamp", 0) > time.time() - 5:
-        logger.debug(f"Skipping duplicate edit request (cache hit)")
+        logger.debug("Skipping duplicate edit request (cache hit)")
         return True
     
     # Fix common HTML issues before sending

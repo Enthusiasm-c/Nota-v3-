@@ -1,7 +1,6 @@
 import pytest
 from unittest.mock import patch
 from fakeredis import FakeRedis
-from app.assistants.client import run_thread_safe
 from app.edit.apply_intent import apply_intent
 
 @pytest.fixture(autouse=True)

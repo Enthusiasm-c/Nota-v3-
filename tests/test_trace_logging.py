@@ -1,7 +1,7 @@
 import logging
 import pytest
 from app.assistants.client import run_thread_safe
-from app.trace_context import set_trace_id, get_trace_id
+from app.trace_context import set_trace_id
 
 @pytest.fixture(autouse=True)
 def set_test_trace_id():
@@ -11,7 +11,6 @@ def set_test_trace_id():
 
 
 def test_run_thread_safe_logs_error_traceid(caplog):
-    import logging
     # Перенаправляем логи в caplog
     logger = logging.getLogger("app.assistants.trace_openai")
     for h in logger.handlers[:]:

@@ -1,0 +1,77 @@
+{
+  "invoice_id": "INV-2023/07",
+  "date": "2023-07-15",
+  "supplier": "PT Supplier Makanan",
+  "lines": [
+    {
+      "name": "Ayam kampung",
+      "qty": 2,
+      "unit": "kg",
+      "price": 15000,
+      "amount": 30000
+    },
+    {
+      "name": "Daging sapi",
+      "qty": 1.5,
+      "unit": "kg",
+      "price": 130000,
+      "amount": 195000
+    },
+    {
+      "name": "Gula pasir",
+      "qty": 5,
+      "unit": "kg",
+      "price": 13000,
+      "amount": 65000
+    },
+    {
+      "name": "Telur ayam",
+      "qty": 30,
+      "unit": "kg",
+      "price": 2000,
+      "amount": 60000
+    },
+    {
+      "name": "Kecap manis",
+      "qty": 2,
+      "unit": "kg",
+      "price": 25000,
+      "amount": 500000
+    },
+    {
+      "name": "Beras putih",
+      "qty": 25,
+      "unit": "kg",
+      "price": 12000,
+      "amount": 360000
+    },
+    {
+      "name": "Minyak goreng",
+      "qty": 15,
+      "unit": "pcs",
+      "price": 15000,
+      "amount": 75000
+    },
+    {
+      "name": "Susu kental manis",
+      "qty": 15,
+      "unit": "btl",
+      "price": 10000,
+      "amount": 15000
+    },
+    {
+      "name": "Tempe",
+      "qty": 10,
+      "unit": "pcs",
+      "price": 3500,
+      "amount": 35000
+    },
+    {
+      "name": "Tahu",
+      "qty": 15,
+      "unit": "pcs",
+      "price": 10000,
+      "amount": 15000
+    }
+  ]
+} 
