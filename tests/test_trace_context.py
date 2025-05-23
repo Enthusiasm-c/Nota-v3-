@@ -1,7 +1,8 @@
-import pytest
 import asyncio
-import contextvars
-from app.trace_context import get_request_id, set_request_id, reset_request_id, request_id_var
+
+import pytest
+
+from app.trace_context import get_request_id, request_id_var, reset_request_id, set_request_id
 
 
 class TestRequestIdContext:
@@ -19,7 +20,7 @@ class TestRequestIdContext:
         """Test setting and getting request ID."""
         test_id = "test-request-123"
         set_request_id(test_id)
-        
+
         assert get_request_id() == test_id
 
     def test_reset_request_id(self):
@@ -27,7 +28,7 @@ class TestRequestIdContext:
         # Set a request ID
         set_request_id("test-id")
         assert get_request_id() == "test-id"
-        
+
         # Reset it
         reset_request_id()
         assert get_request_id() is None
@@ -36,7 +37,7 @@ class TestRequestIdContext:
         """Test overwriting existing request ID."""
         set_request_id("first-id")
         assert get_request_id() == "first-id"
-        
+
         set_request_id("second-id")
         assert get_request_id() == "second-id"
 
@@ -74,7 +75,7 @@ class TestContextVarBehavior:
     async def test_context_isolation_between_tasks(self):
         """Test that context is isolated between async tasks."""
         results = []
-        
+
         async def task_with_id(task_id: str, expected_id: str):
             set_request_id(expected_id)
             # Simulate some async work
@@ -82,14 +83,14 @@ class TestContextVarBehavior:
             # Context should be preserved
             actual_id = get_request_id()
             results.append((task_id, expected_id, actual_id))
-        
+
         # Run multiple tasks concurrently
         await asyncio.gather(
             task_with_id("task1", "id-1"),
             task_with_id("task2", "id-2"),
-            task_with_id("task3", "id-3")
+            task_with_id("task3", "id-3"),
         )
-        
+
         # Each task should have its own context
         assert len(results) == 3
         for task_id, expected_id, actual_id in results:
@@ -98,36 +99,36 @@ class TestContextVarBehavior:
     def test_context_inheritance_in_threads(self):
         """Test that context is inherited but isolated."""
         import threading
-        
+
         results = []
-        
+
         def thread_function(thread_id: str):
             # Each thread should start with the parent context
             initial_id = get_request_id()
-            
+
             # Set a new ID in this thread
             new_id = f"thread-{thread_id}"
             set_request_id(new_id)
-            
+
             results.append((thread_id, initial_id, get_request_id()))
-        
+
         # Set ID in main thread
         set_request_id("main-thread")
-        
+
         # Create threads
         threads = []
         for i in range(3):
             thread = threading.Thread(target=thread_function, args=(str(i),))
             threads.append(thread)
             thread.start()
-        
+
         # Wait for all threads to complete
         for thread in threads:
             thread.join()
-        
+
         # Main thread context should be unchanged
         assert get_request_id() == "main-thread"
-        
+
         # Each thread should have had its own context
         assert len(results) == 3
         for thread_id, initial_id, final_id in results:
@@ -140,8 +141,8 @@ class TestContextVarBehavior:
         # Test setting through context variable directly
         request_id_var.set("direct-set")
         assert get_request_id() == "direct-set"
-        
-        # Test getting through context variable directly  
+
+        # Test getting through context variable directly
         set_request_id("function-set")
         assert request_id_var.get() == "function-set"
 
@@ -149,7 +150,7 @@ class TestContextVarBehavior:
         """Test context variable default value."""
         # Reset context
         reset_request_id()
-        
+
         # Direct access should return None (default)
         assert request_id_var.get() is None
         # When context var already has a value (None), get with default returns that value, not the default
@@ -168,23 +169,23 @@ class TestTraceContextIntegration:
         """Test simulating a complete request lifecycle."""
         # Start of request - no ID
         assert get_request_id() is None
-        
+
         # Middleware sets request ID
         request_id = "req-2024-001"
         set_request_id(request_id)
-        
+
         # Throughout request processing, ID should be available
         assert get_request_id() == request_id
-        
+
         # Simulate nested function calls
         def process_data():
             return get_request_id()
-        
+
         def handle_request():
             return process_data()
-        
+
         assert handle_request() == request_id
-        
+
         # End of request - reset ID
         reset_request_id()
         assert get_request_id() is None
@@ -192,32 +193,33 @@ class TestTraceContextIntegration:
     @pytest.mark.asyncio
     async def test_async_request_handling(self):
         """Test async request handling with context."""
+
         async def async_handler(req_id: str):
             set_request_id(req_id)
-            
+
             # Simulate async operations
             await asyncio.sleep(0.001)
-            
+
             # Context should persist
             assert get_request_id() == req_id
-            
+
             # Simulate nested async calls
             async def nested_operation():
                 await asyncio.sleep(0.001)
                 return get_request_id()
-            
+
             result = await nested_operation()
             assert result == req_id
-            
+
             return req_id
-        
+
         # Process multiple async requests
         tasks = [
             async_handler("async-req-1"),
             async_handler("async-req-2"),
-            async_handler("async-req-3")
+            async_handler("async-req-3"),
         ]
-        
+
         results = await asyncio.gather(*tasks)
         expected = ["async-req-1", "async-req-2", "async-req-3"]
         assert sorted(results) == sorted(expected)
@@ -225,7 +227,7 @@ class TestTraceContextIntegration:
     def test_context_error_handling(self):
         """Test context handling during errors."""
         set_request_id("error-test")
-        
+
         try:
             # Simulate error during request processing
             assert get_request_id() == "error-test"
@@ -233,7 +235,7 @@ class TestTraceContextIntegration:
         except ValueError:
             # Context should still be available during error handling
             assert get_request_id() == "error-test"
-        
+
         # Context persists after error
         assert get_request_id() == "error-test"
 
@@ -244,15 +246,15 @@ class TestTraceContextIntegration:
             ("op-2", "request-2"),
             ("op-3", "request-3"),
             ("reset", None),
-            ("op-4", "request-4")
+            ("op-4", "request-4"),
         ]
-        
+
         for operation, expected_value in operations:
             if operation == "reset":
                 reset_request_id()
             else:
                 set_request_id(expected_value)
-            
+
             assert get_request_id() == expected_value
 
 
@@ -279,7 +281,7 @@ class TestEdgeCases:
         """Test explicitly setting None as request ID."""
         set_request_id("test")
         assert get_request_id() == "test"
-        
+
         # Explicitly set None
         set_request_id(None)
         assert get_request_id() is None
@@ -287,14 +289,13 @@ class TestEdgeCases:
     def test_repeated_operations(self):
         """Test repeated get/set operations."""
         test_id = "repeated-test"
-        
+
         # Set and get multiple times
         for i in range(10):
             set_request_id(f"{test_id}-{i}")
             assert get_request_id() == f"{test_id}-{i}"
-        
+
         # Reset multiple times
         for i in range(5):
             reset_request_id()
-            assert get_request_id() is None 
- 
+            assert get_request_id() is None

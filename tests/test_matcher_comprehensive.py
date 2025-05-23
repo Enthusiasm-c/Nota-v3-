@@ -2,27 +2,27 @@
 Комплексные тесты для модуля app/matcher.py
 """
 
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import patch, MagicMock
-from typing import Dict, Any, List
 
 from app.matcher import (
-    normalize_product_name,
-    calculate_string_similarity,
-    fuzzy_find,
-    fuzzy_best,
-    match_supplier,
-    match_positions,
-    find_best_match,
-    fuzzy_match_product,
-    normalize_name,
-    normalize_unit,
-    check_unit_compatibility,
-    calculate_similarity,
     PRODUCT_VARIANTS,
-    UNIT_PATTERN
+    UNIT_PATTERN,
+    calculate_similarity,
+    calculate_string_similarity,
+    check_unit_compatibility,
+    find_best_match,
+    fuzzy_best,
+    fuzzy_find,
+    fuzzy_match_product,
+    match_positions,
+    match_supplier,
+    normalize_name,
+    normalize_product_name,
+    normalize_unit,
 )
-from app.models import Product, Position
+from app.models import Product
 
 
 class TestNormalizeProductName:
@@ -128,14 +128,14 @@ class TestCalculateStringSimilarity:
         result = calculate_string_similarity("apple", "apples")
         assert result >= 0.9
 
-    @patch('app.matcher.get_string_similarity_cached')
-    @patch('app.matcher.set_string_similarity_cached')
+    @patch("app.matcher.get_string_similarity_cached")
+    @patch("app.matcher.set_string_similarity_cached")
     def test_similarity_caching(self, mock_set_cache, mock_get_cache):
         """Тест кеширования результатов"""
         mock_get_cache.return_value = None
-        
+
         calculate_string_similarity("test1", "test2")
-        
+
         mock_get_cache.assert_called_once()
         mock_set_cache.assert_called_once()
 
@@ -159,60 +159,52 @@ class TestFuzzyFind:
         items = [
             {"name": "apple", "id": 1},
             {"name": "banana", "id": 2},
-            {"name": "pineapple", "id": 3}
+            {"name": "pineapple", "id": 3},
         ]
-        
+
         result = fuzzy_find("apple", items, threshold=0.6)
-        
+
         assert len(result) >= 1
         assert any(r["name"] == "apple" for r in result)
 
     def test_fuzzy_find_object_items(self):
         """Тест поиска в объектах"""
+
         class TestItem:
             def __init__(self, name, id):
                 self.name = name
                 self.id = id
-        
-        items = [
-            TestItem("apple", 1),
-            TestItem("banana", 2),
-            TestItem("pineapple", 3)
-        ]
-        
+
+        items = [TestItem("apple", 1), TestItem("banana", 2), TestItem("pineapple", 3)]
+
         result = fuzzy_find("apple", items, threshold=0.6)
-        
+
         assert len(result) >= 1
 
     def test_fuzzy_find_threshold_filtering(self):
         """Тест фильтрации по порогу"""
         items = [{"name": "apple"}, {"name": "xyz"}]
-        
+
         result = fuzzy_find("apple", items, threshold=0.9)
-        
+
         # Только apple должен пройти высокий порог
         assert len(result) == 1
         assert result[0]["name"] == "apple"
 
     def test_fuzzy_find_limit(self):
         """Тест ограничения количества результатов"""
-        items = [
-            {"name": "apple1"},
-            {"name": "apple2"},
-            {"name": "apple3"},
-            {"name": "apple4"}
-        ]
-        
+        items = [{"name": "apple1"}, {"name": "apple2"}, {"name": "apple3"}, {"name": "apple4"}]
+
         result = fuzzy_find("apple", items, limit=2)
-        
+
         assert len(result) <= 2
 
     def test_fuzzy_find_custom_key(self):
         """Тест поиска по пользовательскому ключу"""
         items = [{"title": "apple", "id": 1}]
-        
+
         result = fuzzy_find("apple", items, key="title")
-        
+
         assert len(result) == 1
 
 
@@ -227,44 +219,38 @@ class TestFuzzyBest:
 
     def test_fuzzy_best_dict_input(self):
         """Тест с входным словарем"""
-        items = {
-            "apple": {"id": 1},
-            "banana": {"id": 2}
-        }
-        
+        items = {"apple": {"id": 1}, "banana": {"id": 2}}
+
         result = fuzzy_best("apple", items)
-        
+
         assert result[0] == "apple"
         assert result[1] > 90.0  # Высокая оценка для точного совпадения
 
     def test_fuzzy_best_list_input(self):
         """Тест с входным списком"""
-        items = [
-            {"name": "apple", "id": 1},
-            {"name": "banana", "id": 2}
-        ]
-        
+        items = [{"name": "apple", "id": 1}, {"name": "banana", "id": 2}]
+
         result = fuzzy_best("apple", items)
-        
+
         assert result[0] == "apple"
         assert result[1] > 90.0
 
     def test_fuzzy_best_no_match(self):
         """Тест когда нет подходящих совпадений"""
         items = {"apple": {"id": 1}}
-        
+
         result = fuzzy_best("xyz", items, threshold=0.9)
-        
+
         assert result == ("", 0.0)
 
     def test_fuzzy_best_with_threshold(self):
         """Тест с порогом схожести"""
         items = {"apple": {"id": 1}}
-        
+
         # Низкий порог - должно найти
         result1 = fuzzy_best("aple", items, threshold=0.5)
         assert result1[0] == "apple"
-        
+
         # Высокий порог - не должно найти
         result2 = fuzzy_best("xyz", items, threshold=0.9)
         assert result2 == ("", 0.0)
@@ -277,14 +263,14 @@ class TestMatchSupplier:
         """Тест с пустым именем поставщика"""
         suppliers = [{"name": "Test Supplier", "id": 1}]
         result = match_supplier("", suppliers)
-        
+
         assert result["status"] == "unknown"
         assert result["id"] is None
 
     def test_match_supplier_empty_list(self):
         """Тест с пустым списком поставщиков"""
         result = match_supplier("Test", [])
-        
+
         assert result["status"] == "unknown"
         assert result["name"] == "Test"
 
@@ -292,11 +278,11 @@ class TestMatchSupplier:
         """Тест точного совпадения"""
         suppliers = [
             {"name": "Test Supplier", "id": 1, "code": "TS001"},
-            {"name": "Other Supplier", "id": 2, "code": "OS002"}
+            {"name": "Other Supplier", "id": 2, "code": "OS002"},
         ]
-        
+
         result = match_supplier("Test Supplier", suppliers)
-        
+
         assert result["status"] == "ok"
         assert result["id"] == 1
         assert result["code"] == "TS001"
@@ -304,43 +290,44 @@ class TestMatchSupplier:
     def test_match_supplier_fuzzy_match(self):
         """Тест нечеткого совпадения"""
         suppliers = [{"name": "Test Supplier", "id": 1, "code": "TS001"}]
-        
+
         result = match_supplier("Test Supplyer", suppliers)  # опечатка
-        
+
         assert result["status"] == "ok"
         assert result["id"] == 1
 
     def test_match_supplier_no_match(self):
         """Тест отсутствия совпадения"""
         suppliers = [{"name": "Test Supplier", "id": 1}]
-        
+
         result = match_supplier("Completely Different", suppliers)
-        
+
         assert result["status"] == "unknown"
         assert result["name"] == "Completely Different"
 
     def test_match_supplier_object_input(self):
         """Тест с объектами вместо словарей"""
+
         class Supplier:
             def __init__(self, name, id, code):
                 self.name = name
                 self.id = id
                 self.code = code
-        
+
         suppliers = [Supplier("Test Supplier", 1, "TS001")]
-        
+
         result = match_supplier("Test Supplier", suppliers)
-        
+
         assert result["status"] == "ok"
         assert result["id"] == 1
 
     def test_match_supplier_custom_threshold(self):
         """Тест с пользовательским порогом"""
         suppliers = [{"name": "Test Supplier", "id": 1}]
-        
+
         # Высокий порог - не должно найти похожее совпадение
         result = match_supplier("Test Supplyer", suppliers, threshold=0.95)
-        
+
         assert result["status"] == "unknown"
 
 
@@ -356,9 +343,9 @@ class TestMatchPositions:
         """Тест базового сопоставления"""
         positions = [{"name": "apple", "qty": 5}]
         products = [Product(id="1", name="Apple", alias="apple", code="", unit="", price_hint=None)]
-        
+
         result = match_positions(positions, products)
-        
+
         assert len(result) == 1
         assert result[0]["status"] == "ok"
         assert result[0]["matched_name"] == "Apple"
@@ -367,9 +354,9 @@ class TestMatchPositions:
         """Тест когда нет совпадений"""
         positions = [{"name": "xyz", "qty": 5}]
         products = [Product(id="1", name="Apple", alias="apple", code="", unit="", price_hint=None)]
-        
+
         result = match_positions(positions, products)
-        
+
         assert len(result) == 1
         assert result[0]["status"] == "unknown"
         assert result[0]["matched_name"] is None
@@ -378,9 +365,9 @@ class TestMatchPositions:
         """Тест с продуктами в виде словарей"""
         positions = [{"name": "apple", "qty": 5}]
         products = [{"name": "Apple", "id": "1"}]
-        
+
         result = match_positions(positions, products)
-        
+
         assert len(result) == 1
         assert result[0]["status"] == "ok"
 
@@ -388,9 +375,9 @@ class TestMatchPositions:
         """Тест сохранения исходных данных позиций"""
         positions = [{"name": "apple", "qty": 5, "price": 100, "custom_field": "test"}]
         products = [Product(id="1", name="Apple", alias="apple", code="", unit="", price_hint=None)]
-        
+
         result = match_positions(positions, products)
-        
+
         assert result[0]["custom_field"] == "test"
         assert result[0]["qty"] == 5
         assert result[0]["price"] == 100
@@ -402,10 +389,12 @@ class TestFindBestMatch:
     def test_find_best_match_basic(self):
         """Тест базового поиска лучшего совпадения"""
         position = {"name": "apple", "unit": "kg", "price": 100}
-        products = [Product(id="1", name="Apple", alias="apple", code="", unit="kg", price_hint=None)]
-        
+        products = [
+            Product(id="1", name="Apple", alias="apple", code="", unit="kg", price_hint=None)
+        ]
+
         result = find_best_match(position, products)
-        
+
         assert result["status"] == "ok"
         assert result["matched_product"] is not None
         assert result["unit_match"] is True
@@ -413,30 +402,36 @@ class TestFindBestMatch:
     def test_find_best_match_no_match(self):
         """Тест когда нет совпадений"""
         position = {"name": "xyz", "unit": "kg"}
-        products = [Product(id="1", name="Apple", alias="apple", code="", unit="kg", price_hint=None)]
-        
+        products = [
+            Product(id="1", name="Apple", alias="apple", code="", unit="kg", price_hint=None)
+        ]
+
         result = find_best_match(position, products)
-        
+
         assert result["status"] == "unknown"
         assert result["matched_product"] is None
 
     def test_find_best_match_unit_mismatch(self):
         """Тест несовпадения единиц измерения"""
         position = {"name": "apple", "unit": "pcs", "price": 100}
-        products = [Product(id="1", name="Apple", alias="apple", code="", unit="kg", price_hint=None)]
-        
+        products = [
+            Product(id="1", name="Apple", alias="apple", code="", unit="kg", price_hint=None)
+        ]
+
         result = find_best_match(position, products)
-        
+
         assert result["status"] == "unit_mismatch"
         assert result["unit_match"] is False
 
     def test_find_best_match_price_hint(self):
         """Тест с подсказкой цены"""
         position = {"name": "apple", "price": 200}
-        products = [Product(id="1", name="Apple", alias="apple", code="", unit="", price_hint=100.0)]
-        
+        products = [
+            Product(id="1", name="Apple", alias="apple", code="", unit="", price_hint=100.0)
+        ]
+
         result = find_best_match(position, products)
-        
+
         # Уверенность должна снизиться из-за большой разницы в цене
         assert result["confidence"] < 1.0
 
@@ -447,51 +442,53 @@ class TestFuzzyMatchProduct:
     def test_fuzzy_match_empty_query(self):
         """Тест с пустым запросом"""
         products = [Product(id="1", name="Apple", alias="apple", code="", unit="", price_hint=None)]
-        
+
         result = fuzzy_match_product("", products)
-        
+
         assert result == (None, 0.0)
 
     def test_fuzzy_match_empty_products(self):
         """Тест с пустым списком продуктов"""
         result = fuzzy_match_product("apple", [])
-        
+
         assert result == (None, 0.0)
 
     def test_fuzzy_match_by_name(self):
         """Тест поиска по названию"""
         products = [Product(id="1", name="Apple", alias="apple", code="", unit="", price_hint=None)]
-        
+
         product, score = fuzzy_match_product("apple", products)
-        
+
         assert product is not None
         assert score > 0.7
 
     def test_fuzzy_match_by_alias(self):
         """Тест поиска по алиасу"""
-        products = [Product(id="1", name="Red Apple", alias="apple", code="", unit="", price_hint=None)]
-        
+        products = [
+            Product(id="1", name="Red Apple", alias="apple", code="", unit="", price_hint=None)
+        ]
+
         product, score = fuzzy_match_product("apple", products)
-        
+
         assert product is not None
         assert score > 0.7
 
     def test_fuzzy_match_dict_products(self):
         """Тест с продуктами в виде словарей"""
         products = [{"name": "Apple", "alias": "apple", "id": "1"}]
-        
+
         product, score = fuzzy_match_product("apple", products)
-        
+
         assert product is not None
         assert score > 0.7
 
     def test_fuzzy_match_threshold(self):
         """Тест с порогом схожести"""
         products = [Product(id="1", name="Apple", alias="apple", code="", unit="", price_hint=None)]
-        
+
         # Высокий порог - не должно найти слабое совпадение
         product, score = fuzzy_match_product("xyz", products, threshold=0.9)
-        
+
         assert product is None
 
 
@@ -628,4 +625,4 @@ class TestEdgeCases:
 
 
 if __name__ == "__main__":
-    pytest.main([__file__]) 
+    pytest.main([__file__])

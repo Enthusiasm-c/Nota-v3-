@@ -1,7 +1,4 @@
 from app import data_loader
-import pytest
-from unittest.mock import patch, mock_open, MagicMock
-from app.models import Product
 
 
 def test_load_suppliers():

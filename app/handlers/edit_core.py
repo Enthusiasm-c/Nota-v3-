@@ -195,7 +195,156 @@ async def process_user_edit(
             await set_processing_edit(user_id, False)  # Снимаем блокировку при ошибке
             return
 
-        match_results = match_positions(new_invoice["positions"], products)
+        # ИСПРАВЛЕНО: Сохраняем предыдущие результаты совпадений и пересчитываем только измененные позиции
+        old_match_results = data.get("match_results", [])
+        old_positions = invoice.get("positions", [])
+        new_positions = new_invoice.get("positions", [])
+
+        logger.critical(f"ОТЛАДКА-ЯДРО: len(old_match_results)={len(old_match_results)}")
+        logger.critical(f"ОТЛАДКА-ЯДРО: len(old_positions)={len(old_positions)}")
+        logger.critical(f"ОТЛАДКА-ЯДРО: len(new_positions)={len(new_positions)}")
+        logger.critical(f"ОТЛАДКА-ЯДРО: old_match_results={old_match_results}")
+
+        # Определяем какие позиции изменились
+        changed_indices = []
+        name_changed_indices = []  # Позиции где изменилось название
+        for i, (old_pos, new_pos) in enumerate(zip(old_positions, new_positions)):
+            # Проверяем изменения в ключевых полях (name, qty, price, unit)
+            key_fields = ["name", "qty", "price", "unit"]
+            changes = []
+            name_changed = False
+            for field in key_fields:
+                old_val = old_pos.get(field)
+                new_val = new_pos.get(field)
+                if old_val != new_val:
+                    changes.append(
+                        f"{field}: '{old_val}' -> '{new_val}' (types: {type(old_val).__name__} -> {type(new_val).__name__})"
+                    )
+                    if field == "name":
+                        name_changed = True
+
+            if changes:
+                changed_indices.append(i)
+                if name_changed:
+                    name_changed_indices.append(i)
+                logger.critical(f"ОТЛАДКА-ЯДРО: Позиция {i+1} изменилась: {', '.join(changes)}")
+            else:
+                logger.critical(
+                    f"ОТЛАДКА-ЯДРО: Позиция {i+1} БЕЗ изменений: qty='{old_pos.get('qty')}' == '{new_pos.get('qty')}'"
+                )
+
+        # Если добавились новые позиции
+        if len(new_positions) > len(old_positions):
+            new_position_indices = list(range(len(old_positions), len(new_positions)))
+            changed_indices.extend(new_position_indices)
+            name_changed_indices.extend(
+                new_position_indices
+            )  # Новые позиции нужно полностью пересчитать
+            logger.critical(
+                f"ОТЛАДКА-ЯДРО: Добавлены новые позиции: {len(old_positions)} -> {len(new_positions)}"
+            )
+
+        # Пересчитываем только позиции где изменилось название или это новые позиции
+        if name_changed_indices:
+            logger.critical(
+                f"ОТЛАДКА-ЯДРО: Пересчитываем позиции с изменением названий: {[i+1 for i in name_changed_indices]}"
+            )
+            name_changed_positions = [new_positions[i] for i in name_changed_indices]
+            new_match_results = match_positions(name_changed_positions, products)
+
+            # Объединяем старые и новые результаты
+            match_results = []
+            new_result_iter = iter(new_match_results)
+
+            for i in range(len(new_positions)):
+                if i in name_changed_indices:
+                    # Используем новый результат для позиции с измененным названием
+                    match_results.append(next(new_result_iter))
+                elif i < len(old_match_results):
+                    # Сохраняем старый результат, но обновляем числовые поля из новой позиции
+                    old_result = old_match_results[i].copy()
+                    new_position = new_positions[i]
+
+                    # Обновляем числовые поля из новой позиции
+                    for field in ["qty", "price", "unit"]:
+                        if field in new_position:
+                            old_result[field] = new_position[field]
+
+                    # Пересчитываем line_total если есть qty и price
+                    if "qty" in old_result and "price" in old_result:
+                        try:
+                            qty = float(old_result["qty"]) if old_result["qty"] is not None else 0
+                            price = (
+                                float(old_result["price"]) if old_result["price"] is not None else 0
+                            )
+                            old_result["line_total"] = qty * price
+                        except (ValueError, TypeError):
+                            pass
+
+                    match_results.append(old_result)
+                    logger.critical(
+                        f"ОТЛАДКА-ЯДРО: Позиция {i+1} - сохранены старые совпадения, обновлены числовые поля"
+                    )
+                else:
+                    # Новая позиция без предыдущего результата
+                    match_results.append(
+                        {
+                            "name": new_positions[i].get("name", ""),
+                            "status": "unknown",
+                            "score": 0.0,
+                        }
+                    )
+        elif changed_indices and not name_changed_indices:
+            # Изменились только числовые поля, сохраняем все старые совпадения но обновляем числовые поля
+            logger.critical("ОТЛАДКА-ЯДРО: Изменились только числовые поля, сохраняем совпадения")
+            match_results = []
+            for i in range(len(new_positions)):
+                if i < len(old_match_results):
+                    # Сохраняем старый результат, но обновляем числовые поля из новой позиции
+                    old_result = old_match_results[i].copy()
+                    new_position = new_positions[i]
+
+                    # Обновляем числовые поля из новой позиции
+                    for field in ["qty", "price", "unit"]:
+                        if field in new_position:
+                            old_result[field] = new_position[field]
+
+                    # Пересчитываем line_total если есть qty и price
+                    if "qty" in old_result and "price" in old_result:
+                        try:
+                            qty = float(old_result["qty"]) if old_result["qty"] is not None else 0
+                            price = (
+                                float(old_result["price"]) if old_result["price"] is not None else 0
+                            )
+                            old_result["line_total"] = qty * price
+                        except (ValueError, TypeError):
+                            pass
+
+                    match_results.append(old_result)
+                    logger.critical(
+                        f"ОТЛАДКА-ЯДРО: Позиция {i+1} - сохранены старые совпадения, обновлены числовые поля"
+                    )
+                else:
+                    # Новая позиция без предыдущего результата
+                    match_results.append(
+                        {
+                            "name": new_positions[i].get("name", ""),
+                            "status": "unknown",
+                            "score": 0.0,
+                        }
+                    )
+        elif len(old_match_results) == 0:
+            # ИСПРАВЛЕНО: Если old_match_results пустой, полностью пересчитываем все позиции
+            logger.critical(
+                "ОТЛАДКА-ЯДРО: old_match_results пустой, полностью пересчитываем все позиции"
+            )
+            match_results = match_positions(new_positions, products)
+        else:
+            # Если ничего не изменилось, используем старые результаты
+            logger.critical(
+                "ОТЛАДКА-ЯДРО: Изменений в позициях не обнаружено, используем старые match_results"
+            )
+            match_results = old_match_results[: len(new_positions)]  # Обрезаем под новую длину
 
         # Явно считаем ошибки для более надежного определения статуса
         unknown_count = sum(1 for r in match_results if r.get("status") == "unknown")
@@ -206,14 +355,33 @@ async def process_user_edit(
             "ОТЛАДКА-ЯДРО: Результаты: unknown=%s, partial=%s" % (unknown_count, partial_count)
         )
 
+        # ДИАГНОСТИКА: Проверяем финальный match_results
+        logger.critical(f"ОТЛАДКА-ЯДРО: Финальный len(match_results)={len(match_results)}")
+        logger.critical(f"ОТЛАДКА-ЯДРО: Финальный match_results={match_results}")
+
         # Обновляем состояние с явными счетчиками ошибок
         await state.update_data(
             invoice=new_invoice,
+            match_results=match_results,
             unknown_count=unknown_count,
             partial_count=partial_count,
             last_edit_time=asyncio.get_event_loop().time(),  # Сохраняем время последнего редактирования
         )
         logger.critical("ОТЛАДКА-ЯДРО: Состояние обновлено с новым инвойсом")
+
+        # ОТЛАДКА: Проверяем что имена сохранились после match_positions
+        logger.critical("ОТЛАДКА-ЯДРО: Проверка имен после match_positions:")
+        for i, pos in enumerate(new_invoice.get("positions", [])):
+            name = pos.get("name")
+            logger.critical(f"ОТЛАДКА-ЯДРО: Позиция {i+1}: name='{name}'")
+
+        for i, match in enumerate(match_results):
+            name = match.get("name")
+            matched_name = match.get("matched_name")
+            status = match.get("status")
+            logger.critical(
+                f"ОТЛАДКА-ЯДРО: Match {i+1}: name='{name}', matched_name='{matched_name}', status='{status}'"
+            )
 
         # Формируем отчет
         try:

@@ -30,8 +30,12 @@ def test_normalize_product_name_edge_cases():
     assert normalize_product_name("exotic_fruit") == "exotic_fruit"  # Слово с подчеркиванием
     assert normalize_product_name("TOMATOES") == "tomatoes"  # Только верхний регистр
     assert normalize_product_name("tomatoes 1kg") == "tomatoes"  # Удаление единиц измерения
-    assert normalize_product_name("apples 2.5 kg") == "apples"  # Удаление единиц измерения с дробным числом
-    assert normalize_product_name("fresh organic premium tomatoes") == "tomatoes"  # Множество филлеров
+    assert (
+        normalize_product_name("apples 2.5 kg") == "apples"
+    )  # Удаление единиц измерения с дробным числом
+    assert (
+        normalize_product_name("fresh organic premium tomatoes") == "tomatoes"
+    )  # Множество филлеров
 
 
 def test_calculate_string_similarity_basic():
@@ -49,7 +53,9 @@ def test_calculate_string_similarity_normalization():
     assert calculate_string_similarity("  apple  ", "apple") == 1.0  # Пробелы
     assert calculate_string_similarity("apples", "apple") >= 0.9  # Множественное число
     assert calculate_string_similarity("fresh apple", "apple") >= 0.9  # Филлеры
-    assert calculate_string_similarity("organic apples", "apple") >= 0.9  # Филлеры + множественное число
+    assert (
+        calculate_string_similarity("organic apples", "apple") >= 0.9
+    )  # Филлеры + множественное число
     assert calculate_string_similarity("apple 1kg", "apple") >= 0.9  # Единицы измерения
 
 
@@ -66,11 +72,15 @@ def test_calculate_string_similarity_edge_cases():
 def test_calculate_string_similarity_product_variants():
     # Тестирование особых случаев с синонимами продуктов
     assert calculate_string_similarity("roma", "romaine") >= 0.8  # Частичное совпадение
-    assert calculate_string_similarity("romaine lettuce", "romaine") >= 0.9  # Синоним с дополнительным словом
+    assert (
+        calculate_string_similarity("romaine lettuce", "romaine") >= 0.9
+    )  # Синоним с дополнительным словом
     assert calculate_string_similarity("tomato", "tomatoes") >= 0.9  # Множественное число
     assert calculate_string_similarity("eggplant", "aubergine") >= 0.9  # Полные синонимы
     assert calculate_string_similarity("chili", "chilli") >= 0.9  # Вариации написания
-    assert calculate_string_similarity("fresh organic tomatoes", "tomato") >= 0.9  # Филлеры и множественное число
+    assert (
+        calculate_string_similarity("fresh organic tomatoes", "tomato") >= 0.9
+    )  # Филлеры и множественное число
     assert calculate_string_similarity("premium eggplant", "aubergine") >= 0.9  # Филлеры и синонимы
 
 
@@ -441,6 +451,7 @@ def test_match_positions_with_fillers():
     assert results[2]["status"] == "ok"
     assert results[2]["id"] == "3"
     assert results[2]["score"] >= 0.8
+
 
 def test_levenshtein_ratio():
     # Тестирование функции levenshtein_ratio

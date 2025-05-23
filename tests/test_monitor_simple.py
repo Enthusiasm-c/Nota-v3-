@@ -2,33 +2,29 @@
 Упрощенные тесты для app/utils/monitor.py - утилиты мониторинга
 """
 
-import time
-import pytest
-from unittest.mock import Mock, patch
 import logging
-from collections import deque
+import time
+from unittest.mock import Mock, patch
 
 from app.utils.monitor import (
-    MetricValue,
-    MetricsManager,
+    LOCAL_METRICS,
+    LOCAL_METRICS_FLUSH_INTERVAL,
+    LOCAL_METRICS_LOCK,
+    METRICS,
     ErrorRateMonitor,
     LatencyMonitor,
-    OCRMonitor,
+    MetricsManager,
     MetricsMonitor,
-    init_metrics,
-    increment_counter,
-    record_histogram,
+    MetricValue,
+    OCRMonitor,
     _maybe_flush_local_metrics,
-    metrics_manager,
-    parse_action_monitor,
+    increment_counter,
+    init_metrics,
     latency_monitor,
+    metrics_manager,
     ocr_monitor,
-    METRICS,
-    LOCAL_METRICS,
-    LOCAL_METRICS_LOCK,
-    LOCAL_METRICS_FLUSH_INTERVAL,
-    HAS_PROMETHEUS,
-    PROMETHEUS_AVAILABLE
+    parse_action_monitor,
+    record_histogram,
 )
 
 
@@ -62,45 +58,45 @@ class TestMetricsManager:
         manager = MetricsManager()
         assert manager.metrics == {}
 
-    @patch('app.utils.monitor.PROMETHEUS_AVAILABLE', False)
+    @patch("app.utils.monitor.PROMETHEUS_AVAILABLE", False)
     def test_register_counter_no_prometheus(self):
         """Тест регистрации счетчика без Prometheus"""
         manager = MetricsManager()
         manager.register_counter("test_counter", "Test counter")
         assert "test_counter" not in manager.metrics
 
-    @patch('app.utils.monitor.PROMETHEUS_AVAILABLE', False)
+    @patch("app.utils.monitor.PROMETHEUS_AVAILABLE", False)
     def test_register_histogram_no_prometheus(self):
         """Тест регистрации гистограммы без Prometheus"""
         manager = MetricsManager()
         manager.register_histogram("test_hist", "Test histogram")
         assert "test_hist" not in manager.metrics
 
-    @patch('app.utils.monitor.PROMETHEUS_AVAILABLE', False)
+    @patch("app.utils.monitor.PROMETHEUS_AVAILABLE", False)
     def test_increment_counter_no_prometheus(self):
         """Тест увеличения счетчика без Prometheus"""
         manager = MetricsManager()
         # Не должно выбрасывать исключений
         manager.increment_counter("test_counter", {"label": "value"}, 5)
 
-    @patch('app.utils.monitor.PROMETHEUS_AVAILABLE', True)
+    @patch("app.utils.monitor.PROMETHEUS_AVAILABLE", True)
     def test_increment_counter_metric_not_registered(self, caplog):
         """Тест увеличения незарегистрированного счетчика"""
         manager = MetricsManager()
-        
+
         with caplog.at_level(logging.WARNING):
             manager.increment_counter("non_existent", {"label": "value"})
-        
+
         assert "Metric non_existent not registered" in caplog.text
 
-    @patch('app.utils.monitor.PROMETHEUS_AVAILABLE', True)
+    @patch("app.utils.monitor.PROMETHEUS_AVAILABLE", True)
     def test_observe_histogram_not_registered(self, caplog):
         """Тест записи в незарегистрированную гистограмму"""
         manager = MetricsManager()
-        
+
         with caplog.at_level(logging.WARNING):
             manager.observe_histogram("non_existent", 1.0)
-        
+
         assert "Metric non_existent not registered" in caplog.text
 
 
@@ -113,7 +109,7 @@ class TestErrorRateMonitor:
         assert monitor.max_errors == 3
         assert monitor.interval_sec == 300
         assert len(monitor.error_times) == 0
-        assert hasattr(monitor, 'lock')
+        assert hasattr(monitor, "lock")
 
     def test_record_error_single(self):
         """Тест записи одной ошибки"""
@@ -124,41 +120,41 @@ class TestErrorRateMonitor:
     def test_record_error_expired_cleanup(self):
         """Тест очистки истекших ошибок"""
         monitor = ErrorRateMonitor(max_errors=5, interval_sec=1)
-        
+
         # Добавляем ошибку
         monitor.record_error()
         assert len(monitor.error_times) == 1
-        
+
         # Ждем и добавляем новую ошибку
         time.sleep(1.1)
         monitor.record_error()
-        
+
         # Старая ошибка должна быть удалена
         assert len(monitor.error_times) == 1
 
-    @patch('app.utils.monitor.logging.getLogger')
+    @patch("app.utils.monitor.logging.getLogger")
     def test_trigger_alert(self, mock_get_logger):
         """Тест триггера алерта"""
         mock_logger = Mock()
         mock_get_logger.return_value = mock_logger
-        
+
         monitor = ErrorRateMonitor(max_errors=2, interval_sec=600)
-        
+
         # Добавляем ошибки до превышения лимита
         monitor.record_error()
         monitor.record_error()  # Должен вызвать алерт
-        
+
         mock_logger.error.assert_called_once()
         assert "ALERT" in mock_logger.error.call_args[0][0]
 
     def test_record_error_below_threshold(self):
         """Тест записи ошибок ниже порога"""
-        with patch.object(ErrorRateMonitor, 'trigger_alert') as mock_trigger:
+        with patch.object(ErrorRateMonitor, "trigger_alert") as mock_trigger:
             monitor = ErrorRateMonitor(max_errors=3, interval_sec=600)
-            
+
             monitor.record_error()
             monitor.record_error()
-            
+
             mock_trigger.assert_not_called()
 
 
@@ -181,13 +177,13 @@ class TestLatencyMonitor:
     def test_record_latency_expired_cleanup(self):
         """Тест очистки истекших измерений задержки"""
         monitor = LatencyMonitor(threshold_ms=8000, interval_sec=1)
-        
+
         monitor.record_latency(1000)
         assert len(monitor.latencies) == 1
-        
+
         time.sleep(1.1)
         monitor.record_latency(2000)
-        
+
         assert len(monitor.latencies) == 1
 
     def test_check_alert_no_latencies(self):
@@ -196,25 +192,25 @@ class TestLatencyMonitor:
         # Не должно вызывать исключений
         monitor.check_alert()
 
-    @patch('app.utils.monitor.logging.getLogger')
+    @patch("app.utils.monitor.logging.getLogger")
     def test_check_alert_below_threshold(self, mock_get_logger):
         """Тест проверки алерта ниже порога"""
         mock_logger = Mock()
         mock_get_logger.return_value = mock_logger
-        
+
         monitor = LatencyMonitor(threshold_ms=8000, interval_sec=600)
         monitor.latencies.extend([(time.time(), 1000), (time.time(), 2000)])
-        
+
         monitor.check_alert()
-        
+
         mock_logger.error.assert_not_called()
 
-    @patch.object(LatencyMonitor, 'trigger_alert')
+    @patch.object(LatencyMonitor, "trigger_alert")
     def test_trigger_alert_called_correctly(self, mock_trigger):
         """Тест правильного вызова trigger_alert"""
         monitor = LatencyMonitor(threshold_ms=5000, interval_sec=600)
         monitor.trigger_alert(6000)
-        
+
         mock_trigger.assert_called_once_with(6000)
 
 
@@ -229,34 +225,34 @@ class TestOCRMonitor:
         assert monitor.interval_sec == 300
         assert len(monitor.measurements) == 0
 
-    @patch('app.utils.monitor.record_histogram')
+    @patch("app.utils.monitor.record_histogram")
     def test_record_with_tokens(self, mock_record_histogram):
         """Тест записи измерения с токенами"""
         monitor = OCRMonitor()
         monitor.record(1500, tokens=1000)
-        
+
         assert len(monitor.measurements) == 1
         assert mock_record_histogram.call_count == 2  # latency + tokens
 
-    @patch('app.utils.monitor.record_histogram')
+    @patch("app.utils.monitor.record_histogram")
     def test_record_without_tokens(self, mock_record_histogram):
         """Тест записи измерения без токенов"""
         monitor = OCRMonitor()
         monitor.record(1500)
-        
+
         assert len(monitor.measurements) == 1
         assert mock_record_histogram.call_count == 1  # только latency
 
     def test_record_expired_cleanup(self):
         """Тест очистки истекших измерений"""
         monitor = OCRMonitor(interval_sec=1)
-        
+
         monitor.record(1000)
         assert len(monitor.measurements) == 1
-        
+
         time.sleep(1.1)
         monitor.record(2000)
-        
+
         assert len(monitor.measurements) == 1
 
     def test_check_alerts_no_measurements(self):
@@ -265,27 +261,27 @@ class TestOCRMonitor:
         # Не должно вызывать исключений
         monitor.check_alerts()
 
-    @patch('app.utils.monitor.logging.getLogger')
+    @patch("app.utils.monitor.logging.getLogger")
     def test_trigger_latency_alert(self, mock_get_logger):
         """Тест триггера алерта по задержке"""
         mock_logger = Mock()
         mock_get_logger.return_value = mock_logger
-        
+
         monitor = OCRMonitor()
         monitor.trigger_latency_alert(7000)
-        
+
         mock_logger.error.assert_called_once()
         assert "OCR latency" in mock_logger.error.call_args[0][0]
 
-    @patch('app.utils.monitor.logging.getLogger')
+    @patch("app.utils.monitor.logging.getLogger")
     def test_trigger_token_alert(self, mock_get_logger):
         """Тест триггера алерта по токенам"""
         mock_logger = Mock()
         mock_get_logger.return_value = mock_logger
-        
+
         monitor = OCRMonitor()
         monitor.trigger_token_alert(9000)
-        
+
         mock_logger.error.assert_called_once()
         assert "OCR token usage" in mock_logger.error.call_args[0][0]
 
@@ -298,39 +294,39 @@ class TestMetricsMonitor:
         monitor = MetricsMonitor()
         assert "ocr" in monitor._metrics
         assert "matching" in monitor._metrics
-        assert hasattr(monitor, '_lock')
+        assert hasattr(monitor, "_lock")
 
     def test_increment_counter_valid_category(self):
         """Тест увеличения счетчика для валидной категории"""
         monitor = MetricsMonitor()
-        
+
         initial_value = monitor._metrics["ocr"]["total_requests"].value
         monitor.increment_counter("ocr", "total_requests", 5)
-        
+
         assert monitor._metrics["ocr"]["total_requests"].value == initial_value + 5
 
     def test_increment_counter_invalid_category(self):
         """Тест увеличения счетчика для невалидной категории"""
         monitor = MetricsMonitor()
-        
+
         # Не должно вызывать исключений
         monitor.increment_counter("invalid", "total_requests", 5)
 
     def test_increment_counter_invalid_metric(self):
         """Тест увеличения невалидной метрики"""
         monitor = MetricsMonitor()
-        
+
         # Не должно вызывать исключений
         monitor.increment_counter("ocr", "invalid_metric", 5)
 
     def test_update_timing(self):
         """Тест обновления метрик времени"""
         monitor = MetricsMonitor()
-        
+
         # Обновляем время обработки
         monitor.update_timing("ocr", 2.5)
         monitor.update_timing("ocr", 1.5)
-        
+
         metrics = monitor._metrics["ocr"]
         assert metrics["total_processing_time"].value == 4.0
         assert metrics["total_requests"].value == 2
@@ -339,20 +335,20 @@ class TestMetricsMonitor:
     def test_update_timing_invalid_category(self):
         """Тест обновления времени для невалидной категории"""
         monitor = MetricsMonitor()
-        
+
         # Не должно вызывать исключений
         monitor.update_timing("invalid", 2.5)
 
     def test_get_metrics(self):
         """Тест получения метрик"""
         monitor = MetricsMonitor()
-        
+
         # Обновляем некоторые метрики
         monitor.increment_counter("ocr", "successful_requests", 10)
         monitor.update_timing("ocr", 1.5)
-        
+
         metrics = monitor.get_metrics()
-        
+
         assert "ocr" in metrics
         assert "matching" in metrics
         assert metrics["ocr"]["successful_requests"] == 10
@@ -362,49 +358,61 @@ class TestMetricsMonitor:
 class TestModuleFunctions:
     """Тесты для функций модуля"""
 
-    @patch('app.utils.monitor.metrics_manager')
+    @patch("app.utils.monitor.metrics_manager")
     def test_init_metrics(self, mock_manager):
         """Тест инициализации метрик"""
         init_metrics()
-        
+
         assert mock_manager.register_counter.call_count == 1
         assert mock_manager.register_histogram.call_count == 1
 
-    @patch('app.utils.monitor.HAS_PROMETHEUS', False)
-    @patch('app.utils.monitor._maybe_flush_local_metrics')
+    @patch("app.utils.monitor.HAS_PROMETHEUS", False)
+    @patch("app.utils.monitor._maybe_flush_local_metrics")
     def test_increment_counter_without_prometheus(self, mock_flush):
         """Тест увеличения счетчика без Prometheus"""
-        with patch.dict('app.utils.monitor.LOCAL_METRICS', {"counters": {}, "histograms": {}, "last_flush": time.time()}, clear=True):
+        with patch.dict(
+            "app.utils.monitor.LOCAL_METRICS",
+            {"counters": {}, "histograms": {}, "last_flush": time.time()},
+            clear=True,
+        ):
             increment_counter("test_counter", {"label": "value"})
-            
+
             assert "test_counter:label:value" in LOCAL_METRICS["counters"]
             mock_flush.assert_called_once()
 
-    @patch('app.utils.monitor.HAS_PROMETHEUS', False)
-    @patch('app.utils.monitor._maybe_flush_local_metrics')
+    @patch("app.utils.monitor.HAS_PROMETHEUS", False)
+    @patch("app.utils.monitor._maybe_flush_local_metrics")
     def test_record_histogram_without_prometheus(self, mock_flush):
         """Тест записи в гистограмму без Prometheus"""
-        with patch.dict('app.utils.monitor.LOCAL_METRICS', {"counters": {}, "histograms": {}, "last_flush": time.time()}, clear=True):
+        with patch.dict(
+            "app.utils.monitor.LOCAL_METRICS",
+            {"counters": {}, "histograms": {}, "last_flush": time.time()},
+            clear=True,
+        ):
             record_histogram("test_hist", 1.5, {"label": "value"})
-            
+
             hist_key = "test_hist:label:value"
             assert hist_key in LOCAL_METRICS["histograms"]
             assert 1.5 in LOCAL_METRICS["histograms"][hist_key]
             mock_flush.assert_called_once()
 
-    @patch('app.utils.monitor.logging.getLogger')
+    @patch("app.utils.monitor.logging.getLogger")
     def test_maybe_flush_local_metrics_counters_only(self, mock_get_logger):
         """Тест флуша локальных метрик только со счетчиками"""
         mock_logger = Mock()
         mock_get_logger.return_value = mock_logger
-        
-        with patch.dict('app.utils.monitor.LOCAL_METRICS', {
-            "counters": {"test:default": 5, "other:label:value": 3},
-            "histograms": {},
-            "last_flush": time.time() - 200
-        }, clear=True):
+
+        with patch.dict(
+            "app.utils.monitor.LOCAL_METRICS",
+            {
+                "counters": {"test:default": 5, "other:label:value": 3},
+                "histograms": {},
+                "last_flush": time.time() - 200,
+            },
+            clear=True,
+        ):
             _maybe_flush_local_metrics()
-            
+
             mock_logger.info.assert_called_once()
             log_msg = mock_logger.info.call_args[0][0]
             assert "COUNTERS:" in log_msg
@@ -412,12 +420,13 @@ class TestModuleFunctions:
 
     def test_maybe_flush_local_metrics_no_flush_needed(self):
         """Тест что флуш не происходит если интервал не прошел"""
-        with patch.dict('app.utils.monitor.LOCAL_METRICS', {
-            "last_flush": time.time()  # Только что сбрасывалось
-        }):
-            with patch('app.utils.monitor.logging.getLogger') as mock_get_logger:
+        with patch.dict(
+            "app.utils.monitor.LOCAL_METRICS",
+            {"last_flush": time.time()},  # Только что сбрасывалось
+        ):
+            with patch("app.utils.monitor.logging.getLogger") as mock_get_logger:
                 _maybe_flush_local_metrics()
-                
+
                 mock_get_logger.assert_not_called()
 
 
@@ -453,7 +462,7 @@ class TestGlobalInstances:
     def test_constants_defined(self):
         """Тест определения констант"""
         assert LOCAL_METRICS_FLUSH_INTERVAL == 120
-        assert hasattr(LOCAL_METRICS_LOCK, '__enter__')
+        assert hasattr(LOCAL_METRICS_LOCK, "__enter__")
 
 
 class TestThreadSafety:
@@ -462,31 +471,31 @@ class TestThreadSafety:
     def test_error_rate_monitor_thread_safety(self):
         """Тест потокобезопасности ErrorRateMonitor"""
         monitor = ErrorRateMonitor()
-        
+
         # Проверяем, что блокировка используется
-        assert hasattr(monitor, 'lock')
-        assert hasattr(monitor.lock, '__enter__')
+        assert hasattr(monitor, "lock")
+        assert hasattr(monitor.lock, "__enter__")
 
     def test_latency_monitor_thread_safety(self):
         """Тест потокобезопасности LatencyMonitor"""
         monitor = LatencyMonitor()
-        
-        assert hasattr(monitor, 'lock')
-        assert hasattr(monitor.lock, '__enter__')
+
+        assert hasattr(monitor, "lock")
+        assert hasattr(monitor.lock, "__enter__")
 
     def test_ocr_monitor_thread_safety(self):
         """Тест потокобезопасности OCRMonitor"""
         monitor = OCRMonitor()
-        
-        assert hasattr(monitor, 'lock')
-        assert hasattr(monitor.lock, '__enter__')
+
+        assert hasattr(monitor, "lock")
+        assert hasattr(monitor.lock, "__enter__")
 
     def test_metrics_monitor_thread_safety(self):
         """Тест потокобезопасности MetricsMonitor"""
         monitor = MetricsMonitor()
-        
-        assert hasattr(monitor, '_lock')
-        assert hasattr(monitor._lock, '__enter__')
+
+        assert hasattr(monitor, "_lock")
+        assert hasattr(monitor._lock, "__enter__")
 
 
 class TestEdgeCases:
@@ -495,28 +504,31 @@ class TestEdgeCases:
     def test_empty_deque_operations(self):
         """Тест операций с пустыми deque"""
         monitor = ErrorRateMonitor()
-        
+
         # Не должно вызывать исключений
         monitor.record_error()
-        
+
         latency_monitor = LatencyMonitor()
         latency_monitor.check_alert()  # Пустые latencies
 
-    @patch('app.utils.monitor.HAS_PROMETHEUS', False)
+    @patch("app.utils.monitor.HAS_PROMETHEUS", False)
     def test_increment_counter_no_labels(self):
         """Тест увеличения счетчика без меток"""
-        with patch.dict('app.utils.monitor.LOCAL_METRICS', {"counters": {}, "histograms": {}, "last_flush": time.time()}, clear=True):
+        with patch.dict(
+            "app.utils.monitor.LOCAL_METRICS",
+            {"counters": {}, "histograms": {}, "last_flush": time.time()},
+            clear=True,
+        ):
             increment_counter("test_counter")
-            
+
             assert "test_counter:default" in LOCAL_METRICS["counters"]
 
     def test_division_by_zero_protection(self):
         """Тест защиты от деления на ноль"""
         monitor = MetricsMonitor()
-        
+
         # Получаем метрики когда total_requests = 0
         metrics = monitor.get_metrics()
-        
+
         # Не должно быть исключений
-        assert metrics["ocr"]["avg_processing_time"] == 0.0 
- 
+        assert metrics["ocr"]["avg_processing_time"] == 0.0

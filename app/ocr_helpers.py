@@ -23,8 +23,8 @@ def parse_numeric_value(text: Optional[str], default: float = 0, is_float: bool 
     Parse numeric value from text with different formats.
 
     Handles various number formats:
+    - Indonesian/European: 16.000 (16 thousand), 16.000,50 (16 thousand and 50 cents)
     - American: 1,000.00
-    - European: 1.000,00
     - Other: 1 000, 1000, etc.
 
     Args:
@@ -61,27 +61,43 @@ def parse_numeric_value(text: Optional[str], default: float = 0, is_float: bool 
         # Normalize the text based on format
         text = text.strip()
 
-        # European format: 1.000,50 -> convert to 1000.50
+        # NEW: Better detection of Indonesian/European vs American format
         if "," in text and "." in text:
-            # Check if it's European format (1.000,50) or US format (1,000.50)
+            # Check if it's European format (16.000,50) or US format (1,000.50)
             dot_pos = text.rfind(".")
             comma_pos = text.rfind(",")
 
-            if dot_pos < comma_pos:  # European: 1.000,50
+            if dot_pos < comma_pos:  # European: 16.000,50
                 text = text.replace(".", "").replace(",", ".")
             else:  # US: 1,000.50
                 text = text.replace(",", "")
+        elif "." in text:
+            # IMPROVED: Better handling of dots
+            dot_count = text.count(".")
+            last_dot_pos = text.rfind(".")
+
+            if dot_count == 1:
+                # Check if it's likely a thousands separator or decimal
+                digits_after_dot = len(text) - last_dot_pos - 1
+
+                if digits_after_dot == 3 and len(text) > 4:
+                    # Format like "16.000" - likely thousands separator for Indonesian
+                    text = text.replace(".", "")
+                elif digits_after_dot <= 2 and is_float:
+                    # Format like "16.50" - likely decimal separator
+                    pass  # Keep as is
+                elif not is_float:
+                    # If not expecting float, assume thousands separator
+                    text = text.replace(".", "")
+            else:
+                # Multiple dots - likely European thousands format (1.234.567)
+                text = text.replace(".", "")
         elif "," in text:
             # If only commas, treat as decimal separator if last position
             if text.rindex(",") > len(text) - 4:  # ,XX at the end -> decimal
                 text = text.replace(",", ".")
             else:  # Otherwise, it's a thousands separator
                 text = text.replace(",", "")
-        elif "." in text and not is_float:
-            # If only periods and not expecting float, it might be European format
-            if text.count(".") == 1 and text.rindex(".") < len(text) - 4:  # Not at the end
-                # Likely a thousands separator
-                text = text.replace(".", "")
 
         # Remove all spaces
         text = text.replace(" ", "")

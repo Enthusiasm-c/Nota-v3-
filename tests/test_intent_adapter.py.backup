@@ -25,9 +25,9 @@ class TestIntentAdapter:
             "line": 1,
             "price": 100
         }
-        
+
         result = IntentAdapter.adapt(response)
-        
+
         assert result["action"] == "set_price"
         assert result["line_index"] == 0  # Преобразование в 0-based
         assert result["value"] == "100"
@@ -35,9 +35,9 @@ class TestIntentAdapter:
     def test_adapt_string_response_with_json(self):
         """Тест адаптации строкового ответа с JSON"""
         response = '{"action": "set_name", "row": 2, "name": "Apple"}'
-        
+
         result = IntentAdapter.adapt(response)
-        
+
         assert result["action"] == "set_name"
         assert result["line_index"] == 1
         assert result["value"] == "Apple"
@@ -50,9 +50,9 @@ class TestIntentAdapter:
                 {"action": "set_qty", "line": 2, "qty": 5}
             ]
         }
-        
+
     result = IntentAdapter.adapt(response)
-        
+
         # Должно взять первое действие
     assert result["action"] == "set_price"
     assert result["line_index"] == 0
@@ -61,18 +61,18 @@ class TestIntentAdapter:
     def test_adapt_missing_action_field(self):
         """Тест обработки ответа без поля action"""
         response = {"line": 1, "price": 100}
-        
+
         result = IntentAdapter.adapt(response)
-        
+
         assert result["action"] == "unknown"
         assert "missing_action_field" in result["error"]
 
     def test_adapt_unsupported_action(self):
         """Тест обработки неподдерживаемого действия"""
         response = {"action": "unsupported_action", "value": "test"}
-        
+
     result = IntentAdapter.adapt(response)
-        
+
     assert result["action"] == "unknown"
     assert "unsupported_action" in result["error"]
 
@@ -81,7 +81,7 @@ class TestIntentAdapter:
         response = {"action": "set_price"}  # Нет line_index и value
 
     result = IntentAdapter.adapt(response)
-        
+
     assert result["action"] == "unknown"
     assert "missing_fields" in result["error"]
 
@@ -91,9 +91,9 @@ class TestIntentAdapter:
             "action": "set_date",
             "date": "15.05.2024"
         }
-        
+
         result = IntentAdapter.adapt(response)
-        
+
         assert result["action"] == "set_date"
         assert result["value"] == "2024-05-15"
 
@@ -106,9 +106,9 @@ class TestIntentAdapter:
             "unit": "кг",
             "price": "100"
         }
-        
+
         result = IntentAdapter.adapt(response)
-        
+
         assert result["action"] == "add_line"
         assert result["name"] == "Apple"
         assert result["qty"] == "5"
@@ -119,7 +119,7 @@ class TestIntentAdapter:
         """Тест обработки исключений"""
         # Передаем невалидный тип данных
         result = IntentAdapter.adapt(123)
-        
+
         assert result["action"] == "unknown"
         assert "error" in result
 
@@ -130,9 +130,9 @@ class TestFastRecognize:
     def test_fast_recognize_price_command_russian(self):
         """Тест быстрого распознавания команды цены на русском"""
         text = "строка 1 цена 100"
-        
+
         result = IntentAdapter._fast_recognize(text)
-        
+
         assert result is not None
         assert result["action"] == "set_price"
         assert result["line_index"] == 0
@@ -141,9 +141,9 @@ class TestFastRecognize:
     def test_fast_recognize_quantity_command_english(self):
         """Тест быстрого распознавания команды количества на английском"""
         text = "line 2 qty 5"
-        
+
         result = IntentAdapter._fast_recognize(text)
-        
+
         assert result is not None
         assert result["action"] == "set_quantity"
         assert result["line_index"] == 1
@@ -152,9 +152,9 @@ class TestFastRecognize:
     def test_fast_recognize_unit_command(self):
         """Тест быстрого распознавания команды единицы измерения"""
         text = "строка 3 ед изм кг"  # Исправленный паттерн
-        
+
         result = IntentAdapter._fast_recognize(text)
-        
+
         assert result is not None
         assert result["action"] == "set_unit"
         assert result["line_index"] == 2
@@ -163,9 +163,9 @@ class TestFastRecognize:
     def test_fast_recognize_name_command(self):
         """Тест быстрого распознавания команды названия"""
         text = "строка 1 название Apple"
-        
+
         result = IntentAdapter._fast_recognize(text)
-        
+
         assert result is not None
         assert result["action"] == "set_name"
         assert result["line_index"] == 0
@@ -174,9 +174,9 @@ class TestFastRecognize:
     def test_fast_recognize_date_command_text_month(self):
         """Тест быстрого распознавания команды даты с текстовым месяцем"""
         text = "дата 15 мая"
-        
+
         result = IntentAdapter._fast_recognize(text)
-        
+
         assert result is not None
         assert result["action"] == "set_date"
         assert result["value"] == f"{datetime.now().year}-05-15"
@@ -184,9 +184,9 @@ class TestFastRecognize:
     def test_fast_recognize_date_command_numeric(self):
         """Тест быстрого распознавания команды даты в числовом формате"""
         text = "дата 15.05.2024"
-        
+
         result = IntentAdapter._fast_recognize(text)
-        
+
         assert result is not None
         assert result["action"] == "set_date"
         assert result["value"] == "2024-05-15"
@@ -194,9 +194,9 @@ class TestFastRecognize:
     def test_fast_recognize_no_match(self):
         """Тест случая, когда быстрое распознавание не находит совпадений"""
         text = "непонятная команда без паттернов"
-        
+
         result = IntentAdapter._fast_recognize(text)
-        
+
         assert result is None
 
     def test_fast_recognize_exception_handling(self):
@@ -206,9 +206,9 @@ class TestFastRecognize:
             mock_match = Mock()
             mock_match.group.side_effect = IndexError("Test error")
             mock_search.return_value = mock_match
-            
+
             result = IntentAdapter._fast_recognize("строка 1 цена 100")
-            
+
             # Должно вернуть None из-за ошибки в обработчике
             assert result is None
 
@@ -219,33 +219,33 @@ class TestNormalizeForCache:
     def test_normalize_for_cache_numbers(self):
         """Тест замены чисел на плейсхолдеры"""
         text = "строка 5 цена 100"
-        
+
         result = IntentAdapter._normalize_for_cache(text)
-        
+
         assert result == "строка X цена X"
 
     def test_normalize_for_cache_units(self):
         """Тест замены единиц измерения"""
         text = "добавить 5 кг продукта"
-        
+
         result = IntentAdapter._normalize_for_cache(text)
-        
+
         assert result == "добавить X UNIT продукта"
 
     def test_normalize_for_cache_case_and_spaces(self):
         """Тест приведения к нижнему регистру и удаления лишних пробелов"""
         text = "СТРОКА   5    Цена    100"
-        
+
         result = IntentAdapter._normalize_for_cache(text)
-        
+
         assert result == "строка X цена X"
 
     def test_normalize_for_cache_english_units(self):
         """Тест замены английских единиц измерения"""
         text = "add 3 kg of items"  # Избегаем слова с "l" внутри
-        
+
         result = IntentAdapter._normalize_for_cache(text)
-        
+
         assert result == "add X UNIT of items"
 
 
@@ -255,54 +255,54 @@ class TestExtractJson:
     def test_extract_json_valid_json(self):
         """Тест извлечения валидного JSON"""
         text = '{"action": "set_price", "value": 100}'
-        
+
         result = IntentAdapter._extract_json(text)
-        
+
         assert result["action"] == "set_price"
         assert result["value"] == 100
 
     def test_extract_json_embedded_in_text(self):
         """Тест извлечения JSON, встроенного в текст"""
         text = 'Вот ответ: {"action": "set_name", "value": "Apple"} - готово'
-        
+
         result = IntentAdapter._extract_json(text)
-        
+
         assert result["action"] == "set_name"
         assert result["value"] == "Apple"
 
     def test_extract_json_with_actions_field(self):
         """Тест извлечения JSON с полем actions"""
         text = '{"actions": [{"action": "set_price", "value": 100}]}'
-        
+
         result = IntentAdapter._extract_json(text)
-        
+
         assert "actions" in result
         assert len(result["actions"]) == 1
 
     def test_extract_json_malformed_json(self):
         """Тест обработки некорректного JSON"""
         text = 'Некорректный JSON: {"action": "set_price", value: 100'
-        
+
         result = IntentAdapter._extract_json(text)
-        
+
         # Должно вернуться к text parsing
         assert result["action"] == "unknown"
 
     def test_extract_json_no_json_found(self):
         """Тест случая, когда JSON не найден"""
         text = "Обычный текст без JSON"
-        
+
         result = IntentAdapter._extract_json(text)
-        
+
         # Должно вернуться к text parsing
         assert result["action"] == "unknown"
 
     def test_extract_json_multiple_json_fragments(self):
         """Тест извлечения из текста с несколькими JSON фрагментами"""
         text = 'Первый: {"test": 1} Второй: {"action": "set_price", "value": 100} Конец'
-        
+
         result = IntentAdapter._extract_json(text)
-        
+
         # Должен взять фрагмент с action
         assert result["action"] == "set_price"
 
@@ -311,9 +311,9 @@ class TestExtractJson:
         # Создаем текст, который вызовет исключение
         with patch('json.loads') as mock_json_loads:
             mock_json_loads.side_effect = Exception("JSON error")
-            
+
             result = IntentAdapter._extract_json('{"test": "value"}')
-            
+
             assert result["action"] == "unknown"
             assert "json_extraction_failed" in result["error"]
 
@@ -324,18 +324,18 @@ class TestParseTextIntent:
     def test_parse_text_intent_date_command(self):
         """Тест парсинга команды даты из текста"""
         text = "дата 15 мая 2024"
-        
+
         result = IntentAdapter._parse_text_intent(text)
-        
+
         assert result["action"] == "set_date"
         assert result["value"] == "2024-05-15"
 
     def test_parse_text_intent_price_command(self):
         """Тест парсинга команды цены из текста"""
         text = "строка 2 цена 150"
-        
+
         result = IntentAdapter._parse_text_intent(text)
-        
+
         assert result["action"] == "set_price"
         assert result["line_index"] == 1
         assert result["value"] == "150"
@@ -343,9 +343,9 @@ class TestParseTextIntent:
     def test_parse_text_intent_name_command(self):
         """Тест парсинга команды названия из текста"""
         text = "строка 1 название Банан"
-        
+
         result = IntentAdapter._parse_text_intent(text)
-        
+
         assert result["action"] == "set_name"
         assert result["line_index"] == 0
         assert result["value"] == "банан"
@@ -353,18 +353,18 @@ class TestParseTextIntent:
     def test_parse_text_intent_unparseable(self):
         """Тест обработки неразборчивого текста"""
         text = "непонятный текст без команд"
-        
+
         result = IntentAdapter._parse_text_intent(text)
-        
+
         assert result["action"] == "unknown"
         assert result["error"] == "unparseable_text"
 
     def test_parse_text_intent_date_current_year(self):
         """Тест парсинга даты без года (должен использовать текущий год)"""
         text = "дата 10 декабря"
-        
+
         result = IntentAdapter._parse_text_intent(text)
-        
+
         assert result["action"] == "set_date"
         assert result["value"] == f"{datetime.now().year}-12-10"
 
@@ -375,59 +375,59 @@ class TestNormalizeFields:
     def test_normalize_fields_line_to_line_index(self):
         """Тест преобразования line в line_index"""
         intent = {"action": "set_price", "line": 3, "price": 100}
-        
+
         result = IntentAdapter._normalize_fields(intent)
-        
+
         assert result["line_index"] == 2  # 3 - 1
         assert result["value"] == "100"
 
     def test_normalize_fields_row_to_line_index(self):
         """Тест преобразования row в line_index"""
         intent = {"action": "set_name", "row": 1, "name": "Apple"}
-        
+
         result = IntentAdapter._normalize_fields(intent)
-        
+
         assert result["line_index"] == 0  # 1 - 1
         assert result["value"] == "Apple"
 
     def test_normalize_fields_price_to_value(self):
         """Тест преобразования price в value"""
         intent = {"action": "set_price", "line_index": 0, "price": 150}
-        
+
         result = IntentAdapter._normalize_fields(intent)
-        
+
         assert result["value"] == "150"
 
     def test_normalize_fields_qty_to_value(self):
         """Тест преобразования qty в value"""
         intent = {"action": "set_quantity", "line_index": 0, "qty": 5}
-        
+
         result = IntentAdapter._normalize_fields(intent)
-        
+
         assert result["value"] == "5"
 
     def test_normalize_fields_unit_to_value(self):
         """Тест преобразования unit в value"""
         intent = {"action": "set_unit", "line_index": 0, "unit": "кг"}
-        
+
         result = IntentAdapter._normalize_fields(intent)
-        
+
         assert result["value"] == "кг"
 
     def test_normalize_fields_name_to_value(self):
         """Тест преобразования name в value"""
         intent = {"action": "set_name", "line_index": 0, "name": "Банан"}
-        
+
         result = IntentAdapter._normalize_fields(intent)
-        
+
         assert result["value"] == "Банан"
 
     def test_normalize_fields_date_normalization(self):
         """Тест нормализации даты"""
         intent = {"action": "set_date", "date": "15.05.2024"}
-        
+
         result = IntentAdapter._normalize_fields(intent)
-        
+
         assert result["value"] == "2024-05-15"
 
     def test_normalize_fields_add_line(self):
@@ -439,9 +439,9 @@ class TestNormalizeFields:
             "unit": "кг",
             "price": 100
         }
-        
+
         result = IntentAdapter._normalize_fields(intent)
-        
+
         assert result["name"] == "Apple"
         assert result["qty"] == "5"
         assert result["unit"] == "кг"
@@ -455,9 +455,9 @@ class TestNormalizeFields:
             "value": "100",
             "custom_field": "test_value"
         }
-        
+
         result = IntentAdapter._normalize_fields(intent)
-        
+
         assert result["custom_field"] == "test_value"
 
     def test_normalize_fields_exception_handling(self):
@@ -465,11 +465,11 @@ class TestNormalizeFields:
         # Мокируем ошибку в _normalize_date
         with patch.object(IntentAdapter, '_normalize_date') as mock_normalize:
             mock_normalize.side_effect = Exception("Date normalization error")
-            
+
             intent = {"action": "set_date", "date": "invalid_date"}
-            
+
             result = IntentAdapter._normalize_fields(intent)
-            
+
             assert result["action"] == "unknown"
             assert "field_normalization_failed" in result["error"]
 
@@ -480,42 +480,42 @@ class TestCheckRequiredFields:
     def test_check_required_fields_all_present(self):
         """Тест случая, когда все обязательные поля присутствуют"""
         intent = {"action": "set_price", "line_index": 0, "value": "100"}
-        
+
         missing = IntentAdapter._check_required_fields(intent)
-        
+
         assert missing == []
 
     def test_check_required_fields_missing_value(self):
         """Тест случая отсутствия value для set_price"""
         intent = {"action": "set_price", "line_index": 0}
-        
+
         missing = IntentAdapter._check_required_fields(intent)
-        
+
         assert "value" in missing
 
     def test_check_required_fields_missing_line_index(self):
         """Тест случая отсутствия line_index для set_price"""
         intent = {"action": "set_price", "value": "100"}
-        
+
         missing = IntentAdapter._check_required_fields(intent)
-        
+
         assert "line_index" in missing
 
     def test_check_required_fields_add_line_missing(self):
         """Тест отсутствующих полей для add_line"""
         intent = {"action": "add_line", "name": "Apple", "qty": "5"}
-        
+
         missing = IntentAdapter._check_required_fields(intent)
-        
+
         assert "unit" in missing
         assert "price" in missing
 
     def test_check_required_fields_unknown_action(self):
         """Тест проверки для неизвестного действия"""
         intent = {"action": "unknown_action"}
-        
+
         missing = IntentAdapter._check_required_fields(intent)
-        
+
         assert missing == []
 
 
@@ -525,58 +525,58 @@ class TestNormalizeDate:
     def test_normalize_date_already_formatted(self):
         """Тест даты уже в правильном формате"""
         date_value = "2024-05-15"
-        
+
         result = IntentAdapter._normalize_date(date_value)
-        
+
         assert result == "2024-05-15"
 
     def test_normalize_date_dd_mm_yyyy(self):
         """Тест формата DD.MM.YYYY"""
         date_value = "15.05.2024"
-        
+
         result = IntentAdapter._normalize_date(date_value)
-        
+
         assert result == "2024-05-15"
 
     def test_normalize_date_dd_mm(self):
         """Тест формата DD.MM без года"""
         date_value = "15.05"
-        
+
         result = IntentAdapter._normalize_date(date_value)
-        
+
         assert result == f"{datetime.now().year}-05-15"
 
     def test_normalize_date_text_month_russian(self):
         """Тест текстового месяца на русском"""
         date_value = "15 мая 2024"
-        
+
         result = IntentAdapter._normalize_date(date_value)
-        
+
         assert result == "2024-05-15"
 
     def test_normalize_date_text_month_without_year(self):
         """Тест текстового месяца без года"""
         date_value = "10 декабря"
-        
+
         result = IntentAdapter._normalize_date(date_value)
-        
+
         assert result == f"{datetime.now().year}-12-10"
 
     def test_normalize_date_invalid_format(self):
         """Тест некорректного формата даты"""
         date_value = "некорректная дата"
-        
+
         result = IntentAdapter._normalize_date(date_value)
-        
+
         assert result == "некорректная дата"  # Возвращается как есть
 
     def test_normalize_date_exception_handling(self):
         """Тест обработки исключений в нормализации даты"""
         # Создаем ситуацию, которая может вызвать исключение
         date_value = "32.13.2024"  # Некорректная дата
-        
+
         result = IntentAdapter._normalize_date(date_value)
-        
+
         # Должна вернуться исходная строка
         assert result == "32.13.2024"
 
@@ -587,9 +587,9 @@ class TestAdaptIntentFunction:
     def test_adapt_intent_function_delegates_to_class(self):
         """Тест что функция-обертка делегирует вызов классу"""
         response = {"action": "set_price", "line": 1, "price": 100}
-        
+
         result = adapt_intent(response)
-        
+
         assert result["action"] == "set_price"
         assert result["line_index"] == 0
         assert result["value"] == "100"
@@ -603,12 +603,12 @@ class TestCaching:
     def test_adapt_with_caching_miss(self, mock_cache_set, mock_cache_get):
         """Тест адаптации с пропуском кеша"""
         mock_cache_get.return_value = None  # Cache miss
-        
+
         # Используем команду, которая НЕ будет распознана быстрым методом
         response = "установить цену 100 для строки номер 1"
-        
+
         result = IntentAdapter.adapt(response)
-        
+
         # Должна произойти попытка получить из кеша (если не используется быстрое распознавание)
         if result.get("action") != "unknown":  # Если команда была распознана
             mock_cache_get.assert_called()
@@ -621,11 +621,11 @@ class TestCaching:
         """Тест адаптации с попаданием в кеш"""
         cached_result = '{"action": "set_price", "line_index": 0, "value": "100"}'
         mock_cache_get.return_value = cached_result
-        
+
         response = "строка 1 цена 100"
-        
+
         result = IntentAdapter.adapt(response)
-        
+
         assert result["action"] == "set_price"
         assert result["line_index"] == 0
         assert result["value"] == "100"
@@ -634,12 +634,12 @@ class TestCaching:
     def test_adapt_with_cache_error(self, mock_cache_get):
         """Тест обработки ошибки кеша"""
         mock_cache_get.return_value = "invalid json"  # Некорректный JSON
-        
+
         response = "строка 1 цена 100"
-        
+
         # Не должно падать, должно продолжить нормальную обработку
         result = IntentAdapter.adapt(response)
-        
+
         assert result["action"] == "set_price"
 
 
@@ -665,7 +665,7 @@ class TestClassConstants:
     def test_fast_patterns_defined(self):
         """Тест определения быстрых паттернов"""
         assert len(IntentAdapter.FAST_PATTERNS) > 0
-        
+
         # Проверяем, что паттерны содержат нужные команды
         pattern_actions = []
         for pattern, handler in IntentAdapter.FAST_PATTERNS.items():
@@ -674,7 +674,7 @@ class TestClassConstants:
                 pattern_actions.append("price")
             elif "кол" in pattern:
                 pattern_actions.append("quantity")
-        
+
         assert len(pattern_actions) > 0
 
 

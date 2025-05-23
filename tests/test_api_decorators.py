@@ -3,21 +3,20 @@
 """
 
 import asyncio
-import pytest
 import time
-import uuid
-from unittest.mock import Mock, patch, AsyncMock
-import logging
+from unittest.mock import Mock, patch
+
+import pytest
 
 from app.utils.api_decorators import (
-    FriendlyException,
     ErrorType,
+    FriendlyException,
     classify_error,
-    with_retry_backoff,
+    update_stage,
+    update_stage_async,
     with_async_retry_backoff,
     with_progress_stages,
-    update_stage,
-    update_stage_async
+    with_retry_backoff,
 )
 
 
@@ -165,6 +164,7 @@ class TestWithRetryBackoff:
 
     def test_successful_call_no_retry(self):
         """Тест успешного вызова без повторов"""
+
         @with_retry_backoff(max_retries=3)
         def test_func():
             return "success"
@@ -190,6 +190,7 @@ class TestWithRetryBackoff:
 
     def test_max_retries_exceeded(self):
         """Тест превышения максимального количества повторов"""
+
         @with_retry_backoff(max_retries=2, initial_backoff=0.01)
         def test_func():
             raise Exception("Persistent error")
@@ -211,7 +212,7 @@ class TestWithRetryBackoff:
 
         with pytest.raises(ValueError):
             test_func()
-        
+
         assert call_count == 1
 
     def test_specific_error_types_retry(self):
@@ -225,7 +226,7 @@ class TestWithRetryBackoff:
             if call_count == 1:
                 raise Exception("timeout error")  # Будет повторено
             elif call_count == 2:
-                raise Exception("server error")   # Не будет повторено
+                raise Exception("server error")  # Не будет повторено
             return "success"
 
         with pytest.raises(Exception) as exc_info:
@@ -248,14 +249,14 @@ class TestWithRetryBackoff:
         result = test_func()
         assert result == "success"
         assert len(call_times) == 3
-        
+
         # Проверяем что задержки увеличиваются
         delay1 = call_times[1] - call_times[0]
         delay2 = call_times[2] - call_times[1]
         assert delay1 >= 0.1
         assert delay2 >= 0.2
 
-    @patch('app.utils.api_decorators.uuid.uuid4')
+    @patch("app.utils.api_decorators.uuid.uuid4")
     def test_request_id_generation(self, mock_uuid):
         """Тест генерации ID запроса"""
         mock_uuid.return_value.hex = "abcdef123456"
@@ -270,6 +271,7 @@ class TestWithRetryBackoff:
 
     def test_custom_request_id(self):
         """Тест использования пользовательского ID запроса"""
+
         @with_retry_backoff(max_retries=1)
         def test_func():
             return "success"
@@ -277,7 +279,7 @@ class TestWithRetryBackoff:
         result = test_func(_req_id="custom123")
         assert result == "success"
 
-    @patch('app.utils.api_decorators.logging.getLogger')
+    @patch("app.utils.api_decorators.logging.getLogger")
     def test_logging_on_retry(self, mock_get_logger):
         """Тест логирования при повторах"""
         mock_logger = Mock()
@@ -295,7 +297,7 @@ class TestWithRetryBackoff:
 
         result = test_func()
         assert result == "success"
-        
+
         # Проверяем что было логирование
         mock_logger.info.assert_called()
         mock_logger.warning.assert_called()
@@ -307,6 +309,7 @@ class TestWithAsyncRetryBackoff:
     @pytest.mark.asyncio
     async def test_successful_async_call_no_retry(self):
         """Тест успешного асинхронного вызова без повторов"""
+
         @with_async_retry_backoff(max_retries=3)
         async def test_func():
             return "async_success"
@@ -334,13 +337,14 @@ class TestWithAsyncRetryBackoff:
     @pytest.mark.asyncio
     async def test_async_max_retries_exceeded(self):
         """Тест превышения максимального количества повторов в асинхронной функции"""
+
         @with_async_retry_backoff(max_retries=2, initial_backoff=0.01)
         async def test_func():
             raise Exception("Persistent async error")
 
         with pytest.raises(RuntimeError) as exc_info:
             await test_func()
-        
+
         assert "Persistent async error" in str(exc_info.value)
 
     @pytest.mark.asyncio
@@ -380,19 +384,21 @@ class TestWithAsyncRetryBackoff:
         """Тест повтора только для определенных типов ошибок в асинхронной функции"""
         call_count = 0
 
-        @with_async_retry_backoff(max_retries=2, initial_backoff=0.01, error_types=[ErrorType.TIMEOUT])
+        @with_async_retry_backoff(
+            max_retries=2, initial_backoff=0.01, error_types=[ErrorType.TIMEOUT]
+        )
         async def test_func():
             nonlocal call_count
             call_count += 1
             if call_count == 1:
                 raise Exception("timeout error")  # Будет повторено
             elif call_count == 2:
-                raise Exception("server error")   # Не будет повторено
+                raise Exception("server error")  # Не будет повторено
             return "success"
 
         with pytest.raises(RuntimeError):
             await test_func()
-        
+
         assert call_count == 2
 
     @pytest.mark.asyncio
@@ -410,7 +416,7 @@ class TestWithAsyncRetryBackoff:
         result = await test_func()
         assert result == "success"
         assert len(call_times) == 3
-        
+
         # Проверяем что задержки увеличиваются
         delay1 = call_times[1] - call_times[0]
         delay2 = call_times[2] - call_times[1]
@@ -420,6 +426,7 @@ class TestWithAsyncRetryBackoff:
     @pytest.mark.asyncio
     async def test_async_friendly_exception_preservation(self):
         """Тест сохранения friendly_message в исключениях"""
+
         @with_async_retry_backoff(max_retries=1, initial_backoff=0.01)
         async def test_func():
             exc = Exception("Test error")
@@ -428,7 +435,7 @@ class TestWithAsyncRetryBackoff:
 
         with pytest.raises(Exception) as exc_info:
             await test_func()
-        
+
         assert exc_info.value.friendly_message == "Friendly test message"
 
 
@@ -438,10 +445,7 @@ class TestWithProgressStages:
     @pytest.mark.asyncio
     async def test_progress_stages_successful(self):
         """Тест успешного выполнения с отслеживанием этапов"""
-        stages = {
-            "stage1": "Первый этап",
-            "stage2": "Второй этап"
-        }
+        stages = {"stage1": "Первый этап", "stage2": "Второй этап"}
 
         @with_progress_stages(stages)
         async def test_func(**kwargs):
@@ -485,10 +489,7 @@ class TestWithProgressStages:
     @pytest.mark.asyncio
     async def test_progress_stages_error_handling(self):
         """Тест обработки ошибок с этапами"""
-        stages = {
-            "stage1": "Первый этап",
-            "stage2": "Второй этап"
-        }
+        stages = {"stage1": "Первый этап", "stage2": "Второй этап"}
 
         @with_progress_stages(stages)
         async def test_func(**kwargs):
@@ -499,7 +500,7 @@ class TestWithProgressStages:
 
         with pytest.raises(FriendlyException) as exc_info:
             await test_func()
-        
+
         assert "Второй этап" in str(exc_info.value)
 
     @pytest.mark.asyncio
@@ -517,7 +518,7 @@ class TestWithProgressStages:
 
         with pytest.raises(FriendlyException):
             await test_func(_update_progress=mock_update_progress)
-        
+
         # Проверяем что была попытка обновить UI с ошибкой
         assert len(update_calls) == 1
         assert "error_message" in update_calls[0]
@@ -537,11 +538,11 @@ class TestWithProgressStages:
         # Основная ошибка должна быть выброшена, ошибка UI - проигнорирована
         with pytest.raises(FriendlyException) as exc_info:
             await test_func(_update_progress=failing_update_progress)
-        
+
         assert "Main error" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    @patch('app.utils.api_decorators.logging.getLogger')
+    @patch("app.utils.api_decorators.logging.getLogger")
     async def test_progress_stages_logging(self, mock_get_logger):
         """Тест логирования в декораторе этапов"""
         mock_logger = Mock()
@@ -555,28 +556,24 @@ class TestWithProgressStages:
 
         result = await test_func()
         assert result == "success"
-        
+
         # Проверяем что было логирование завершения
         mock_logger.info.assert_called()
 
     @pytest.mark.asyncio
     async def test_progress_stages_with_stage_updates(self):
         """Тест этапов с обновлениями внутри функции"""
-        stages = {
-            "download": "Загрузка",
-            "process": "Обработка", 
-            "upload": "Сохранение"
-        }
+        stages = {"download": "Загрузка", "process": "Обработка", "upload": "Сохранение"}
 
         @with_progress_stages(stages)
         async def test_func(**kwargs):
             # Симулируем выполнение этапов
             await update_stage_async("download", kwargs)
             await asyncio.sleep(0.01)
-            
+
             await update_stage_async("process", kwargs)
             await asyncio.sleep(0.01)
-            
+
             await update_stage_async("upload", kwargs)
             return "completed"
 
@@ -591,28 +588,25 @@ class TestUpdateStage:
         """Тест успешного обновления этапа"""
         context = {
             "_stages": {"stage1": False, "stage2": False},
-            "_stages_names": {"stage1": "Первый этап", "stage2": "Второй этап"}
+            "_stages_names": {"stage1": "Первый этап", "stage2": "Второй этап"},
         }
 
         result = update_stage("stage1", context)
-        
+
         assert result["_stages"]["stage1"] is True
         assert result["_stages"]["stage2"] is False
 
     def test_update_stage_with_update_func(self):
         """Тест обновления этапа с функцией обновления"""
-        context = {
-            "_stages": {"stage1": False},
-            "_stages_names": {"stage1": "Первый этап"}
-        }
-        
+        context = {"_stages": {"stage1": False}, "_stages_names": {"stage1": "Первый этап"}}
+
         update_calls = []
 
         def mock_update_func(**kwargs):
             update_calls.append(kwargs)
 
         update_stage("stage1", context, mock_update_func)
-        
+
         assert context["_stages"]["stage1"] is True
         assert len(update_calls) == 1
         assert update_calls[0]["stage"] == "stage1"
@@ -620,10 +614,7 @@ class TestUpdateStage:
 
     def test_update_stage_with_async_update_func(self):
         """Тест обновления этапа с асинхронной функцией обновления"""
-        context = {
-            "_stages": {"stage1": False},
-            "_stages_names": {"stage1": "Первый этап"}
-        }
+        context = {"_stages": {"stage1": False}, "_stages_names": {"stage1": "Первый этап"}}
 
         async def mock_async_update(**kwargs):
             pass
@@ -635,28 +626,22 @@ class TestUpdateStage:
     def test_update_stage_invalid_context(self):
         """Тест обновления этапа с невалидным контекстом"""
         context = {}
-        
+
         result = update_stage("stage1", context)
         assert result == context
 
     def test_update_stage_invalid_stage(self):
         """Тест обновления несуществующего этапа"""
-        context = {
-            "_stages": {"stage1": False},
-            "_stages_names": {"stage1": "Первый этап"}
-        }
+        context = {"_stages": {"stage1": False}, "_stages_names": {"stage1": "Первый этап"}}
 
         update_stage("invalid_stage", context)
-        
+
         # Состояние не должно измениться
         assert context["_stages"]["stage1"] is False
 
     def test_update_stage_update_func_error_ignored(self):
         """Тест что ошибки функции обновления игнорируются"""
-        context = {
-            "_stages": {"stage1": False},
-            "_stages_names": {"stage1": "Первый этап"}
-        }
+        context = {"_stages": {"stage1": False}, "_stages_names": {"stage1": "Первый этап"}}
 
         def failing_update_func(**kwargs):
             raise Exception("Update failed")
@@ -674,47 +659,41 @@ class TestUpdateStageAsync:
         """Тест успешного асинхронного обновления этапа"""
         context = {
             "_stages": {"stage1": False, "stage2": False},
-            "_stages_names": {"stage1": "Первый этап", "stage2": "Второй этап"}
+            "_stages_names": {"stage1": "Первый этап", "stage2": "Второй этап"},
         }
 
         result = await update_stage_async("stage1", context)
-        
+
         assert result["_stages"]["stage1"] is True
         assert result["_stages"]["stage2"] is False
 
     @pytest.mark.asyncio
     async def test_update_stage_async_with_sync_update_func(self):
         """Тест асинхронного обновления этапа с синхронной функцией обновления"""
-        context = {
-            "_stages": {"stage1": False},
-            "_stages_names": {"stage1": "Первый этап"}
-        }
-        
+        context = {"_stages": {"stage1": False}, "_stages_names": {"stage1": "Первый этап"}}
+
         update_calls = []
 
         def mock_update_func(**kwargs):
             update_calls.append(kwargs)
 
         await update_stage_async("stage1", context, mock_update_func)
-        
+
         assert context["_stages"]["stage1"] is True
         assert len(update_calls) == 1
 
     @pytest.mark.asyncio
     async def test_update_stage_async_with_async_update_func(self):
         """Тест асинхронного обновления этапа с асинхронной функцией обновления"""
-        context = {
-            "_stages": {"stage1": False},
-            "_stages_names": {"stage1": "Первый этап"}
-        }
-        
+        context = {"_stages": {"stage1": False}, "_stages_names": {"stage1": "Первый этап"}}
+
         update_calls = []
 
         async def mock_async_update(**kwargs):
             update_calls.append(kwargs)
 
         await update_stage_async("stage1", context, mock_async_update)
-        
+
         assert context["_stages"]["stage1"] is True
         assert len(update_calls) == 1
 
@@ -722,17 +701,14 @@ class TestUpdateStageAsync:
     async def test_update_stage_async_invalid_context(self):
         """Тест асинхронного обновления этапа с невалидным контекстом"""
         context = {}
-        
+
         result = await update_stage_async("stage1", context)
         assert result == context
 
     @pytest.mark.asyncio
     async def test_update_stage_async_update_func_error_ignored(self):
         """Тест что ошибки асинхронной функции обновления игнорируются"""
-        context = {
-            "_stages": {"stage1": False},
-            "_stages_names": {"stage1": "Первый этап"}
-        }
+        context = {"_stages": {"stage1": False}, "_stages_names": {"stage1": "Первый этап"}}
 
         async def failing_async_update(**kwargs):
             raise Exception("Async update failed")
@@ -756,10 +732,10 @@ class TestIntegration:
         async def test_func(**kwargs):
             nonlocal call_count
             call_count += 1
-            
+
             if call_count == 1:
                 raise Exception("Temporary error")
-            
+
             # Обновляем этап
             kwargs["_stages"]["process"] = True
             return "success"
@@ -773,9 +749,9 @@ class TestIntegration:
         errors = [
             Exception("timeout occurred"),
             Exception("rate limit exceeded"),
-            Exception("server error 500")
+            Exception("server error 500"),
         ]
-        
+
         call_count = 0
 
         @with_retry_backoff(max_retries=3, initial_backoff=0.01)
@@ -794,21 +770,17 @@ class TestIntegration:
     @pytest.mark.asyncio
     async def test_progress_stages_with_stage_updates(self):
         """Тест этапов с обновлениями внутри функции"""
-        stages = {
-            "download": "Загрузка",
-            "process": "Обработка", 
-            "upload": "Сохранение"
-        }
+        stages = {"download": "Загрузка", "process": "Обработка", "upload": "Сохранение"}
 
         @with_progress_stages(stages)
         async def test_func(**kwargs):
             # Симулируем выполнение этапов
             await update_stage_async("download", kwargs)
             await asyncio.sleep(0.01)
-            
+
             await update_stage_async("process", kwargs)
             await asyncio.sleep(0.01)
-            
+
             await update_stage_async("upload", kwargs)
             return "completed"
 

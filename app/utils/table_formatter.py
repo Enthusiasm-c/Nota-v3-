@@ -129,5 +129,4 @@ def text_to_markdown_table(text: str) -> str:
 
     return header + separator + "".join(rows)
 
-    
-    return header + separator + ''.join(rows) 
+    return header + separator + "".join(rows)

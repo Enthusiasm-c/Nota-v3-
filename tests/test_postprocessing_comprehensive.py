@@ -2,20 +2,21 @@
 Комплексные тесты для модуля app/postprocessing.py
 """
 
-import pytest
-from unittest.mock import patch, MagicMock
 from datetime import date
+from unittest.mock import MagicMock, patch
 
+import pytest
+
+from app.models import ParsedData, Position
 from app.postprocessing import (
-    clean_num,
+    PRODUCT_CATEGORIES,
+    PRODUCT_DEFAULT_UNITS,
+    UNIT_MAPPING,
     autocorrect_name,
+    clean_num,
     normalize_units,
     postprocess_parsed_data,
-    UNIT_MAPPING,
-    PRODUCT_DEFAULT_UNITS,
-    PRODUCT_CATEGORIES
 )
-from app.models import ParsedData, Position
 
 
 class TestCleanNum:
@@ -132,12 +133,12 @@ class TestAutocorrectName:
         result = autocorrect_name("  apple  ", allowed_names)
         assert result == "apple"
 
-    @patch('app.postprocessing.logging')
+    @patch("app.postprocessing.logging")
     def test_autocorrect_name_logging(self, mock_logging):
         """Тест логирования в функции автокоррекции"""
         allowed_names = ["apple", "banana", "orange"]
         autocorrect_name("aple", allowed_names)
-        
+
         # Проверяем что логирование происходило
         assert mock_logging.debug.call_count >= 2
 
@@ -242,10 +243,10 @@ class TestPostprocessParsedData:
         """Тест базовой постобработки"""
         positions = [Position(name="apple", qty=5, price=2.0, total_price=10.0)]
         parsed = ParsedData(supplier="Test", positions=positions, total_price=10.0)
-        
-        with patch('app.postprocessing.load_products', return_value=[]):
+
+        with patch("app.postprocessing.load_products", return_value=[]):
             result = postprocess_parsed_data(parsed)
-        
+
         assert result.supplier == "Test"
         assert len(result.positions) == 1
         assert result.total_price == 10.0
@@ -254,10 +255,10 @@ class TestPostprocessParsedData:
         """Тест очистки числовых значений"""
         positions = [Position(name="apple", qty="5", price="$2.50", total_price="12.50")]
         parsed = ParsedData(supplier="Test", positions=positions, total_price="$12.50")
-        
-        with patch('app.postprocessing.load_products', return_value=[]):
+
+        with patch("app.postprocessing.load_products", return_value=[]):
             result = postprocess_parsed_data(parsed)
-        
+
         assert result.positions[0].qty == 5.0
         assert result.positions[0].price == 2.50
         assert result.positions[0].total_price == 12.50
@@ -267,20 +268,20 @@ class TestPostprocessParsedData:
         """Тест конвертации даты"""
         positions = [Position(name="apple", qty=1, price=1.0)]
         parsed = ParsedData(supplier="Test", positions=positions, date="15.03.2024")
-        
-        with patch('app.postprocessing.load_products', return_value=[]):
+
+        with patch("app.postprocessing.load_products", return_value=[]):
             result = postprocess_parsed_data(parsed)
-        
+
         assert result.date == date(2024, 3, 15)
 
     def test_postprocess_invalid_date(self):
         """Тест обработки невалидной даты"""
         positions = [Position(name="apple", qty=1, price=1.0)]
         parsed = ParsedData(supplier="Test", positions=positions, date="invalid_date")
-        
-        with patch('app.postprocessing.load_products', return_value=[]):
+
+        with patch("app.postprocessing.load_products", return_value=[]):
             result = postprocess_parsed_data(parsed)
-        
+
         assert result.date == "invalid_date"  # должна остаться без изменений
 
     def test_postprocess_filter_empty_positions(self):
@@ -289,13 +290,13 @@ class TestPostprocessParsedData:
             Position(name="apple", qty=1, price=1.0),
             Position(name="", qty=2, price=2.0),  # пустое название
             Position(name="Итого", qty=3, price=3.0),  # итого
-            Position(name="banana", qty=4, price=4.0)
+            Position(name="banana", qty=4, price=4.0),
         ]
         parsed = ParsedData(supplier="Test", positions=positions)
-        
-        with patch('app.postprocessing.load_products', return_value=[]):
+
+        with patch("app.postprocessing.load_products", return_value=[]):
             result = postprocess_parsed_data(parsed)
-        
+
         assert len(result.positions) == 2
         assert result.positions[0].name == "apple"
         assert result.positions[1].name == "banana"
@@ -304,100 +305,100 @@ class TestPostprocessParsedData:
         """Тест вычисления отсутствующей total_price"""
         positions = [Position(name="apple", qty=5, price=2.0, total_price=None)]
         parsed = ParsedData(supplier="Test", positions=positions)
-        
-        with patch('app.postprocessing.load_products', return_value=[]):
+
+        with patch("app.postprocessing.load_products", return_value=[]):
             result = postprocess_parsed_data(parsed)
-        
+
         assert result.positions[0].total_price == 10.0
 
     def test_postprocess_calculate_missing_price(self):
         """Тест вычисления отсутствующей цены"""
         positions = [Position(name="apple", qty=5, price=None, total_price=10.0)]
         parsed = ParsedData(supplier="Test", positions=positions)
-        
-        with patch('app.postprocessing.load_products', return_value=[]):
+
+        with patch("app.postprocessing.load_products", return_value=[]):
             result = postprocess_parsed_data(parsed)
-        
+
         assert result.positions[0].price == 2.0
 
     def test_postprocess_calculate_total_sum(self):
         """Тест вычисления общей суммы"""
         positions = [
             Position(name="apple", qty=1, price=5.0, total_price=5.0),
-            Position(name="banana", qty=2, price=3.0, total_price=6.0)
+            Position(name="banana", qty=2, price=3.0, total_price=6.0),
         ]
         parsed = ParsedData(supplier="Test", positions=positions, total_price=None)
-        
-        with patch('app.postprocessing.load_products', return_value=[]):
+
+        with patch("app.postprocessing.load_products", return_value=[]):
             result = postprocess_parsed_data(parsed)
-        
+
         assert result.total_price == 11.0
 
     def test_postprocess_anomaly_correction_price(self):
         """Тест коррекции аномальной цены"""
         positions = [Position(name="apple", qty=1, price=20000000, total_price=20000000)]
         parsed = ParsedData(supplier="Test", positions=positions)
-        
-        with patch('app.postprocessing.load_products', return_value=[]):
+
+        with patch("app.postprocessing.load_products", return_value=[]):
             result = postprocess_parsed_data(parsed)
-        
+
         assert result.positions[0].price == 2000000  # исправлено /10
 
     def test_postprocess_anomaly_correction_qty(self):
         """Тест коррекции аномального количества"""
         positions = [Position(name="apple", qty=5000, price=1.0, total_price=5000)]
         parsed = ParsedData(supplier="Test", positions=positions)
-        
-        with patch('app.postprocessing.load_products', return_value=[]):
+
+        with patch("app.postprocessing.load_products", return_value=[]):
             result = postprocess_parsed_data(parsed)
-        
+
         assert result.positions[0].qty == 500  # исправлено /10
 
     def test_postprocess_with_autocorrect(self):
         """Тест автокоррекции названий"""
         mock_product = MagicMock()
         mock_product.alias = "apple"
-        
+
         positions = [Position(name="aple", qty=1, price=1.0)]  # опечатка
         parsed = ParsedData(supplier="Test", positions=positions)
-        
-        with patch('app.postprocessing.load_products', return_value=[mock_product]):
+
+        with patch("app.postprocessing.load_products", return_value=[mock_product]):
             result = postprocess_parsed_data(parsed)
-        
+
         assert result.positions[0].name == "apple"
 
-    @patch('app.postprocessing.log_format_issues')
+    @patch("app.postprocessing.log_format_issues")
     def test_postprocess_long_name_logging(self, mock_log):
         """Тест логирования слишком длинных названий"""
         long_name = "a" * 35  # больше 30 символов
         positions = [Position(name=long_name, qty=1, price=1.0)]
         parsed = ParsedData(supplier="Test", positions=positions)
-        
-        with patch('app.postprocessing.load_products', return_value=[]):
+
+        with patch("app.postprocessing.load_products", return_value=[]):
             postprocess_parsed_data(parsed, req_id="test_123")
-        
+
         mock_log.assert_called_with("test_123", "position.name", long_name, "< 30 chars")
 
     def test_postprocess_unit_normalization(self):
         """Тест нормализации единиц измерения"""
         positions = [Position(name="apple", qty=1, price=1.0, unit="kilograms")]
         parsed = ParsedData(supplier="Test", positions=positions)
-        
-        with patch('app.postprocessing.load_products', return_value=[]):
+
+        with patch("app.postprocessing.load_products", return_value=[]):
             result = postprocess_parsed_data(parsed)
-        
+
         assert result.positions[0].unit == "kg"
 
-    @patch('app.postprocessing.log_indonesian_invoice')
-    @patch('app.postprocessing.logging')
+    @patch("app.postprocessing.log_indonesian_invoice")
+    @patch("app.postprocessing.logging")
     def test_postprocess_logging(self, mock_logging, mock_log_indonesian):
         """Тест логирования процесса постобработки"""
         positions = [Position(name="apple", qty=1, price=1.0)]
         parsed = ParsedData(supplier="Test", positions=positions)
-        
-        with patch('app.postprocessing.load_products', return_value=[]):
+
+        with patch("app.postprocessing.load_products", return_value=[]):
             postprocess_parsed_data(parsed, req_id="test_123")
-        
+
         # Проверяем что происходило логирование
         assert mock_logging.info.call_count >= 1
         mock_log_indonesian.assert_called_once()
@@ -406,10 +407,10 @@ class TestPostprocessParsedData:
         """Тест обработки исключений"""
         positions = [Position(name="apple", qty=1, price=1.0)]
         parsed = ParsedData(supplier="Test", positions=positions)
-        
-        with patch('app.postprocessing.load_products', side_effect=Exception("Test error")):
+
+        with patch("app.postprocessing.load_products", side_effect=Exception("Test error")):
             result = postprocess_parsed_data(parsed)
-        
+
         # Должны вернуться исходные данные при ошибке
         assert result == parsed
 
@@ -417,10 +418,10 @@ class TestPostprocessParsedData:
         """Тест защиты от деления на ноль"""
         positions = [Position(name="apple", qty=0, price=None, total_price=10.0)]
         parsed = ParsedData(supplier="Test", positions=positions)
-        
-        with patch('app.postprocessing.load_products', return_value=[]):
+
+        with patch("app.postprocessing.load_products", return_value=[]):
             result = postprocess_parsed_data(parsed)
-        
+
         # Цена не должна быть вычислена при qty=0
         assert result.positions[0].price is None
 
@@ -429,16 +430,16 @@ class TestPostprocessParsedData:
         positions = [
             Position(name="aple", qty="5", price="$2.50", total_price=None, unit="pieces"),
             Position(name="", qty=1, price=1.0),  # будет отфильтрована
-            Position(name="banana", qty=3, price=None, total_price="$9.00", unit="kg")
+            Position(name="banana", qty=3, price=None, total_price="$9.00", unit="kg"),
         ]
         parsed = ParsedData(supplier="Test Co", positions=positions, date="15/12/2024")
-        
+
         mock_product = MagicMock()
         mock_product.alias = "apple"
-        
-        with patch('app.postprocessing.load_products', return_value=[mock_product]):
+
+        with patch("app.postprocessing.load_products", return_value=[mock_product]):
             result = postprocess_parsed_data(parsed)
-        
+
         # Проверяем результаты
         assert len(result.positions) == 2  # одна отфильтрована
         assert result.positions[0].name == "apple"  # автокоррекция
@@ -446,14 +447,14 @@ class TestPostprocessParsedData:
         assert result.positions[0].price == 2.50  # очищено
         assert result.positions[0].total_price == 12.5  # вычислено
         assert result.positions[0].unit == "pcs"  # нормализовано
-        
+
         assert result.positions[1].name == "banana"
         assert result.positions[1].price == 3.0  # вычислено из total/qty
         assert result.positions[1].unit == "kg"
-        
+
         assert result.total_price == 21.5  # сумма всех позиций
         assert result.date == date(2024, 12, 15)  # конвертирована
 
 
 if __name__ == "__main__":
-    pytest.main([__file__]) 
+    pytest.main([__file__])

@@ -3,11 +3,12 @@ OCR utility functions for invoice processing.
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import List, Optional
+
+from pydantic import BaseModel
 
 from app.config import settings
 from app.models import ParsedData
-from pydantic import BaseModel
 
 # INVOICE_FUNCTION_SCHEMA is defined in app.utils.async_ocr.py
 # and should be the single source of truth.
@@ -17,6 +18,7 @@ class Position(BaseModel):
     """
     Позиция в накладной.
     """
+
     name: str
     quantity: float
     unit: Optional[str] = None
@@ -28,6 +30,7 @@ class ParsedData(BaseModel):
     """
     Распознанные данные накладной.
     """
+
     positions: List[Position]
     supplier: Optional[str] = None
     date: Optional[str] = None
@@ -52,18 +55,18 @@ INVOICE_FUNCTION_SCHEMA = {
                         "quantity": {"type": "number", "description": "Item quantity"},
                         "unit": {"type": "string", "description": "Unit of measurement"},
                         "price": {"type": "number", "description": "Price per unit"},
-                        "total": {"type": "number", "description": "Total price for this item"}
+                        "total": {"type": "number", "description": "Total price for this item"},
                     },
-                    "required": ["name", "quantity"]
-                }
+                    "required": ["name", "quantity"],
+                },
             },
             "supplier": {"type": "string", "description": "Supplier name"},
             "date": {"type": "string", "description": "Invoice date"},
             "number": {"type": "string", "description": "Invoice number"},
-            "total": {"type": "number", "description": "Total invoice amount"}
+            "total": {"type": "number", "description": "Total invoice amount"},
         },
-        "required": ["positions"]
-    }
+        "required": ["positions"],
+    },
 }
 
 

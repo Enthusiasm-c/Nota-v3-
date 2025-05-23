@@ -161,13 +161,6 @@ def apply_intent(invoice: Union[dict, ParsedData], intent: dict) -> dict:
     source = intent.get("source", "openai")
     logger.info(f"Применяем интент: action={action}, source={source}")
 
-    # Тестовый блок для проверки обработки интента edit_quantity
-    if action == "edit_quantity":
-        line_value = intent.get("line", 0)
-        logger.info(
-            f"Тест: intent.get('line', 0) = {line_value}, intent.get('line', 0) - 1 = {line_value - 1}"
-        )
-
     if action == "set_date":
         return set_date(invoice, intent.get("value", ""))
 
@@ -181,7 +174,7 @@ def apply_intent(invoice: Union[dict, ParsedData], intent: dict) -> dict:
         return set_quantity(invoice, intent.get("line_index", 0), intent.get("value", ""))
 
     elif action == "set_qty":
-        line = intent.get("line", 0) - 1
+        line = intent.get("line", 0)
         qty = str(intent.get("qty", "0"))
         logger.info(f"set_qty: line={line}, qty={qty}")
         return set_quantity(invoice, line, qty)
@@ -190,9 +183,9 @@ def apply_intent(invoice: Union[dict, ParsedData], intent: dict) -> dict:
         return set_unit(invoice, intent.get("line_index", 0), intent.get("value", ""))
 
     elif action == "edit_name":
-        return set_name(invoice, intent.get("line", 0) - 1, intent.get("value", ""))
+        return set_name(invoice, intent.get("line", 0), intent.get("value", ""))
     elif action == "edit_line_field":
-        line = intent.get("line", 0) - 1  # Преобразуем в 0-based индекс
+        line = intent.get("line", 0)
         field = intent.get("field")
         value = intent.get("value")
 
@@ -215,6 +208,7 @@ def apply_intent(invoice: Union[dict, ParsedData], intent: dict) -> dict:
     elif action == "edit_date":
         try:
             # Изменение даты
+            result = deepcopy(invoice)  # Создаем копию чтобы не изменять исходный объект
             value = intent.get("value", "")
             logger.info(f"Изменяем дату инвойса на: {value}")
 
@@ -239,23 +233,42 @@ def apply_intent(invoice: Union[dict, ParsedData], intent: dict) -> dict:
                 formatted_date = f"{int(day):02d}.{int(month):02d}.{int(year)}"
                 logger.info(f"Дата отформатирована в {formatted_date}")
 
-                invoice["date"] = formatted_date
+                result["date"] = formatted_date
             else:
                 logger.warning(f"Некорректный формат даты: {value}")
         except Exception as e:
             logger.error(f"Ошибка при обработке интента edit_date: {e}")
 
         # Возвращаем invoice с изменениями
-        return invoice
+        return result
+
+    elif action == "edit_supplier":
+        try:
+            # Изменение поставщика
+            result = deepcopy(invoice)  # Создаем копию чтобы не изменять исходный объект
+            value = intent.get("value", "").strip()
+            logger.info(f"Изменяем поставщика инвойса на: {value}")
+
+            if value:
+                result["supplier"] = value
+                logger.info(f"Поставщик установлен: {value}")
+            else:
+                logger.warning("Пустое значение поставщика")
+        except Exception as e:
+            logger.error(f"Ошибка при обработке интента edit_supplier: {e}")
+
+        # Возвращаем invoice с изменениями
+        return result
 
     elif action == "edit_quantity":
         try:
             # Изменение количества
-            position_idx = intent.get("line", 0) - 1
+            result = deepcopy(invoice)  # Создаем копию чтобы не изменять исходный объект
+            position_idx = intent.get("line", 0)
             value = intent.get("value", "0")
 
             # Проверяем, что в позициях есть элемент с таким индексом
-            if 0 <= position_idx < len(invoice.get("positions", [])):
+            if 0 <= position_idx < len(result.get("positions", [])):
                 # Конвертируем строку в число
                 numeric_value = value
                 if isinstance(value, str):
@@ -263,23 +276,24 @@ def apply_intent(invoice: Union[dict, ParsedData], intent: dict) -> dict:
                     value = value.replace(",", ".")
                     numeric_value = float(value)
 
-                invoice["positions"][position_idx]["qty"] = numeric_value
+                result["positions"][position_idx]["qty"] = numeric_value
             else:
                 logger.warning(f"Невалидный индекс позиции для изменения: {position_idx}")
         except Exception as e:
             logger.error(f"Ошибка при изменении quantity: {e}")
 
         # Возвращаем invoice с изменениями
-        return invoice
+        return result
 
     elif action == "edit_unit":
         try:
             # Изменение единицы измерения
-            position_idx = intent.get("line", 0) - 1
+            result = deepcopy(invoice)  # Создаем копию чтобы не изменять исходный объект
+            position_idx = intent.get("line", 0)
             value = intent.get("value", "").strip().lower()
 
             # Проверяем, что в позициях есть элемент с таким индексом
-            if 0 <= position_idx < len(invoice.get("positions", [])):
+            if 0 <= position_idx < len(result.get("positions", [])):
                 # Нормализуем единицу измерения
                 normalized_unit = value
                 if value in ["g", "г", "гр", "грамм", "гра", "грамма", "грамм"]:
@@ -293,23 +307,24 @@ def apply_intent(invoice: Union[dict, ParsedData], intent: dict) -> dict:
                 elif value in ["pc", "шт", "штука", "штуки", "штук"]:
                     normalized_unit = "pc"
 
-                invoice["positions"][position_idx]["unit"] = normalized_unit
+                result["positions"][position_idx]["unit"] = normalized_unit
             else:
                 logger.warning(f"Невалидный индекс позиции для изменения: {position_idx}")
         except Exception as e:
             logger.error(f"Ошибка при изменении unit: {e}")
 
         # Возвращаем invoice с изменениями
-        return invoice
+        return result
 
     elif action == "edit_price":
         try:
             # Изменение цены
-            position_idx = intent.get("line", 0) - 1
+            result = deepcopy(invoice)  # Создаем копию чтобы не изменять исходный объект
+            position_idx = intent.get("line", 0)
             value = intent.get("value", "0")
 
             # Проверяем, что в позициях есть элемент с таким индексом
-            if 0 <= position_idx < len(invoice.get("positions", [])):
+            if 0 <= position_idx < len(result.get("positions", [])):
                 # Конвертируем строку в число
                 numeric_value = value
                 if isinstance(value, str):
@@ -317,14 +332,14 @@ def apply_intent(invoice: Union[dict, ParsedData], intent: dict) -> dict:
                     value = value.replace(",", ".")
                     numeric_value = float(value)
 
-                invoice["positions"][position_idx]["price"] = numeric_value
+                result["positions"][position_idx]["price"] = numeric_value
             else:
                 logger.warning(f"Невалидный индекс позиции для изменения: {position_idx}")
         except Exception as e:
             logger.error(f"Ошибка при изменении price: {e}")
 
         # Возвращаем invoice с изменениями
-        return invoice
+        return result
 
     elif action == "add_line":
         value = intent.get("value")

@@ -1,9 +1,6 @@
-import pytest
-import os
-import tempfile
-from pathlib import Path
-from unittest.mock import patch, mock_open
-from app.alias import read_aliases, add_alias, learn_from_invoice
+from unittest.mock import patch
+
+from app.alias import add_alias, learn_from_invoice, read_aliases
 
 
 def test_read_aliases():
@@ -28,16 +25,16 @@ def test_color_prefix_detection():
             "status": "partial",
             "name": "green apple",
             "matched_product": {"id": "1"},
-            "match_reason": "partial"
+            "match_reason": "partial",
         },
         {
             "status": "partial",
             "name": "red tomato",
             "matched_product": {"id": "2"},
-            "match_reason": "partial"
-        }
+            "match_reason": "partial",
+        },
     ]
-    
+
     with patch("app.alias.add_alias") as mock_add:
         mock_add.return_value = True
         added_count, added_aliases = learn_from_invoice(positions)
