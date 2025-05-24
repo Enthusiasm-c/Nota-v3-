@@ -90,7 +90,16 @@ check_bot_running() {
     if [ "$bot_processes" -gt 1 ]; then
         log_message "КРИТИЧЕСКАЯ ОШИБКА: Обнаружено $bot_processes процессов бота! Останавливаем все."
         stop_all_bot_processes
-        return 1
+        # ИСПРАВЛЕНИЕ: После остановки множественных процессов ждем и проверяем заново
+        sleep 5
+        local remaining_processes=$(ps aux | grep -E "[Pp]ython.*bot\.py" | grep -v grep | wc -l)
+        if [ "$remaining_processes" -eq 0 ]; then
+            log_message "Множественные процессы успешно остановлены. Нужен перезапуск."
+            return 1  # Нет процессов - нужен запуск
+        else
+            log_message "После остановки осталось $remaining_processes процессов"
+            return 0  # Есть процесс - считаем что работает
+        fi
     elif [ "$bot_processes" -eq 1 ]; then
         return 0  # Один процесс - нормально
     else
