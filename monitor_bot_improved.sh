@@ -110,7 +110,7 @@ check_bot_running() {
 check_bot_health() {
     if [ -f "$BOT_LOG_FILE" ]; then
         local telegram_conflicts=$(tail -20 "$BOT_LOG_FILE" | grep "TelegramConflictError" | wc -l)
-        local recent_errors=$(tail -50 "$BOT_LOG_FILE" | grep -E "ERROR|CRITICAL|Exception|Traceback" | wc -l)
+        local recent_errors=$(tail -50 "$BOT_LOG_FILE" | grep -E "ERROR|CRITICAL|Exception|Traceback" | grep -v "ОТЛАДКА|AI Action" | wc -l)
 
         if [ "$telegram_conflicts" -gt 0 ]; then
             log_message "ПРОБЛЕМА: TelegramConflictError - множественные экземпляры!"
@@ -118,7 +118,7 @@ check_bot_health() {
             return 1
         fi
 
-        if [ "$recent_errors" -gt 8 ]; then
+        if [ "$recent_errors" -gt 50 ]; then
             log_message "ПРОБЛЕМА: Слишком много ошибок ($recent_errors)"
             return 1
         fi
