@@ -261,31 +261,11 @@ def register_handlers(dp, bot=None):
                 f"Пользователь {call.from_user.id} использовал устаревшую кнопку upload_new"
             )
 
-        # Регистрируем обработчик кнопки подтверждения инвойса
-        @dp.callback_query(F.data == "confirm:invoice")
-        async def handle_invoice_confirm(call: CallbackQuery, state: FSMContext):
-            """Обработчик кнопки 'Подтвердить' для отправки в Syrve"""
-            from app.handlers.syrve_handler import handle_invoice_confirm as syrve_handler
-
-            try:
-                # Сначала изменяем состояние
-                await state.set_state(NotaStates.progress)
-                # Затем вызываем обработчик
-                await syrve_handler(call, state)
-                # В случае успеха устанавливаем состояние главного меню
-                await state.set_state(NotaStates.main_menu)
-            except Exception as e:
-                logger.error(f"Ошибка при обработке подтверждения инвойса: {e}")
-                await call.message.answer(
-                    "An error occurred while sending to Syrve. Please try again later."
-                )
-                # В случае ошибки возвращаемся в режим редактирования
-                await state.set_state(NotaStates.editing)
-
         # ДИАГНОСТИКА: Добавляем универсальный обработчик для всех сообщений (после всех остальных)
         @dp.callback_query(
-            ~F.data.in_(["edit:free", "action:new", "confirm:invoice"])
+            ~F.data.in_(["edit:free", "action:new"])
             & ~F.data.startswith("fuzzy:")
+            & ~F.data.startswith("confirm:")  # Исключаем все confirm: callback'ы
         )
         async def debug_unhandled_callbacks(call, state: FSMContext):
             """Диагностический обработчик для всех callback-ов (работает только для необработанных)"""
