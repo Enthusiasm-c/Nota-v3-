@@ -283,7 +283,6 @@ async def handle_invoice_confirm_final(callback: CallbackQuery, state: FSMContex
                 callback.message.chat.id,
                 processing_msg.message_id,
                 t("status.syrve_success", {"id": f"✅ Импорт OK · № {server_number}"}, lang=lang),
-                kb=kb_main(lang),
             )
 
             # Track successful upload
