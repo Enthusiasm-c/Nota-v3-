@@ -235,9 +235,16 @@ def register_handlers(dp, bot=None):
 
         # Регистрируем роутер Syrve для обработки отправки накладных
         if "syrve_router" not in dp._registered_routers:
+            logger.critical("🔧 Регистрируем syrve_router")
+            print("🔧 Регистрируем syrve_router")
             dp.include_router(syrve_router)
             dp._registered_routers.add("syrve_router")
+            logger.critical("🔧 ✅ syrve_router зарегистрирован")
+            print("🔧 ✅ syrve_router зарегистрирован")
             logger.info("Зарегистрирован обработчик Syrve")
+        else:
+            logger.critical("🔧 ⚠️ syrve_router уже зарегистрирован")
+            print("🔧 ⚠️ syrve_router уже зарегистрирован")
 
         # Регистрируем команду старт
         dp.message.register(cmd_start, CommandStart())
