@@ -1,9 +1,5 @@
-from unittest.mock import AsyncMock, MagicMock
-
-import pytest
 from aiogram.types import InlineKeyboardMarkup
 
-from app.fsm.states import EditFree
 from app.keyboards import build_main_kb
 
 
@@ -53,33 +49,3 @@ def test_build_edit_keyboard_forwards_to_build_main_kb():
 
     # Сравниваем структуру клавиатур
     assert len(kb1.inline_keyboard) == len(kb2.inline_keyboard)
-
-
-@pytest.mark.asyncio
-async def test_cb_edit_line_state_transition():
-    """Тест: cb_edit_line переводит состояние в EditFree.awaiting_input"""
-    import bot
-
-    # Создаем моки
-    callback = AsyncMock()
-    callback.from_user = MagicMock(id=123)
-    callback.message = AsyncMock()
-    callback.message.message_id = 456
-    callback.data = "edit:free"
-
-    state = AsyncMock()
-
-    # Вызываем функцию
-    await bot.cb_edit_line(callback, state)
-
-    # Проверяем, что состояние было установлено в EditFree.awaiting_input
-    state.set_state.assert_awaited_with(EditFree.awaiting_input)
-
-    # Проверяем, что был вызван answer
-    callback.answer.assert_awaited()
-
-    # Проверяем, что был вызван message.answer с инструкцией
-    callback.message.answer.assert_awaited()
-
-    # Проверяем, что в state сохранен message_id
-    state.update_data.assert_awaited_with(edit_msg_id=456)

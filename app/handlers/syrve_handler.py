@@ -9,7 +9,7 @@ from datetime import datetime
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from dotenv import load_dotenv
 
 from app.alias import learn_from_invoice
@@ -74,6 +74,94 @@ def get_syrve_client():
 
 @router.callback_query(F.data == "confirm:invoice")
 async def handle_invoice_confirm(callback: CallbackQuery, state: FSMContext):
+    """
+    Handle first confirmation click - show confirmation dialog with Yes/No buttons.
+    """
+    try:
+        # Immediately answer the callback to prevent timeout
+        await callback.answer()
+
+        # Get user language
+        data = await state.get_data()
+        lang = data.get("lang", "en")
+
+        # Get invoice data from state
+        invoice = data.get("invoice")
+        if not invoice:
+            await callback.message.answer(t("error.invoice_not_found", {}, lang=lang))
+            return
+
+        # Show confirmation dialog with Yes/No buttons
+        confirm_kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="✅ Yes, send to Syrve", callback_data="confirm:invoice:final"
+                    ),
+                    InlineKeyboardButton(
+                        text="❌ No, cancel", callback_data="confirm:invoice:cancel"
+                    ),
+                ]
+            ]
+        )
+
+        # Show confirmation message
+        await callback.message.edit_text(
+            "🚨 <b>Confirm sending invoice to Syrve?</b>\n\n"
+            "This action cannot be undone. The invoice will be permanently submitted to the restaurant system.",
+            reply_markup=confirm_kb,
+            parse_mode="HTML",
+        )
+
+    except Exception as e:
+        logger.error(f"Error in confirmation dialog: {str(e)}", exc_info=True)
+        await callback.message.answer("An error occurred. Please try again.")
+
+
+@router.callback_query(F.data == "confirm:invoice:cancel")
+async def handle_invoice_confirm_cancel(callback: CallbackQuery, state: FSMContext):
+    """
+    Handle confirmation cancellation - restore original report.
+    """
+    try:
+        await callback.answer("Sending cancelled")
+
+        # Get data from state
+        data = await state.get_data()
+        lang = data.get("lang", "en")
+        invoice = data.get("invoice")
+        match_results = data.get("match_results", [])
+
+        if not invoice:
+            await callback.message.answer("Invoice not found. Please send a new photo.")
+            return
+
+        # Restore original report
+        from app.formatters.report import build_report
+        from app.keyboards import build_main_kb
+
+        report_text, has_errors = build_report(invoice, match_results, escape_html=True)
+
+        # Add helpful instructions
+        if has_errors:
+            instructions = "\n\n💬 <i>Just type your edits: 'line 3 qty 5' or 'date 2024-12-25'</i>"
+        else:
+            instructions = "\n\n💬 <i>Ready to confirm! Or edit with: 'line 3 qty 5'</i>"
+
+        final_text = report_text + instructions
+
+        # Restore original keyboard
+        keyboard = build_main_kb(has_errors=has_errors, lang=lang)
+
+        await callback.message.edit_text(final_text, reply_markup=keyboard, parse_mode="HTML")
+
+    except Exception as e:
+        logger.error(f"Error cancelling confirmation: {str(e)}", exc_info=True)
+        await callback.message.answer("An error occurred. Please try again.")
+
+
+@router.callback_query(F.data == "confirm:invoice:final")
+async def handle_invoice_confirm_final(callback: CallbackQuery, state: FSMContext):
     """
     Handle confirmation of invoice and send to Syrve.
 
