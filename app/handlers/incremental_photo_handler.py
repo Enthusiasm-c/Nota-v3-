@@ -41,7 +41,7 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
     # Убедимся, что у сообщения есть фотографии
     if not message.photo or len(message.photo) == 0:
         logger.warning(f"[{req_id}] Сообщение не содержит фотографий")
-        await message.answer("Ошибка: фотография не найдена. Попробуйте отправить еще раз.")
+        await message.answer("Error: photo not found. Please try sending again.")
         return
 
     # Берем фото с наивысшим качеством (последнее в массиве)
@@ -133,7 +133,7 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
             await state.update_data(processing_photo=False)
             # Сообщаем об ошибке
             await ui.update(
-                "❌ Ошибка при распознавании текста. Попробуйте другое фото или сделайте снимок более четким."
+                "❌ Error recognizing text. Try another photo or take a clearer picture."
             )
             # Прекращаем обработку
             return

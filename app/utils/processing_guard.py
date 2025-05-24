@@ -278,13 +278,9 @@ def require_user_free(context_name: str = "default", max_age: int = 120):
 
                 # Можно вернуть сообщение о том, что запрос игнорируется
                 if hasattr(args[0], "answer"):
-                    await args[0].answer(
-                        "Предыдущий запрос еще обрабатывается. Пожалуйста, подождите."
-                    )
+                    await args[0].answer("Previous request is still being processed. Please wait.")
                 elif hasattr(args[0], "reply"):
-                    await args[0].reply(
-                        "Предыдущий запрос еще обрабатывается. Пожалуйста, подождите."
-                    )
+                    await args[0].reply("Previous request is still being processed. Please wait.")
 
                 return None
 
@@ -343,9 +339,9 @@ def require_rate_limit(action_type: str, min_interval: float = 2.0):
 
                 # Можно вернуть сообщение о том, что запрос слишком частый
                 if hasattr(args[0], "answer"):
-                    await args[0].answer("Слишком частые запросы. Пожалуйста, подождите.")
+                    await args[0].answer("Too many requests. Please wait.")
                 elif hasattr(args[0], "reply"):
-                    await args[0].reply("Слишком частые запросы. Пожалуйста, подождите.")
+                    await args[0].reply("Too many requests. Please wait.")
 
                 return None
 

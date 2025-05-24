@@ -46,9 +46,7 @@ async def handle_free_edit_text(message: Message, state: FSMContext):
     invoice = data.get("invoice")
     if not invoice:
         logger.critical(f"ОТЛАДКА-ХЕНДЛЕР: Инвойс отсутствует в состоянии для user_id={user_id}")
-        await message.answer(
-            "Не найден инвойс для редактирования. Отправьте фото инвойса или нажмите Edit."
-        )
+        await message.answer("Invoice not found for editing. Send an invoice photo or click Edit.")
         return
 
     # Проверка наличия текста в сообщении
@@ -140,7 +138,7 @@ async def handle_free_edit_text(message: Message, state: FSMContext):
             logger.critical(traceback.format_exc())
             return {
                 "action": "unknown",
-                "user_message": f"Ошибка при разборе команды: {e}",
+                "user_message": f"An error occurred while processing the command: {e}",
                 "source": "local_parser_error",
             }
 
@@ -163,7 +161,7 @@ async def handle_free_edit_text(message: Message, state: FSMContext):
         )
     except Exception as e:
         logger.critical(f"ОТЛАДКА-ХЕНДЛЕР: Ошибка в process_user_edit: {e}", exc_info=True)
-        await message.answer("Произошла ошибка при обработке команды. Попробуйте ещё раз.")
+        await message.answer("An error occurred while processing the command. Please try again.")
 
     if processing_msg:
         try:
@@ -261,8 +259,8 @@ async def handle_edit_free(call: CallbackQuery, state: FSMContext):
 
         # Все равно отвечаем на callback
         try:
-            await call.answer("Ошибка обработки")
-        except:
+            await call.answer("Processing error")
+        except Exception:
             pass
 
 

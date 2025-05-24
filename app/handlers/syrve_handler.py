@@ -14,7 +14,6 @@ from dotenv import load_dotenv
 
 from app.alias import learn_from_invoice
 from app.config import settings
-from app.fsm.states import NotaStates
 from app.i18n import t
 from app.keyboards import kb_main
 from app.syrve_client import SyrveClient, generate_invoice_xml
@@ -157,9 +156,9 @@ async def handle_invoice_confirm(callback: CallbackQuery, state: FSMContext):
         try:
             xml = await generate_invoice_xml(syrve_data, openai_client)
         except Exception as e:
-            logger.error(f"Ошибка генерации XML для Syrve: {str(e)}", exc_info=True)
+            logger.error(f"XML generation error: {str(e)}", exc_info=True)
             await processing_msg.edit_text(
-                t("error.syrve_error", {"message": "Ошибка генерации XML: " + str(e)}, lang=lang),
+                t("error.syrve_error", {"message": "XML generation error: " + str(e)}, lang=lang),
                 reply_markup=kb_main(lang),
             )
             increment_counter("nota_invoices_total", {"status": "failed"})
@@ -172,11 +171,11 @@ async def handle_invoice_confirm(callback: CallbackQuery, state: FSMContext):
             auth_token = await syrve_client.auth()
             result = await syrve_client.import_invoice(auth_token, xml)
         except Exception as e:
-            logger.error(f"Ошибка отправки накладной в Syrve: {str(e)}", exc_info=True)
+            logger.error(f"Error sending to Syrve: {str(e)}", exc_info=True)
             await processing_msg.edit_text(
                 t(
                     "error.syrve_error",
-                    {"message": "Ошибка отправки в Syrve: " + str(e)},
+                    {"message": "Error sending to Syrve: " + str(e)},
                     lang=lang,
                 ),
                 reply_markup=kb_main(lang),
@@ -240,8 +239,10 @@ async def handle_invoice_confirm(callback: CallbackQuery, state: FSMContext):
         )
         increment_counter("nota_invoices_total", {"status": "failed"})
 
-    # Update user state to main menu
-    await state.set_state(NotaStates.main_menu)
+    # ИСПРАВЛЕНИЕ: НЕ переводим пользователя в главное меню
+    # Оставляем в состоянии редактирования для возможности дальнейших изменений
+    # Данные invoice и match_results остаются в state для продолжения редактирования
+    # await state.set_state(NotaStates.main_menu)  # УДАЛЕНО!
 
 
 def prepare_invoice_data(invoice, match_results):

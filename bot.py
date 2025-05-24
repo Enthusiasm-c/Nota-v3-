@@ -11,6 +11,7 @@ import logging
 import os
 import shutil
 import sys
+import time
 import traceback
 import uuid
 from pathlib import Path
@@ -101,7 +102,7 @@ def create_bot_and_dispatcher():
 
 async def cmd_start(message: Message):
     await message.answer(
-        "👋 Привет! Я Nota AI Bot - бот для обработки инвойсов.\n\n📱 Просто отправьте фотографию инвойса, и я проанализирую его для вас. Никаких дополнительных кнопок не требуется."
+        "👋 Hello! I'm Nota AI Bot - a bot for processing invoices.\n\n📱 Just send a photo of your invoice and I'll analyze it for you. No additional buttons required."
     )
 
 
@@ -134,11 +135,11 @@ async def global_error_handler(event, exception):
     # Пытаемся отправить сообщение пользователю
     try:
         if hasattr(event, "answer"):
-            await event.answer("Произошла ошибка. Пожалуйста, попробуйте снова.")
+            await event.answer("An error occurred. Please try again.")
         elif hasattr(event, "reply"):
-            await event.reply("Произошла ошибка. Пожалуйста, попробуйте снова.")
+            await event.reply("An error occurred. Please try again.")
         elif hasattr(event, "message") and hasattr(event.message, "answer"):
-            await event.message.answer("Произошла ошибка. Пожалуйста, попробуйте снова.")
+            await event.message.answer("An error occurred. Please try again.")
 
         logger.info(f"[{error_id}] Отправлено сообщение об ошибке пользователю")
     except Exception as e:
@@ -251,7 +252,7 @@ def register_handlers(dp, bot=None):
                 # ШАГ 1: Быстро отвечаем на callback (КРИТИЧНО!)
                 logger.critical(f"[{op_id}] ШАГ 1: Отвечаем на callback")
                 print(f"[{op_id}] ШАГ 1: Отвечаем на callback")
-                await call.answer("Отмена", cache_time=1)
+                await call.answer("Cancelled", cache_time=1)
                 logger.critical(f"[{op_id}] ШАГ 1: ✅ Callback отвечен")
                 print(f"[{op_id}] ШАГ 1: ✅ Callback отвечен")
             except Exception as e:
@@ -335,7 +336,7 @@ def register_handlers(dp, bot=None):
                     await asyncio.wait_for(
                         bot.send_message(
                             chat_id=call.message.chat.id,
-                            text="❌ Операция отменена.\n\n📱 Отправьте фотографию инвойса для обработки.",
+                            text="❌ Operation cancelled.\n\n📱 Send an invoice photo for processing.",
                             parse_mode=None,
                         ),
                         timeout=5.0,
@@ -362,14 +363,14 @@ def register_handlers(dp, bot=None):
         async def cb_new_invoice(call: CallbackQuery, state: FSMContext):
             """Заглушка для устаревшей кнопки Upload New Invoice"""
             # Немедленно отвечаем на callback и сообщаем, что нужно просто отправить фото
-            await call.answer("Просто отправьте новое фото")
+            await call.answer("Just send a new photo")
 
             # Полностью очищаем состояние и устанавливаем новое
             await state.clear()
             await state.set_state(NotaStates.awaiting_file)
 
             # Отправляем сообщение без кнопок
-            await call.message.answer("📱 Просто отправьте фотографию инвойса для обработки.")
+            await call.message.answer("📱 Just send an invoice photo for processing.")
 
             logger.info(
                 f"Пользователь {call.from_user.id} использовал устаревшую кнопку upload_new"
@@ -391,7 +392,7 @@ def register_handlers(dp, bot=None):
             except Exception as e:
                 logger.error(f"Ошибка при обработке подтверждения инвойса: {e}")
                 await call.message.answer(
-                    "Произошла ошибка при отправке в Syrve. Попробуйте еще раз позже."
+                    "An error occurred while sending to Syrve. Please try again later."
                 )
                 # В случае ошибки возвращаемся в режим редактирования
                 await state.set_state(NotaStates.editing)
@@ -411,10 +412,10 @@ def register_handlers(dp, bot=None):
             )
 
             # Отвечаем на callback чтобы кнопка не зависала
-            await call.answer("⚠️ Необработанный callback")
+            await call.answer("⚠️ Unhandled callback")
 
             # Отправляем сообщение пользователю
-            await call.message.answer(f"⚠️ Кнопка '{call.data}' не обработана. Попробуйте еще раз.")
+            await call.message.answer(f"⚠️ Button '{call.data}' not handled. Please try again.")
 
         # ДИАГНОСТИКА: Добавляем универсальный обработчик для всех фото сообщений (ПОСЛЕДНИМ!)
         @dp.message(F.photo)
@@ -427,7 +428,7 @@ def register_handlers(dp, bot=None):
             print(f"📷 UNHANDLED PHOTO: user_id={message.from_user.id}, state={current_state}")
 
             # Отправляем сообщение пользователю
-            await message.answer("⚠️ Фото не обработано. Отправьте фото инвойса.")
+            await message.answer("⚠️ Photo not processed. Send an invoice photo.")
 
         # Создаем и регистрируем fallback роутер последним для корректного приоритета
         if "fallback_router" not in dp._registered_routers:
@@ -644,7 +645,7 @@ async def handle_field_edit(message, state: FSMContext):
         logger.error(f"Error handling field edit: {str(e)}")
         await message.answer(
             t("error.edit_failed", lang=lang)
-            or "Ошибка при обработке изменений. Пожалуйста, попробуйте еще раз."
+            or "An error occurred while processing the command. Please try again."
         )
     finally:
         # Удаляем сообщение о загрузке
@@ -1005,7 +1006,7 @@ async def all_messages_fallback(message, state: FSMContext):
             if not invoice:
                 try:
                     await message.answer(
-                        "Не найден инвойс для редактирования. Отправьте фото или нажмите Edit снова."
+                        "Invoice not found for editing. Send a photo or click Edit again."
                     )
                     logger.critical("СТАРТ: Инвойс отсутствует, отправлено сообщение пользователю")
                     return
@@ -1061,7 +1062,7 @@ async def all_messages_fallback(message, state: FSMContext):
 
                 # Если все обработчики не сработали, показываем ошибку
                 await message.answer(
-                    "Произошла ошибка при обработке команды. Пожалуйста, повторите."
+                    "An error occurred while processing the command. Please try again."
                 )
                 return
             except Exception as e:
@@ -1071,7 +1072,7 @@ async def all_messages_fallback(message, state: FSMContext):
                 logger.critical(traceback.format_exc())
                 try:
                     await message.answer(
-                        "Произошла ошибка при обработке команды. Пожалуйста, повторите."
+                        "An error occurred while processing the command. Please try again."
                     )
                 except Exception as e:
                     logger.error(f"Не удалось отправить сообщение об ошибке: {e}")
@@ -1082,7 +1083,7 @@ async def all_messages_fallback(message, state: FSMContext):
         logger.critical(f"ГЛОБАЛЬНАЯ ОШИБКА: {e}")
         logger.critical(traceback.format_exc())
         try:
-            await message.answer("Произошла системная ошибка. Пожалуйста, повторите.")
+            await message.answer("A system error occurred. Please try again.")
         except Exception as e:
             logger.error(f"Не удалось отправить сообщение о системной ошибке: {e}")
         return

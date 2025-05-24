@@ -39,7 +39,7 @@ router = Router()
 async def handle_edit_choose(call: CallbackQuery, state: FSMContext):
     await state.set_state(EditFree.awaiting_input)
     await call.message.answer(
-        "Что нужно отредактировать? (пример: 'дата — 26 апреля' или 'строка 2 цена 90000')",
+        "What needs to be edited? (example: 'date — April 26' or 'line 2 price 90000')",
         reply_markup=None,
     )
 
@@ -67,7 +67,7 @@ async def handle_choose_line(message: Message, state: FSMContext):
         await state.update_data(invoice=invoice)
     await state.set_state(EditFree.awaiting_input)
     await message.answer(
-        "Что нужно отредактировать? (пример: 'дата — 26 апреля' или 'строка 2 цена 90000')",
+        "What needs to be edited? (example: 'date — April 26' or 'line 2 price 90000')",
         reply_markup=None,
     )
 
@@ -99,7 +99,7 @@ async def handle_cancel_row(call: CallbackQuery, state: FSMContext):
     Обработчик для "cancel:all" находится в bot.py
     """
     # Немедленно отвечаем на callback, чтобы пользователь увидел, что кнопка сработала
-    await call.answer("Отмена редактирования строки")
+    await call.answer("Line editing cancelled")
 
     try:
         parts = call.data.split(":")
@@ -120,7 +120,7 @@ async def handle_cancel_row(call: CallbackQuery, state: FSMContext):
             )
     except Exception as e:
         logger.error(f"Ошибка в обработчике cancel: {e}")
-        await call.answer("Произошла ошибка. Попробуйте загрузить новое фото.")
+        await call.answer("An error occurred. Please try uploading a new photo.")
 
 
 # --- UX финального отчёта: обработчики новых кнопок ---
@@ -223,20 +223,20 @@ async def handle_submit(call: CallbackQuery, state: FSMContext):
     match_results = matcher.match_positions(invoice["positions"], data_loader.load_products())
     text, has_errors = invoice_report.build_report(invoice, match_results)
     if has_errors:
-        await call.answer("⚠️ Исправьте ошибки перед отправкой.", show_alert=True)
+        await call.answer("⚠️ Please fix errors before sending.", show_alert=True)
         # Подтверждение перед отправкой
     from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
     confirm_kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="Да, отправить", callback_data="inv_submit_confirm"),
-                InlineKeyboardButton(text="Нет, вернуться", callback_data="inv_submit_cancel"),
+                InlineKeyboardButton(text="Yes, send", callback_data="inv_submit_confirm"),
+                InlineKeyboardButton(text="No, go back", callback_data="inv_submit_cancel"),
             ]
         ]
     )
     await call.message.edit_text(
-        "Вы уверены, что хотите отправить инвойс?", reply_markup=confirm_kb, parse_mode="HTML"
+        "Are you sure you want to send the invoice?", reply_markup=confirm_kb, parse_mode="HTML"
     )
 
 
@@ -249,7 +249,7 @@ async def handle_submit_confirm(call: CallbackQuery, state: FSMContext):
     if not invoice:
         await call.answer("Session expired. Please resend the invoice.", show_alert=True)
         # Здесь — экспорт/отправка в Syrve или другой сервис
-    await call.message.edit_text("Инвойс успешно отправлен!")
+    await call.message.edit_text("Invoice sent successfully!")
     # Очищаем state только при полной отмене или отправке инвойса
 
 
@@ -422,13 +422,13 @@ async def process_field_reply(message: Message, state: FSMContext, field: str):
         try:
             value = float(value)
         except Exception:
-            await message.answer("⚠️ Введите корректное число для qty.", reply_markup=ForceReply())
+            await message.answer("⚠️ Enter a valid number for qty.", reply_markup=ForceReply())
             return
     elif field == "price":
         try:
             value = float(value)
         except Exception:
-            await message.answer("⚠️ Введите корректное число для price.", reply_markup=ForceReply())
+            await message.answer("⚠️ Enter a valid number for price.", reply_markup=ForceReply())
             return
     # Обновляем значение в позиции
     invoice["positions"][idx][field] = value
