@@ -175,41 +175,29 @@ def kb_cancel_all(lang: str = "en") -> InlineKeyboardMarkup:
 
 def build_main_kb(has_errors: bool = True, lang: str = "en") -> InlineKeyboardMarkup:
     """
-    Создает клавиатуру для редактирования отчета.
+    Создает упрощенную клавиатуру для отчета - только кнопка подтверждения при отсутствии ошибок.
+    Редактирование и отмена доступны через текстовые команды.
 
     Args:
         has_errors: Флаг, указывающий есть ли ошибки в отчете
         lang: Код языка для интернационализации
 
     Returns:
-        InlineKeyboardMarkup с кнопками редактирования и подтверждения/отмены
+        InlineKeyboardMarkup с кнопкой подтверждения (если нет ошибок) или пустая клавиатура
     """
-    logger.debug(f"Creating main keyboard with has_errors={has_errors}, lang={lang}")
+    logger.debug(f"Creating simplified keyboard with has_errors={has_errors}, lang={lang}")
 
-    # Кнопка редактирования
-    edit_button = InlineKeyboardButton(
-        text="✏️ " + t("buttons.edit", {"default": "Редактировать"}, lang), callback_data="edit:free"
-    )
+    # Если есть ошибки - показываем пустую клавиатуру (пользователь может сразу писать команды)
+    if has_errors:
+        return InlineKeyboardMarkup(inline_keyboard=[])
 
-    # Кнопка отмены
-    cancel_button = InlineKeyboardButton(
-        text="❌ " + t("buttons.cancel", {"default": "Отмена"}, lang), callback_data="cancel:all"
-    )
-
-    # Кнопка подтверждения (только если нет ошибок)
+    # Если ошибок нет - показываем только кнопку подтверждения для безопасности
     confirm_button = InlineKeyboardButton(
         text="✅ " + t("buttons.confirm", {"default": "Подтвердить"}, lang),
         callback_data="confirm:invoice",
     )
 
-    # Формируем клавиатуру
-    keyboard_rows = [[edit_button, cancel_button]]  # Первый ряд с редактированием и отменой
-
-    # Добавляем кнопку подтверждения только если нет ошибок
-    if not has_errors:
-        keyboard_rows.append([confirm_button])  # Второй ряд только с подтверждением
-
-    return InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
+    return InlineKeyboardMarkup(inline_keyboard=[[confirm_button]])
 
 
 def build_edit_keyboard(has_errors: bool = True, lang: str = "en") -> InlineKeyboardMarkup:

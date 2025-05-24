@@ -233,14 +233,22 @@ async def photo_handler_incremental(message: Message, state: FSMContext):
             ]
             has_valid_html = any(tag in report_text for tag in telegram_html_tags)
 
-            # Try to send with HTML first if we have valid HTML tags
-            if has_valid_html:
-                result = await message.answer(
-                    report_text, reply_markup=inline_kb, parse_mode="HTML"
+            # Add helpful instructions for users
+            if unknown_count + partial_count > 0:
+                instructions = (
+                    "\n\n💬 <i>Just type your edits: 'line 3 qty 5' or 'date 2024-12-25'</i>"
                 )
             else:
+                instructions = "\n\n💬 <i>Ready to confirm! Or edit with: 'line 3 qty 5'</i>"
+
+            final_text = report_text + instructions
+
+            # Try to send with HTML first if we have valid HTML tags
+            if has_valid_html:
+                result = await message.answer(final_text, reply_markup=inline_kb, parse_mode="HTML")
+            else:
                 # If no HTML tags, send without parse_mode
-                result = await message.answer(report_text, reply_markup=inline_kb)
+                result = await message.answer(final_text, reply_markup=inline_kb)
 
             # Update message ID in user_matches
             new_key = (user_id, result.message_id)

@@ -102,7 +102,12 @@ def create_bot_and_dispatcher():
 
 async def cmd_start(message: Message):
     await message.answer(
-        "👋 Hello! I'm Nota AI Bot - a bot for processing invoices.\n\n📱 Just send a photo of your invoice and I'll analyze it for you. No additional buttons required."
+        "👋 Hello! I'm Nota AI Bot - a smart invoice processing assistant.\n\n"
+        "📸 <b>Just send a photo</b> of your invoice and I'll analyze it\n"
+        "✍️ <b>Edit with text</b>: 'line 3 qty 5' or 'date 2024-12-25'\n"
+        "❌ <b>Cancel anytime</b>: type 'cancel'\n\n"
+        "💬 <i>No buttons needed - just chat naturally!</i>",
+        parse_mode="HTML",
     )
 
 
@@ -234,126 +239,6 @@ def register_handlers(dp, bot=None):
             dp._registered_routers.add("syrve_router")
             logger.info("Зарегистрирован обработчик Syrve")
 
-        # Регистрируем встроенный обработчик для кнопки cancel (упрощенная надежная версия)
-        @dp.callback_query(F.data == "cancel:all")
-        async def handle_cancel_all(call, state: FSMContext):
-            """Упрощенный обработчик кнопки Cancel без асинхронных задач"""
-            import asyncio
-            import time
-
-            from app.fsm.states import NotaStates
-
-            logger.critical(f"🔥 CANCEL HANDLER TRIGGERED! callback_data: {call.data}")
-            print(f"🔥 CANCEL HANDLER TRIGGERED! callback_data: {call.data}")
-
-            op_id = f"cancel_{call.message.message_id}_{int(time.time() * 1000)}"
-
-            try:
-                # ШАГ 1: Быстро отвечаем на callback (КРИТИЧНО!)
-                logger.critical(f"[{op_id}] ШАГ 1: Отвечаем на callback")
-                print(f"[{op_id}] ШАГ 1: Отвечаем на callback")
-                await call.answer("Cancelled", cache_time=1)
-                logger.critical(f"[{op_id}] ШАГ 1: ✅ Callback отвечен")
-                print(f"[{op_id}] ШАГ 1: ✅ Callback отвечен")
-            except Exception as e:
-                logger.error(f"[{op_id}] ШАГ 1: ❌ ОШИБКА callback: {str(e)}")
-                print(f"[{op_id}] ШАГ 1: ❌ ОШИБКА callback: {str(e)}")
-
-            try:
-                # ШАГ 2: Очищаем блокировки
-                logger.critical(f"[{op_id}] ШАГ 2: Очищаем блокировки")
-                print(f"[{op_id}] ШАГ 2: Очищаем блокировки")
-                user_id = call.from_user.id
-
-                from app.utils.processing_guard import (
-                    clear_all_locks,
-                    set_processing_photo,
-                    set_sending_to_syrve,
-                )
-
-                await set_processing_photo(user_id, False)
-                await set_sending_to_syrve(user_id, False)
-                clear_all_locks()
-
-                logger.critical(f"[{op_id}] ШАГ 2: ✅ Блокировки очищены")
-                print(f"[{op_id}] ШАГ 2: ✅ Блокировки очищены")
-            except Exception as e:
-                logger.error(f"[{op_id}] ШАГ 2: ❌ ОШИБКА блокировок: {str(e)}")
-                print(f"[{op_id}] ШАГ 2: ❌ ОШИБКА блокировок: {str(e)}")
-
-            try:
-                # ШАГ 3: Очищаем данные инвойса
-                logger.critical(f"[{op_id}] ШАГ 3: Очищаем данные инвойса")
-                print(f"[{op_id}] ШАГ 3: Очищаем данные инвойса")
-
-                global user_matches
-                keys_to_remove = [key for key in user_matches.keys() if key[0] == user_id]
-                for key in keys_to_remove:
-                    del user_matches[key]
-
-                logger.critical(f"[{op_id}] ШАГ 3: ✅ Очищено {len(keys_to_remove)} записей")
-                print(f"[{op_id}] ШАГ 3: ✅ Очищено {len(keys_to_remove)} записей")
-            except Exception as e:
-                logger.error(f"[{op_id}] ШАГ 3: ❌ ОШИБКА данных: {str(e)}")
-                print(f"[{op_id}] ШАГ 3: ❌ ОШИБКА данных: {str(e)}")
-
-            try:
-                # ШАГ 4: Сбрасываем состояние (МОЖЕТ ЗАВИСНУТЬ!)
-                logger.critical(f"[{op_id}] ШАГ 4: Сбрасываем состояние")
-                print(f"[{op_id}] ШАГ 4: Сбрасываем состояние")
-
-                await asyncio.wait_for(state.clear(), timeout=2.0)
-                logger.critical(f"[{op_id}] ШАГ 4A: ✅ Состояние очищено")
-                print(f"[{op_id}] ШАГ 4A: ✅ Состояние очищено")
-
-                await asyncio.wait_for(state.set_state(NotaStates.awaiting_file), timeout=2.0)
-                logger.critical(f"[{op_id}] ШАГ 4B: ✅ Новое состояние установлено")
-                print(f"[{op_id}] ШАГ 4B: ✅ Новое состояние установлено")
-            except Exception as e:
-                logger.error(f"[{op_id}] ШАГ 4: ❌ ОШИБКА состояния: {str(e)}")
-                print(f"[{op_id}] ШАГ 4: ❌ ОШИБКА состояния: {str(e)}")
-
-            try:
-                # ШАГ 5: Удаляем клавиатуру (МОЖЕТ ЗАВИСНУТЬ!)
-                logger.critical(f"[{op_id}] ШАГ 5: Удаляем клавиатуру")
-                print(f"[{op_id}] ШАГ 5: Удаляем клавиатуру")
-
-                await asyncio.wait_for(
-                    call.message.edit_reply_markup(reply_markup=None), timeout=3.0
-                )
-                logger.critical(f"[{op_id}] ШАГ 5: ✅ Клавиатура удалена")
-                print(f"[{op_id}] ШАГ 5: ✅ Клавиатура удалена")
-            except Exception as e:
-                logger.error(f"[{op_id}] ШАГ 5: ❌ ОШИБКА клавиатуры: {str(e)}")
-                print(f"[{op_id}] ШАГ 5: ❌ ОШИБКА клавиатуры: {str(e)}")
-
-            try:
-                # ШАГ 6: Отправляем сообщение (МОЖЕТ ЗАВИСНУТЬ!)
-                logger.critical(f"[{op_id}] ШАГ 6: Отправляем сообщение")
-                print(f"[{op_id}] ШАГ 6: Отправляем сообщение")
-
-                if bot is not None:
-                    await asyncio.wait_for(
-                        bot.send_message(
-                            chat_id=call.message.chat.id,
-                            text="❌ Operation cancelled.\n\n📱 Send an invoice photo for processing.",
-                            parse_mode=None,
-                        ),
-                        timeout=5.0,
-                    )
-                    logger.critical(f"[{op_id}] ШАГ 6: ✅ Сообщение отправлено")
-                    print(f"[{op_id}] ШАГ 6: ✅ Сообщение отправлено")
-                else:
-                    logger.warning(f"[{op_id}] ШАГ 6: ⚠️ bot is None")
-                    print(f"[{op_id}] ШАГ 6: ⚠️ bot is None")
-            except Exception as e:
-                logger.error(f"[{op_id}] ШАГ 6: ❌ ОШИБКА сообщения: {str(e)}")
-                print(f"[{op_id}] ШАГ 6: ❌ ОШИБКА сообщения: {str(e)}")
-
-            logger.critical(f"[{op_id}] 🎉 CANCEL ЗАВЕРШЕН! Бот готов к новому фото")
-            print(f"[{op_id}] 🎉 CANCEL ЗАВЕРШЕН! Бот готов к новому фото")
-            return True
-
         # Регистрируем команду старт
         dp.message.register(cmd_start, CommandStart())
 
@@ -399,7 +284,7 @@ def register_handlers(dp, bot=None):
 
         # ДИАГНОСТИКА: Добавляем универсальный обработчик для всех сообщений (после всех остальных)
         @dp.callback_query(
-            ~F.data.in_(["edit:free", "cancel:all", "action:new", "confirm:invoice"])
+            ~F.data.in_(["edit:free", "action:new", "confirm:invoice"])
             & ~F.data.startswith("fuzzy:")
         )
         async def debug_unhandled_callbacks(call, state: FSMContext):

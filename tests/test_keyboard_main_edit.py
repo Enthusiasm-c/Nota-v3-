@@ -7,52 +7,33 @@ from app.fsm.states import EditFree
 from app.keyboards import build_main_kb
 
 
-def test_keyboard_two_buttons_with_errors():
-    """Test: if there are errors, keyboard has 2 buttons (Edit, Cancel)"""
+def test_keyboard_empty_with_errors():
+    """Test: if there are errors, keyboard is empty (users can type commands directly)"""
     kb = build_main_kb(has_errors=True)
 
     # Проверяем, что это InlineKeyboardMarkup
     assert isinstance(kb, InlineKeyboardMarkup)
 
-    # Проверяем, что есть только одна строка кнопок
-    assert len(kb.inline_keyboard) == 1
-
-    # Проверяем, что в первой строке 2 кнопки
-    assert len(kb.inline_keyboard[0]) == 2
-
-    # Проверяем текст и callback_data кнопок
-    assert kb.inline_keyboard[0][0].text == "✏️ Edit"
-    assert kb.inline_keyboard[0][0].callback_data == "edit:free"
-
-    assert kb.inline_keyboard[0][1].text == "✖ Cancel"
-    assert kb.inline_keyboard[0][1].callback_data == "cancel:all"
+    # Проверяем, что клавиатура пустая
+    assert len(kb.inline_keyboard) == 0
 
 
-def test_keyboard_three_buttons_no_errors():
-    """Test: if there are no errors, keyboard has 3 buttons (Edit, Cancel, Confirm)"""
+def test_keyboard_confirm_only_no_errors():
+    """Test: if there are no errors, keyboard has only Confirm button"""
     kb = build_main_kb(has_errors=False)
 
     # Проверяем, что это InlineKeyboardMarkup
     assert isinstance(kb, InlineKeyboardMarkup)
 
-    # Проверяем, что есть две строки кнопок
-    assert len(kb.inline_keyboard) == 2
+    # Проверяем, что есть одна строка кнопок
+    assert len(kb.inline_keyboard) == 1
 
-    # Проверяем, что в первой строке 2 кнопки
-    assert len(kb.inline_keyboard[0]) == 2
+    # Проверяем, что в строке одна кнопка
+    assert len(kb.inline_keyboard[0]) == 1
 
-    # Проверяем, что во второй строке 1 кнопка
-    assert len(kb.inline_keyboard[1]) == 1
-
-    # Проверяем текст и callback_data кнопок
-    assert kb.inline_keyboard[0][0].text == "✏️ Edit"
-    assert kb.inline_keyboard[0][0].callback_data == "edit:free"
-
-    assert kb.inline_keyboard[0][1].text == "✖ Cancel"
-    assert kb.inline_keyboard[0][1].callback_data == "cancel:all"
-
-    assert kb.inline_keyboard[1][0].text == "✅ Confirm"
-    assert kb.inline_keyboard[1][0].callback_data == "confirm:invoice"
+    # Проверяем текст и callback_data кнопки
+    assert kb.inline_keyboard[0][0].text == "✅ Confirm"
+    assert kb.inline_keyboard[0][0].callback_data == "confirm:invoice"
 
 
 def test_build_edit_keyboard_forwards_to_build_main_kb():
