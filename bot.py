@@ -162,23 +162,23 @@ def register_handlers(dp, bot=None):
         dp: Диспетчер
         bot: Экземпляр бота (опционально)
     """
-    logger.critical("🔧 НАЧАЛО РЕГИСТРАЦИИ ОБРАБОТЧИКОВ")
+    logger.info("🔧 НАЧАЛО РЕГИСТРАЦИИ ОБРАБОТЧИКОВ")
     print("🔧 НАЧАЛО РЕГИСТРАЦИИ ОБРАБОТЧИКОВ")
 
     # Регистрируем глобальный обработчик ошибок
     dp.errors.register(global_error_handler)
-    logger.critical("🔧 Глобальный обработчик ошибок зарегистрирован")
+    logger.info("🔧 Глобальный обработчик ошибок зарегистрирован")
     print("🔧 Глобальный обработчик ошибок зарегистрирован")
 
     try:
-        logger.critical("🔧 Начинаем импорт роутеров")
+        logger.info("🔧 Начинаем импорт роутеров")
         print("🔧 Начинаем импорт роутеров")
 
         # Импортируем роутеры
         try:
             from app.handlers.edit_flow import router as edit_flow_router
 
-            logger.critical("🔧 ✅ edit_flow_router импортирован")
+            logger.info("🔧 ✅ edit_flow_router импортирован")
             print("🔧 ✅ edit_flow_router импортирован")
         except Exception as e:
             logger.critical(f"🔧 ❌ ОШИБКА импорта edit_flow_router: {e}")
@@ -188,7 +188,7 @@ def register_handlers(dp, bot=None):
         try:
             from app.handlers.syrve_handler import router as syrve_router
 
-            logger.critical("🔧 ✅ syrve_router импортирован")
+            logger.info("🔧 ✅ syrve_router импортирован")
             print("🔧 ✅ syrve_router импортирован")
         except Exception as e:
             logger.critical(f"🔧 ❌ ОШИБКА импорта syrve_router: {e}")
@@ -199,21 +199,21 @@ def register_handlers(dp, bot=None):
         if not hasattr(dp, "_registered_routers"):
             dp._registered_routers = set()
 
-        logger.critical("🔧 Начинаем регистрацию роутеров")
+        logger.info("🔧 Начинаем регистрацию роутеров")
         print("🔧 Начинаем регистрацию роутеров")
 
         # ВАЖНО: Сначала регистрируем роутер редактирования,
         # чтобы он имел приоритет над обработчиком фотографий
         if "edit_flow_router" not in dp._registered_routers:
-            logger.critical("🔧 Регистрируем edit_flow_router")
+            logger.info("🔧 Регистрируем edit_flow_router")
             print("🔧 Регистрируем edit_flow_router")
             dp.include_router(edit_flow_router)
             dp._registered_routers.add("edit_flow_router")
-            logger.critical("🔧 ✅ edit_flow_router зарегистрирован")
+            logger.info("🔧 ✅ edit_flow_router зарегистрирован")
             print("🔧 ✅ edit_flow_router зарегистрирован")
             logger.info("Зарегистрирован обработчик редактирования")
         else:
-            logger.critical("🔧 ⚠️ edit_flow_router уже зарегистрирован")
+            logger.info("🔧 ⚠️ edit_flow_router уже зарегистрирован")
             print("🔧 ⚠️ edit_flow_router уже зарегистрирован")
 
         # Затем регистрируем роутер обработки фотографий
@@ -235,15 +235,15 @@ def register_handlers(dp, bot=None):
 
         # Регистрируем роутер Syrve для обработки отправки накладных
         if "syrve_router" not in dp._registered_routers:
-            logger.critical("🔧 Регистрируем syrve_router")
+            logger.info("🔧 Регистрируем syrve_router")
             print("🔧 Регистрируем syrve_router")
             dp.include_router(syrve_router)
             dp._registered_routers.add("syrve_router")
-            logger.critical("🔧 ✅ syrve_router зарегистрирован")
+            logger.info("🔧 ✅ syrve_router зарегистрирован")
             print("🔧 ✅ syrve_router зарегистрирован")
             logger.info("Зарегистрирован обработчик Syrve")
         else:
-            logger.critical("🔧 ⚠️ syrve_router уже зарегистрирован")
+            logger.info("🔧 ⚠️ syrve_router уже зарегистрирован")
             print("🔧 ⚠️ syrve_router уже зарегистрирован")
 
         # Регистрируем команду старт
@@ -276,7 +276,7 @@ def register_handlers(dp, bot=None):
         )
         async def debug_unhandled_callbacks(call, state: FSMContext):
             """Диагностический обработчик для всех callback-ов (работает только для необработанных)"""
-            logger.critical(
+            logger.info(
                 f"🔍 UNHANDLED CALLBACK: data='{call.data}', message_id={call.message.message_id}"
             )
             print(
@@ -294,7 +294,7 @@ def register_handlers(dp, bot=None):
         async def debug_all_photos(message: Message, state: FSMContext):
             """Диагностический обработчик для всех фото сообщений (работает только для необработанных)"""
             current_state = await state.get_state()
-            logger.critical(
+            logger.info(
                 f"📷 UNHANDLED PHOTO: user_id={message.from_user.id}, state={current_state}"
             )
             print(f"📷 UNHANDLED PHOTO: user_id={message.from_user.id}, state={current_state}")
@@ -314,10 +314,10 @@ def register_handlers(dp, bot=None):
             # Регистрируем fallback роутер ПОСЛЕДНИМ
             dp.include_router(fallback_router)
             dp._registered_routers.add("fallback_router")
-            logger.critical("🔧 ✅ fallback_router зарегистрирован последним")
+            logger.info("🔧 ✅ fallback_router зарегистрирован последним")
             print("🔧 ✅ fallback_router зарегистрирован последним")
 
-        logger.critical("🔧 ✅ Все роутеры зарегистрированы успешно")
+        logger.info("🔧 ✅ Все роутеры зарегистрированы успешно")
         print("🔧 ✅ Все роутеры зарегистрированы успешно")
     except Exception as e:
         logger.error(f"Ошибка при регистрации обработчиков: {e}")
@@ -737,15 +737,15 @@ async def all_messages_fallback(message, state: FSMContext):
         # Импортируем нужные классы состояний вначале функции
         from app.fsm.states import EditFree, NotaStates
 
-        logger.critical(f"СТАРТ: all_messages_fallback вызван, тип={type(message).__name__}")
+        logger.info(f"СТАРТ: all_messages_fallback вызван, тип={type(message).__name__}")
 
         # Получаем и проверяем текст сообщения
         try:
             text = getattr(message, "text", None) or ""
             user_id = getattr(message.from_user, "id", "unknown")
-            logger.critical(f"СТАРТ: Текст сообщения: '{text}', user_id={user_id}")
+            logger.info(f"СТАРТ: Текст сообщения: '{text}', user_id={user_id}")
         except Exception as e:
-            logger.critical(f"ОШИБКА при получении текста: {e}")
+            logger.info(f"ОШИБКА при получении текста: {e}")
             return
 
         # Проверяем на команду даты или редактирования строки максимально просто и надежно
@@ -776,21 +776,21 @@ async def all_messages_fallback(message, state: FSMContext):
                 date_match = re.search(r"(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})", text)
                 if date_match:
                     extracted_date = date_match.group(1)
-                    logger.critical(
+                    logger.info(
                         f"СТАРТ: Извлечена дата '{extracted_date}' из команды на естественном языке"
                     )
                     # Переформатируем в стандартную команду даты
                     text = f"date {extracted_date}"
                 else:
                     # Если дата не найдена, пропускаем команду напрямую в GPT-парсер
-                    logger.critical(
+                    logger.info(
                         f"СТАРТ: Отправляем команду изменения даты на естественном языке в GPT-парсер: '{text}'"
                     )
 
             # Проверка на команду редактирования строки
             elif re.match(r"^line\s+\d+", text_lower) or re.match(r"^строка\s+\d+", text_lower):
                 is_line_edit_command = True
-                logger.critical(f"СТАРТ: Обнаружена команда редактирования строки: '{text}'")
+                logger.info(f"СТАРТ: Обнаружена команда редактирования строки: '{text}'")
             # Распознавание других команд редактирования на естественном языке
             elif any(
                 phrase in text_lower
@@ -819,20 +819,20 @@ async def all_messages_fallback(message, state: FSMContext):
                     if line_match:
                         line_num = line_match.group(1)
                         is_line_edit_command = True
-                        logger.critical(
+                        logger.info(
                             f"СТАРТ: Обнаружена команда редактирования строки на естественном языке: '{text}', строка {line_num}"
                         )
                     else:
                         # Общая команда редактирования
                         is_line_edit_command = True
-                        logger.critical(
+                        logger.info(
                             f"СТАРТ: Обнаружена общая команда редактирования на естественном языке: '{text}'"
                         )
 
             if is_date_command:
-                logger.critical(f"СТАРТ: Обнаружена команда даты: '{text}'")
+                logger.info(f"СТАРТ: Обнаружена команда даты: '{text}'")
             elif is_line_edit_command:
-                logger.critical(f"СТАРТ: Обнаружена команда редактирования строки: '{text}'")
+                logger.info(f"СТАРТ: Обнаружена команда редактирования строки: '{text}'")
             else:
                 # Проверяем, находится ли пользователь в режиме редактирования
                 current_state = await state.get_state()
@@ -845,33 +845,33 @@ async def all_messages_fallback(message, state: FSMContext):
                     current_state in [str(EditFree.awaiting_input), str(NotaStates.editing)]
                     and invoice
                 ):
-                    logger.critical(
+                    logger.info(
                         f"СТАРТ: Перенаправляем неизвестную команду на GPT-парсер: '{text}'"
                     )
                     is_line_edit_command = True  # Устанавливаем флаг для перенаправления
                 else:
-                    logger.critical(f"СТАРТ: Не распознана команда: '{text}'")
+                    logger.info(f"СТАРТ: Не распознана команда: '{text}'")
                     return
         except Exception as e:
-            logger.critical(f"ОШИБКА при проверке на команду: {e}")
+            logger.info(f"ОШИБКА при проверке на команду: {e}")
             return
 
         # Если это команда даты или редактирования строки, проверяем состояние
         if is_date_command or is_line_edit_command:
             try:
                 current_state = await state.get_state()
-                logger.critical(f"СТАРТ: Текущее состояние: {current_state}")
+                logger.info(f"СТАРТ: Текущее состояние: {current_state}")
             except Exception as e:
-                logger.critical(f"ОШИБКА при получении состояния: {e}")
+                logger.info(f"ОШИБКА при получении состояния: {e}")
                 return
 
             # Получаем данные инвойса
             try:
                 data = await state.get_data()
                 invoice = data.get("invoice")
-                logger.critical(f"СТАРТ: Инвойс найден: {bool(invoice)}")
+                logger.info(f"СТАРТ: Инвойс найден: {bool(invoice)}")
             except Exception as e:
-                logger.critical(f"ОШИБКА при получении данных: {e}")
+                logger.info(f"ОШИБКА при получении данных: {e}")
                 return
 
             # Проверяем наличие инвойса
@@ -880,21 +880,21 @@ async def all_messages_fallback(message, state: FSMContext):
                     await message.answer(
                         "Invoice not found for editing. Send a photo or click Edit again."
                     )
-                    logger.critical("СТАРТ: Инвойс отсутствует, отправлено сообщение пользователю")
+                    logger.info("СТАРТ: Инвойс отсутствует, отправлено сообщение пользователю")
                     return
                 except Exception as e:
-                    logger.critical(f"ОШИБКА при отправке сообщения: {e}")
+                    logger.info(f"ОШИБКА при отправке сообщения: {e}")
                     return
 
             # Поддерживаем оба состояния: EditFree.awaiting_input и NotaStates.editing
             if current_state not in [str(EditFree.awaiting_input), str(NotaStates.editing)]:
                 try:
-                    logger.critical(
+                    logger.info(
                         f"СТАРТ: Устанавливаем состояние EditFree.awaiting_input из {current_state}"
                     )
                     await state.set_state(EditFree.awaiting_input)
                 except Exception as e:
-                    logger.critical(f"ОШИБКА при установке состояния: {e}")
+                    logger.info(f"ОШИБКА при установке состояния: {e}")
                     return
 
             # Если все в порядке, передаем управление обработчику редактирования
@@ -906,31 +906,29 @@ async def all_messages_fallback(message, state: FSMContext):
 
                 # Пробуем использовать инкрементальный обработчик сначала
                 try:
-                    logger.critical("СТАРТ: Пробуем использовать incremental_edit_flow.py")
+                    logger.info("СТАРТ: Пробуем использовать incremental_edit_flow.py")
                     inc_edit_flow = importlib.import_module("app.handlers.incremental_edit_flow")
                     await inc_edit_flow.handle_free_edit_text(message, state)
-                    logger.critical(
+                    logger.info(
                         "СТАРТ: incremental_edit_flow.handle_free_edit_text выполнен успешно"
                     )
                     return
                 except ImportError:
-                    logger.critical(
-                        "СТАРТ: incremental_edit_flow не найден, пробуем обычный edit_flow"
-                    )
+                    logger.info("СТАРТ: incremental_edit_flow не найден, пробуем обычный edit_flow")
                 except Exception as e:
-                    logger.critical(f"ОШИБКА при вызове incremental_edit_flow: {e}")
-                    logger.critical(traceback.format_exc())
+                    logger.info(f"ОШИБКА при вызове incremental_edit_flow: {e}")
+                    logger.info(traceback.format_exc())
 
                 # Если не сработал инкрементальный - пробуем обычный
                 try:
-                    logger.critical("СТАРТ: Используем edit_flow.py")
+                    logger.info("СТАРТ: Используем edit_flow.py")
                     edit_flow = importlib.import_module("app.handlers.edit_flow")
                     await edit_flow.handle_free_edit_text(message, state)
-                    logger.critical("СТАРТ: edit_flow.handle_free_edit_text выполнен успешно")
+                    logger.info("СТАРТ: edit_flow.handle_free_edit_text выполнен успешно")
                     return
                 except Exception as e:
-                    logger.critical(f"ОШИБКА при вызове edit_flow: {e}")
-                    logger.critical(traceback.format_exc())
+                    logger.info(f"ОШИБКА при вызове edit_flow: {e}")
+                    logger.info(traceback.format_exc())
 
                 # Если все обработчики не сработали, показываем ошибку
                 await message.answer(
@@ -940,8 +938,8 @@ async def all_messages_fallback(message, state: FSMContext):
             except Exception as e:
                 import traceback
 
-                logger.critical(f"ОШИБКА при вызове обработчиков: {e}")
-                logger.critical(traceback.format_exc())
+                logger.info(f"ОШИБКА при вызове обработчиков: {e}")
+                logger.info(traceback.format_exc())
                 try:
                     await message.answer(
                         "An error occurred while processing the command. Please try again."
@@ -952,8 +950,8 @@ async def all_messages_fallback(message, state: FSMContext):
     except Exception as e:
         import traceback
 
-        logger.critical(f"ГЛОБАЛЬНАЯ ОШИБКА: {e}")
-        logger.critical(traceback.format_exc())
+        logger.info(f"ГЛОБАЛЬНАЯ ОШИБКА: {e}")
+        logger.info(traceback.format_exc())
         try:
             await message.answer("A system error occurred. Please try again.")
         except Exception as e:
