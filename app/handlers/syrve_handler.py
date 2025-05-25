@@ -191,6 +191,32 @@ async def handle_invoice_confirm_final(callback: CallbackQuery, state: FSMContex
 
         # Get match results from state if available
         match_results = data.get("match_results", [])
+        
+        # ПРОВЕРКА: Если в match_results нет поля id, регенерируем их
+        needs_regeneration = False
+        if match_results:
+            for result in match_results:
+                if result.get("status") == "ok" and not result.get("id"):
+                    needs_regeneration = True
+                    break
+        
+        if needs_regeneration:
+            logger.warning("match_results missing id field, regenerating...")
+            from app.matcher import match_positions
+            from app.data_loader import load_products
+            
+            # Получаем позиции из накладной
+            positions = getattr(invoice, "positions", [])
+            if not positions and hasattr(invoice, "__dict__"):
+                positions = invoice.__dict__.get("positions", [])
+            
+            # Регенерируем match_results с правильными id
+            products = load_products()
+            match_results = match_positions(positions, products)
+            
+            # Сохраняем обновленные результаты в состояние
+            await state.update_data(match_results=match_results)
+            logger.info(f"Regenerated {len(match_results)} match_results with id fields")
 
         # Подготовка данных для автоматического обучения алиасов
         positions = []
