@@ -421,11 +421,19 @@ async def handle_field_edit(message, state: FSMContext):
         # Запускаем матчер заново для обновленной строки, если нужно
         if field in ["name", "qty", "unit"]:
             products = data_loader.load_products("data/base_products.csv")
-            entry["match_results"][idx] = matcher.match_positions(
-                [entry["match_results"][idx]], products
-            )[0]
+            matched_item = matcher.match_positions([entry["match_results"][idx]], products)[0]
+
+            # ИСПРАВЛЕНИЕ: Добавляем поле id если оно отсутствует
+            if "id" not in matched_item and "matched_product" in matched_item:
+                if isinstance(matched_item["matched_product"], dict):
+                    matched_id = matched_item["matched_product"].get("id", "")
+                else:
+                    matched_id = getattr(matched_item["matched_product"], "id", "")
+                matched_item["id"] = matched_id
+
+            entry["match_results"][idx] = matched_item
             logger.debug(
-                f"BUGFIX: Re-matched item, new status: {entry['match_results'][idx].get('status')}"
+                f"BUGFIX: Re-matched item, new status: {entry['match_results'][idx].get('status')}, id: {matched_item.get('id', 'MISSING')}"
             )
 
         # Создаем отчет
@@ -628,7 +636,16 @@ async def confirm_fuzzy_name(callback: CallbackQuery, state: FSMContext):
     updated_positions = matcher.match_positions([entry["match_results"][fuzzy_line]], products)
 
     if updated_positions:
-        entry["match_results"][fuzzy_line] = updated_positions[0]
+        updated_item = updated_positions[0]
+        # ИСПРАВЛЕНИЕ: Проверяем что поле id добавлено правильно
+        if "id" not in updated_item and "matched_product" in updated_item:
+            if isinstance(updated_item["matched_product"], dict):
+                matched_id = updated_item["matched_product"].get("id", "")
+            else:
+                matched_id = getattr(updated_item["matched_product"], "id", "")
+            updated_item["id"] = matched_id
+
+        entry["match_results"][fuzzy_line] = updated_item
 
     # Формируем новый отчет
     report, has_errors = build_report(
