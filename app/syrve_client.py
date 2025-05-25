@@ -55,7 +55,7 @@ class SyrveClient:
         # Если пароль уже хешированный - возвращаем как есть
         if self.is_password_hashed:
             return self.password
-        # Иначе хешируем
+        # Иначе хешируем (без префикса resto#)
         return hashlib.sha1(self.password.encode("utf-8")).hexdigest()
 
     def _is_token_valid(self) -> bool:
@@ -304,7 +304,7 @@ async def generate_invoice_xml(invoice_data: Dict[str, Any], openai_client) -> s
     global _syrve_prompt_cache
 
     try:
-        # Check required fields (без invoice_number, так как он теперь опционален)
+        # Check required fields
         required_fields = ["invoice_date", "conception_id", "supplier_id", "store_id", "items"]
         missing_fields = [field for field in required_fields if not invoice_data.get(field)]
 
@@ -312,20 +312,11 @@ async def generate_invoice_xml(invoice_data: Dict[str, Any], openai_client) -> s
             error_msg = f"Missing required fields: {', '.join(missing_fields)}"
             logger.error(error_msg)
             # Return basic XML with error info
-            return f'<?xml version="1.0" encoding="UTF-8"?>\n<e>{error_msg}</e>'
+            return f'<?xml version="1.0" encoding="UTF-8"?>\n<error>{error_msg}</error>'
 
-        # Fix missing fields with defaults if needed
-        if "conception_id" not in invoice_data or not invoice_data["conception_id"]:
-            # Use the value we found earlier
-            invoice_data["conception_id"] = "bf3c0590-b204-f634-e054-0017f63ab3e6"
-
-        if "store_id" not in invoice_data or not invoice_data["store_id"]:
-            # Use the value we found earlier
-            invoice_data["store_id"] = "1239d270-1bbe-f64f-b7ea-5f00518ef508"
-
-        if "supplier_id" not in invoice_data or not invoice_data["supplier_id"]:
-            # Use a default supplier from our tests
-            invoice_data["supplier_id"] = "61c65f89-d940-4153-8c07-488188e16d50"
+        # Validate that all required IDs are present
+        store_id = invoice_data["store_id"]
+        supplier_id = invoice_data["supplier_id"]
 
         # Start generating XML
         xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
@@ -347,13 +338,13 @@ async def generate_invoice_xml(invoice_data: Dict[str, Any], openai_client) -> s
             xml += f"      <amount>{quantity:.2f}</amount>\n"
             xml += f"      <price>{price:.2f}</price>\n"
             xml += f"      <sum>{item_sum:.2f}</sum>\n"
-            xml += f'      <store>{invoice_data["store_id"]}</store>\n'
+            xml += f"      <store>{store_id}</store>\n"
             xml += "    </item>\n"
         xml += "  </items>\n"
 
         # Add other required elements
-        xml += f'  <supplier>{invoice_data["supplier_id"]}</supplier>\n'
-        xml += f'  <defaultStore>{invoice_data["store_id"]}</defaultStore>\n'
+        xml += f"  <supplier>{supplier_id}</supplier>\n"
+        xml += f"  <defaultStore>{store_id}</defaultStore>\n"
 
         # Add optional elements if present
         if invoice_data.get("invoice_date"):

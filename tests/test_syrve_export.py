@@ -65,16 +65,10 @@ def prepare_invoice_data(invoice):
     invoice_id = invoice.get("number", f"TEST-{datetime.now().strftime('%Y%m%d')}-001")
     invoice_date = invoice.get("date", datetime.now().strftime("%Y-%m-%d"))
 
-    # ID концепции и склада из конфигурации - обязательные поля для Syrve
-    conception_id = os.getenv("SYRVE_CONCEPTION_ID", "bf3c0590-b204-f634-e054-0017f63ab3e6")
-    store_id = os.getenv("SYRVE_STORE_ID", "1234567890123456789012345678901234567890")
-    if not conception_id or not store_id:
-        logger.warning(
-            "SYRVE_CONCEPTION_ID или SYRVE_STORE_ID не установлены, используем тестовые значения"
-        )
-
-    # ID поставщика - используем из тестовых данных или из конфигурации
-    supplier_id = invoice.get("supplier_id", os.getenv("SYRVE_DEFAULT_SUPPLIER_ID", ""))
+    # Get real configuration IDs
+    conception_id = os.getenv("SYRVE_CONCEPTION_ID", "2609b25f-2180-bf98-5c1c-967664eea837")
+    store_id = os.getenv("SYRVE_STORE_ID", "1239d270-c24d-430c-b7ea-62d23a34f276")
+    supplier_id = os.getenv("SYRVE_DEFAULT_SUPPLIER_ID", "ec062e5a-b44a-46e5-ba58-d7e05960a184")
 
     # Обработка позиций
     items = []
@@ -138,16 +132,16 @@ async def get_conception_id(syrve_client, auth_token):
             if conception_id:
                 logger.info(f"Получен ID концепции: {conception_id}")
             else:
-                # Если не нашли в настройках, используем значение по умолчанию
-                conception_id = "bf3c0590-b204-f634-e054-0017f63ab3e6"
+                # Если не нашли в настройках, используем реальное значение по умолчанию
+                conception_id = "2609b25f-2180-bf98-5c1c-967664eea837"
                 logger.warning(
                     f"ID концепции не найден, используем значение по умолчанию: {conception_id}"
                 )
             return conception_id
     except Exception as e:
         logger.error(f"Ошибка при получении настроек: {str(e)}")
-        # Возвращаем значение по умолчанию
-        return "bf3c0590-b204-f634-e054-0017f63ab3e6"
+        # Возвращаем реальное значение по умолчанию
+        return "2609b25f-2180-bf98-5c1c-967664eea837"
 
 
 def generate_manual_xml(invoice_data):

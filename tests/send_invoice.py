@@ -86,7 +86,7 @@ async def get_conception_id(client, auth_token):
     try:
         # Используем известный ID концепции
         # Это значение было получено из работающей системы
-        conception_id = "bf3c0590-b204-f634-e054-0017f63ab3e6"
+        conception_id = "2609b25f-2180-bf98-5c1c-967664eea837"
         logger.info(f"Используем стандартный ID концепции: {conception_id}")
         return conception_id
 
@@ -106,8 +106,8 @@ async def get_conception_id(client, auth_token):
         #     return conception_id
     except Exception as e:
         logger.error(f"Ошибка при получении настроек: {str(e)}")
-        # Возвращаем значение по умолчанию
-        return "bf3c0590-b204-f634-e054-0017f63ab3e6"
+        # Возвращаем реальное значение по умолчанию
+        return "2609b25f-2180-bf98-5c1c-967664eea837"
 
 
 def generate_xml(invoice_data):

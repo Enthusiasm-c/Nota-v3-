@@ -343,34 +343,21 @@ def prepare_invoice_data(invoice, match_results):
     Returns:
         Dictionary with structured data for XML generation
     """
-    # Set default values from settings или используем известные рабочие значения
-    conception_id = os.getenv("SYRVE_CONCEPTION_ID", getattr(settings, "SYRVE_CONCEPTION_ID", ""))
-    # Если значение не установлено, используем жесткое значение по умолчанию
+    # Get required IDs from environment variables
+    conception_id = os.getenv("SYRVE_CONCEPTION_ID")
     if not conception_id:
-        conception_id = (
-            "bf3c0590-b204-f634-e054-0017f63ab3e6"  # Известное рабочее значение из тестов
-        )
-        logger.info(f"Используем значение conception_id по умолчанию: {conception_id}")
+        logger.error("SYRVE_CONCEPTION_ID not set in environment")
+        raise ValueError("SYRVE_CONCEPTION_ID environment variable is required")
 
-    store_id = os.getenv("SYRVE_STORE_ID", getattr(settings, "SYRVE_STORE_ID", ""))
-    # Если значение не установлено, используем жесткое значение по умолчанию
+    store_id = os.getenv("SYRVE_STORE_ID")
     if not store_id:
-        store_id = "1239d270-1bbe-f64f-b7ea-5f00518ef508"  # Известное рабочее значение из тестов
-        logger.info(f"Используем значение store_id по умолчанию: {store_id}")
+        logger.error("SYRVE_STORE_ID not set in environment")
+        raise ValueError("SYRVE_STORE_ID environment variable is required")
 
-    # Get supplier ID from invoice or use default
-    supplier_name = getattr(invoice, "supplier", None)
-    if not supplier_name and hasattr(invoice, "__dict__"):
-        supplier_name = invoice.__dict__.get("supplier")
-
-    # Use default supplier ID if not found
-    supplier_id = os.getenv(
-        "SYRVE_DEFAULT_SUPPLIER_ID", getattr(settings, "SYRVE_DEFAULT_SUPPLIER_ID", "")
-    )
-    # Если значение не установлено, используем жесткое значение по умолчанию
+    supplier_id = os.getenv("SYRVE_DEFAULT_SUPPLIER_ID")
     if not supplier_id:
-        supplier_id = "61c65f89-d940-4153-8c07-488188e16d50"  # Известное рабочее значение из тестов
-        logger.info(f"Используем значение supplier_id по умолчанию: {supplier_id}")
+        logger.error("SYRVE_DEFAULT_SUPPLIER_ID not set in environment")
+        raise ValueError("SYRVE_DEFAULT_SUPPLIER_ID environment variable is required")
 
     # Get invoice date
     invoice_date = getattr(invoice, "date", None)
@@ -378,7 +365,10 @@ def prepare_invoice_data(invoice, match_results):
         invoice_date = invoice.__dict__.get("date")
 
     # Format date if needed
-    if isinstance(invoice_date, datetime):
+    if hasattr(invoice_date, "isoformat"):
+        # Handle datetime.date objects
+        invoice_date = invoice_date.isoformat()
+    elif isinstance(invoice_date, datetime):
         invoice_date = invoice_date.strftime("%Y-%m-%d")
     elif not invoice_date:
         invoice_date = datetime.now().strftime("%Y-%m-%d")
@@ -428,18 +418,10 @@ def prepare_invoice_data(invoice, match_results):
             }
         )
 
-    # Если нет товаров, добавляем тестовый товар для предотвращения ошибки
+    # Validate that we have items to process
     if not items:
-        logger.warning(
-            "Нет товаров в накладной, добавляем тестовый товар для предотвращения ошибки"
-        )
-        items.append(
-            {
-                "product_id": "61aa6384-2fe2-4d0c-aad8-73c5d5dc79c5",  # Тестовый товар (Chicken Breast)
-                "quantity": 1.0,
-                "price": 1.0,
-            }
-        )
+        logger.error("No valid items found in invoice for Syrve export")
+        raise ValueError("Invoice contains no valid items with product IDs")
 
     # Create final data structure
     result = {
@@ -454,11 +436,5 @@ def prepare_invoice_data(invoice, match_results):
     doc_number = getattr(invoice, "document_number", None)
     if doc_number is not None:
         result["invoice_number"] = doc_number
-
-    # Проверяем итоговую структуру на наличие обязательных полей
-    required_fields = ["conception_id", "supplier_id", "store_id", "items"]
-    missing = [field for field in required_fields if not result.get(field)]
-    if missing:
-        logger.warning(f"В данных накладной отсутствуют обязательные поля: {', '.join(missing)}")
 
     return result
