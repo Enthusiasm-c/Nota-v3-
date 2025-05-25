@@ -238,6 +238,10 @@ async def async_match_positions(
     Returns:
         Список совпадений с полями status и score
     """
+    logger.critical(
+        f"MATCHER DEBUG: async_match_positions called with {len(items)} items, {len(reference_items)} reference_items"
+    )
+
     results = []
 
     # Создаем список названий продуктов из базы для быстрого поиска
@@ -250,11 +254,27 @@ async def async_match_positions(
             reference_dict[ref_name] = ref_item
         else:
             ref_name = getattr(ref_item, key, "").lower().strip()
-            reference_dict[ref_name] = ref_item
+            # Convert Product object to dict
+            if hasattr(ref_item, "model_dump"):
+                reference_dict[ref_name] = ref_item.model_dump()
+            else:
+                reference_dict[ref_name] = {
+                    "id": getattr(ref_item, "id", ""),
+                    "name": getattr(ref_item, "name", ""),
+                    "code": getattr(ref_item, "code", ""),
+                    "alias": getattr(ref_item, "alias", ""),
+                    "unit": getattr(ref_item, "unit", ""),
+                    "price_hint": getattr(ref_item, "price_hint", None),
+                }
         if ref_name:
             reference_names.append(ref_name)
 
-    for item in items:
+    logger.critical(f"MATCHER DEBUG: Created reference_dict with {len(reference_dict)} items")
+    if reference_dict:
+        sample_ref = list(reference_dict.values())[0]
+        logger.critical(f"MATCHER DEBUG: Sample reference item: {sample_ref}")
+
+    for i, item in enumerate(items):
         # Получаем значение атрибута в зависимости от типа объекта
         if isinstance(item, dict):
             item_name = item.get(key, "")
@@ -278,6 +298,8 @@ async def async_match_positions(
                     "total": getattr(item, "total", None),
                 }
 
+        logger.critical(f"MATCHER DEBUG: Processing item {i}: name='{item_name}'")
+
         if not item_name:
             results.append({"status": "unknown", "score": 0.0})
             continue
@@ -290,14 +312,29 @@ async def async_match_positions(
         if best_match:
             matched_name, score, _ = best_match
             score = score / 100  # Конвертируем обратно в float 0-1
+            logger.critical(
+                f"MATCHER DEBUG: Found match for '{item_name}' -> '{matched_name}' (score: {score})"
+            )
+
             if score >= threshold:
                 ref_item = reference_dict[matched_name]
+                logger.critical(f"MATCHER DEBUG: ref_item keys: {list(ref_item.keys())}")
+                logger.critical(
+                    f"MATCHER DEBUG: ref_item['id']: {ref_item.get('id', 'NO ID FIELD!')}"
+                )
 
                 # Преобразуем объект Product в словарь, если это объект
                 if isinstance(ref_item, Product):
                     ref_data = ref_item.model_dump()
                 else:
                     ref_data = ref_item.copy()
+
+                logger.critical(
+                    f"MATCHER DEBUG: ref_data keys after conversion: {list(ref_data.keys())}"
+                )
+                logger.critical(
+                    f"MATCHER DEBUG: ref_data['id']: {ref_data.get('id', 'NO ID FIELD!')}"
+                )
 
                 # Сохраняем все атрибуты исходной позиции
                 result = item_data.copy()
@@ -306,14 +343,24 @@ async def async_match_positions(
                 # Добавляем статус и оценку
                 result["status"] = "ok"
                 result["score"] = score
+                result["matched_name"] = matched_name
+                result["id"] = ref_data.get("id", "")
+
+                logger.critical(f"MATCHER DEBUG: Final result keys: {list(result.keys())}")
+                logger.critical(
+                    f"MATCHER DEBUG: Final result['id']: {result.get('id', 'NO ID FIELD!')}"
+                )
+
                 results.append(result)
         else:
+            logger.critical(f"MATCHER DEBUG: No match found for '{item_name}'")
             # Если совпадение не найдено, возвращаем исходные данные с нулевой оценкой
             result = item_data.copy()
             result["status"] = "unknown"
             result["score"] = 0.0
             results.append(result)
 
+    logger.critical(f"MATCHER DEBUG: Returning {len(results)} results")
     return results
 
 
@@ -1052,9 +1099,12 @@ async def async_match_positions(
         if best_match and status == "ok":
             if isinstance(best_match, dict):
                 matched_name = best_match.get("name", "")
+                matched_id = best_match.get("id", "")
             else:
                 matched_name = getattr(best_match, "name", "")
+                matched_id = getattr(best_match, "id", "")
             result["matched_name"] = matched_name
+            result["id"] = matched_id
 
         # Добавляем предложения для неопознанных позиций
         if return_suggestions and status == "unknown":
