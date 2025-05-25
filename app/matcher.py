@@ -597,8 +597,10 @@ def match_positions(
             # Извлекаем название из продукта (словарь или объект)
             if isinstance(match_result["matched_product"], dict):
                 matched_name = match_result["matched_product"].get("name", "")
+                matched_id = match_result["matched_product"].get("id", "")
             else:
                 matched_name = getattr(match_result["matched_product"], "name", "")
+                matched_id = getattr(match_result["matched_product"], "id", "")
 
             # ЗАЩИТА: Проверяем что matched_name не пустое
             if matched_name and str(matched_name).strip():
@@ -606,6 +608,7 @@ def match_positions(
             else:
                 result["matched_name"] = None
             result["matched_product"] = match_result["matched_product"]
+            result["id"] = matched_id  # ДОБАВЛЯЕМ ПОЛЕ ID!
         else:
             result["matched_name"] = None
             result["matched_product"] = None
