@@ -387,7 +387,7 @@ def prepare_invoice_data(invoice, match_results):
         # Find matching product in match results
         if match_results and i < len(match_results):
             match_item = match_results[i]
-            product_id = match_item.get("product_id")
+            product_id = match_item.get("id")
 
             # Используем matched_name из результатов сопоставления
             if match_item.get("matched_name"):
