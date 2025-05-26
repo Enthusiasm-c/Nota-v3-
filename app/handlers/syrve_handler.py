@@ -5,7 +5,8 @@ Handler for processing invoice confirmation and Syrve integration.
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, date
+from decimal import Decimal
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
@@ -16,7 +17,7 @@ from app.alias import learn_from_invoice
 from app.config import settings
 from app.i18n import t
 from app.keyboards import kb_main
-from app.syrve_client import SyrveClient, generate_invoice_xml
+from app.services.unified_syrve_client import UnifiedSyrveClient, Invoice, InvoiceItem
 from app.utils.monitor import increment_counter
 from app.utils.redis_cache import cache_set
 
@@ -31,45 +32,13 @@ router = Router()
 
 def get_syrve_client():
     """
-    Initialize and return Syrve client with current environment settings
+    Initialize and return unified Syrve client with current environment settings
     """
-    api_url = os.getenv("SYRVE_SERVER_URL", "").strip()
-    if not api_url:
-        logger.error("SYRVE_SERVER_URL not set")
-        raise ValueError("SYRVE_SERVER_URL environment variable is required")
-
-    # Ensure URL has protocol
-    if not api_url.startswith(("http://", "https://")):
-        api_url = f"https://{api_url}"
-
-    # Получаем логин
-    login = os.getenv("SYRVE_LOGIN")
-    if not login:
-        logger.error("SYRVE_LOGIN not set")
-        raise ValueError("SYRVE_LOGIN environment variable is required")
-
-    # Приоритет отдаём готовому хешу из SYRVE_PASS_SHA1
-    pass_sha = os.getenv("SYRVE_PASS_SHA1")
-    raw_pass = os.getenv("SYRVE_PASSWORD")
-
-    if pass_sha:
-        # Используем готовый хеш
-        final_pass = pass_sha
-        is_hashed = True
-        logger.debug("Using pre-hashed password from SYRVE_PASS_SHA1")
-    elif raw_pass:
-        # Передаем сырой пароль, клиент сам его захеширует
-        final_pass = raw_pass
-        is_hashed = False
-        logger.debug("Using raw password from SYRVE_PASSWORD")
-    else:
-        logger.error("Neither SYRVE_PASS_SHA1 nor SYRVE_PASSWORD is set")
-        raise ValueError(
-            "Either SYRVE_PASS_SHA1 or SYRVE_PASSWORD environment variable is required"
-        )
-
-    logger.info(f"Initializing Syrve client for {login} at {api_url}")
-    return SyrveClient(api_url, login, final_pass, is_password_hashed=is_hashed)
+    try:
+        return UnifiedSyrveClient.from_env()
+    except Exception as e:
+        logger.error(f"Failed to create Syrve client: {e}")
+        raise
 
 
 @router.callback_query(F.data == "confirm:invoice")
@@ -264,26 +233,33 @@ async def handle_invoice_confirm_final(callback: CallbackQuery, state: FSMContex
                 ocr_key = os.getenv("OPENAI_API_KEY", getattr(settings, "OPENAI_API_KEY", ""))
             openai_client = AsyncOpenAI(api_key=ocr_key)
 
-        # Timer for XML generation to track performance
+        # Timer for invoice processing
         start_time = datetime.now()
-        # Генерация XML
+        # Создание Invoice объекта и отправка
         try:
-            xml = await generate_invoice_xml(syrve_data, openai_client)
-        except Exception as e:
-            logger.error(f"XML generation error: {str(e)}", exc_info=True)
-            await processing_msg.edit_text(
-                t("error.syrve_error", {"message": "XML generation error: " + str(e)}, lang=lang),
-                reply_markup=kb_main(lang),
+            # Convert syrve_data to Invoice object
+            items = []
+            for i, item_data in enumerate(syrve_data.get("items", []), 1):
+                items.append(InvoiceItem(
+                    num=i,
+                    product_id=item_data["product_id"],
+                    amount=Decimal(str(item_data["quantity"])),
+                    price=Decimal(str(item_data["price"])),
+                    sum=Decimal(str(item_data["quantity"])) * Decimal(str(item_data["price"])),
+                ))
+            
+            invoice = Invoice(
+                items=items,
+                supplier_id=syrve_data["supplier_id"],
+                default_store_id=syrve_data["store_id"],
+                conception_id=syrve_data.get("conception_id"),
+                document_number=syrve_data.get("invoice_number"),
+                date_incoming=date.fromisoformat(syrve_data["invoice_date"]) if syrve_data.get("invoice_date") else None,
             )
-            increment_counter("nota_invoices_total", {"status": "failed"})
-            return
-        generation_time = (datetime.now() - start_time).total_seconds()
-        logger.info(f"XML generation took {generation_time:.2f} seconds")
-
-        # Аутентификация и отправка
-        try:
-            auth_token = await syrve_client.auth()
-            result = await syrve_client.import_invoice(auth_token, xml)
+            
+            # Send invoice to Syrve
+            result = await syrve_client.send_invoice_async(invoice)
+            
         except Exception as e:
             logger.error(f"Error sending to Syrve: {str(e)}", exc_info=True)
             await processing_msg.edit_text(
@@ -296,9 +272,12 @@ async def handle_invoice_confirm_final(callback: CallbackQuery, state: FSMContex
             )
             increment_counter("nota_invoices_total", {"status": "failed"})
             return
+        
+        processing_time = (datetime.now() - start_time).total_seconds()
+        logger.info(f"Invoice processing took {processing_time:.2f} seconds")
 
         # Проверка результата
-        if result.get("valid", False):
+        if result.get("success", False):
             # Success - update UI
             # Use optimized safe edit instead of direct edit
             server_number = result.get("document_number", "unknown")
@@ -369,11 +348,8 @@ def prepare_invoice_data(invoice, match_results):
     Returns:
         Dictionary with structured data for XML generation
     """
-    # Get required IDs from environment variables
-    conception_id = os.getenv("SYRVE_CONCEPTION_ID")
-    if not conception_id:
-        logger.error("SYRVE_CONCEPTION_ID not set in environment")
-        raise ValueError("SYRVE_CONCEPTION_ID environment variable is required")
+    # Get IDs from environment variables
+    conception_id = os.getenv("SYRVE_CONCEPTION_ID")  # Optional - only if server requires
 
     store_id = os.getenv("SYRVE_STORE_ID")
     if not store_id:
@@ -399,50 +375,66 @@ def prepare_invoice_data(invoice, match_results):
     elif not invoice_date:
         invoice_date = datetime.now().strftime("%Y-%m-%d")
 
-    # Process items
+    # Process items from match_results instead of invoice.positions
     items = []
-    positions = getattr(invoice, "positions", [])
-    if not positions and hasattr(invoice, "__dict__"):
-        positions = invoice.__dict__.get("positions", [])
+    
+    logger.debug(f"prepare_invoice_data: match_results count = {len(match_results) if match_results else 0}")
+    logger.debug(f"prepare_invoice_data: match_results type = {type(match_results)}")
+    
+    if not match_results:
+        logger.error("No match_results provided to prepare_invoice_data")
+        raise ValueError("No match results to process")
 
-    for i, position in enumerate(positions):
-        # Get product data
-        product_id = None
-        match_item = None
+    for i, match_item in enumerate(match_results):
+        # Debug logging
+        logger.debug(f"Processing match_result {i}: keys = {list(match_item.keys()) if match_item else 'None'}")
+        logger.debug(f"match_item = {match_item}")
+        
+        # Get local product ID first
+        local_id = match_item.get("id")
+        
+        # If no 'id' field, try to extract from matched_product
+        if not local_id and match_item.get("matched_product"):
+            local_id = match_item["matched_product"].get("id")
+        
+        # Get Syrve GUID from mapping
+        from app.syrve_mapping import get_syrve_guid
+        product_id = get_syrve_guid(local_id) if local_id else None
+        
+        if product_id:
+            logger.debug(f"Position {i}: mapped {local_id} -> {product_id}")
+        else:
+            logger.warning(f"Position {i}: No Syrve mapping for local_id = {local_id}")
+            # For now, use local ID as fallback (will likely fail in Syrve)
+            product_id = local_id
+        
+        logger.debug(f"Position {i}: final product_id = {product_id}")
 
-        # Find matching product in match results
-        if match_results and i < len(match_results):
-            match_item = match_results[i]
-            product_id = match_item.get("id")
-
-            # Используем matched_name из результатов сопоставления
-            if match_item.get("matched_name"):
-                if isinstance(position, dict):
-                    position["name"] = match_item["matched_name"]
-                else:
-                    setattr(position, "name", match_item["matched_name"])
-
-        # Skip items without product ID
-        if not product_id:
+        # Skip items without product ID or with status != 'ok'
+        if not product_id or match_item.get("status") != "ok":
+            logger.warning(f"Skipping position {i}: no product_id or status not ok")
             continue
 
-        # Get quantity and price
-        qty = getattr(position, "qty", None)
-        if qty is None and isinstance(position, dict):
-            qty = position.get("qty")
-
-        price = getattr(position, "price", None)
-        if price is None and isinstance(position, dict):
-            price = position.get("price")
+        # Get quantity and price from match_result
+        qty = match_item.get("qty", 0)
+        price = match_item.get("price", 0)
+        
+        # Calculate sum (quantity * price)
+        sum_value = float(qty) * float(price)
 
         # Add item to list
-        items.append(
-            {
-                "product_id": product_id,
-                "quantity": float(qty) if qty is not None else 0,
-                "price": float(price) if price is not None else 0,
-            }
-        )
+        item_data = {
+            "product_id": product_id,
+            "quantity": float(qty),
+            "price": float(price),
+            "sum": round(sum_value, 2)  # Round to 2 decimal places
+        }
+        
+        # Add store_id if different from default
+        if match_item.get("store_id") and match_item["store_id"] != store_id:
+            item_data["store"] = match_item["store_id"]
+            
+        items.append(item_data)
 
     # Validate that we have items to process
     if not items:
@@ -452,11 +444,14 @@ def prepare_invoice_data(invoice, match_results):
     # Create final data structure
     result = {
         "invoice_date": invoice_date,
-        "conception_id": conception_id,
         "supplier_id": supplier_id,
         "store_id": store_id,
         "items": items,
     }
+    
+    # Add conception_id only if it's provided
+    if conception_id:
+        result["conception_id"] = conception_id
 
     # Add document number only if it exists in invoice
     doc_number = getattr(invoice, "document_number", None)

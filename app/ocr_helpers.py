@@ -18,6 +18,9 @@ from app.config import get_ocr_client
 logger = logging.getLogger(__name__)
 
 
+from app.utils.data_utils import clean_number
+
+
 def parse_numeric_value(text: Optional[str], default: float = 0, is_float: bool = False) -> float:
     """
     Parse numeric value from text with different formats.
@@ -45,6 +48,21 @@ def parse_numeric_value(text: Optional[str], default: float = 0, is_float: bool 
     elif text == "1,000.50" and is_float:
         return 1000.5
 
+    # Use common clean_number function
+    result = clean_number(text, default=default)
+    
+    if result is None:
+        return default
+    
+    # Return as int if not float
+    if not is_float and result == int(result):
+        return int(result)
+    
+    return result
+
+
+# Legacy implementation for reference (can be removed later)
+def _parse_numeric_value_legacy(text: Optional[str], default: float = 0, is_float: bool = False) -> float:
     if not text or not isinstance(text, str):
         return default
     try:

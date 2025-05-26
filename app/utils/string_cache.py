@@ -81,12 +81,9 @@ def get_cache_stats() -> Dict[str, Any]:
     Returns:
         Словарь со статистикой кеша
     """
-    with _cache_lock:
-        return {
-            "size": len(_string_compare_cache),
-            "max_size": MAX_CACHE_SIZE,
-            "fill_percentage": len(_string_compare_cache) / MAX_CACHE_SIZE * 100,
-        }
+    from app.utils.cache_stats import StringCacheStatsProvider
+    provider = StringCacheStatsProvider()
+    return provider.get_stats()
 
 
 # Небольшой кеш для быстрого сравнения наиболее частых строк

@@ -136,16 +136,6 @@ def get_cache_stats() -> Dict[str, Any]:
     Returns:
         Dictionary with cache statistics
     """
-    now = time.time()
-    active_entries = sum(1 for _, timestamp in OCR_CACHE.values() if now - timestamp <= CACHE_TTL)
-
-    return {
-        "total_entries": len(OCR_CACHE),
-        "active_entries": active_entries,
-        "expired_entries": len(OCR_CACHE) - active_entries,
-        "max_size": MAX_CACHE_SIZE,
-        "ttl_seconds": CACHE_TTL,
-        "memory_usage": (
-            sum(len(str(data)) for data, _ in OCR_CACHE.values()) / 1024 if OCR_CACHE else 0
-        ),  # Approximate KB
-    }
+    from app.utils.cache_stats import OCRCacheStatsProvider
+    provider = OCRCacheStatsProvider()
+    return provider.get_stats()

@@ -8,7 +8,7 @@ import re
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from app.parsers.text_processor import normalize_text
+from app.utils.data_utils import normalize_text
 
 logger = logging.getLogger(__name__)
 

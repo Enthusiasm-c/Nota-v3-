@@ -10,7 +10,8 @@ from typing import Any, Dict, List, Optional
 from app.edit.free_parser import detect_intent
 from app.parsers.date_parser import parse_date_command
 from app.parsers.line_parser import parse_line_command
-from app.parsers.text_processor import normalize_text, split_command
+from app.parsers.text_processor import split_command
+from app.utils.data_utils import normalize_text
 
 logger = logging.getLogger(__name__)
 

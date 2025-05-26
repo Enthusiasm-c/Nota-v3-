@@ -1,6 +1,8 @@
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+from app.utils.formatters import format_price
+
 
 def format_table_data(data: List[Dict[str, Any]]) -> str:
     """
@@ -45,19 +47,6 @@ def format_table_data(data: List[Dict[str, Any]]) -> str:
     return "\n".join(result)
 
 
-def format_price(value: Optional[Union[int, float, Decimal]]) -> str:
-    """
-    Форматирует цену.
-
-    Args:
-        value: Значение цены
-
-    Returns:
-        Отформатированная цена
-    """
-    if value is None:
-        return "0.00"
-    return f"{float(value):.2f}"
 
 
 def parse_table_line(line: str) -> Tuple[str, str, str, str]:

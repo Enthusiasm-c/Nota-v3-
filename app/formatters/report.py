@@ -2,19 +2,10 @@ import logging
 import re
 from html import escape  # For escaping data only, not HTML tags
 
-from app.utils.formatters import format_price, format_quantity
+from app.utils.formatters import format_price, format_quantity, format_idr
 
 logger = logging.getLogger("nota.report")
 logger.debug("escape func = %s", escape)
-
-
-def format_idr(val):
-    """Format number with narrow space and no currency for table."""
-    try:
-        # Используем унифицированную функцию из общего модуля
-        return format_price(val, currency="", decimal_places=0)
-    except Exception:
-        return "—"
 
 
 def paginate_rows(rows, page_size=40):

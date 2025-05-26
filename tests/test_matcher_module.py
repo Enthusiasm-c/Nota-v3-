@@ -4,13 +4,11 @@ import pytest
 from unittest.mock import Mock, patch
 from app.matcher import (
     match_positions,
-    find_best_match,
-    normalize_name,
-    normalize_unit,
-    calculate_similarity,
-    fuzzy_match_product,
-    get_unit_variants,
-    check_unit_compatibility
+    async_match_positions,
+    calculate_string_similarity,
+    fuzzy_find,
+    get_best_match,
+    normalize_product_name
 )
 from app.models import Product, Position
 

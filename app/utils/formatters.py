@@ -116,4 +116,22 @@ def parse_date(date_str: Optional[str]) -> Optional[str]:
     return None
 
 
-# Удаляю устаревшие функции форматирования валют
+def format_idr(val):
+    """
+    Форматирует число в формате IDR с узким пробелом в качестве разделителя тысяч.
+    
+    Args:
+        val: Значение для форматирования
+    
+    Returns:
+        Форматированная строка вида "1\u2009234\u2009567 IDR" или "—"
+    """
+    try:
+        # Используем format_price с пустой валютой для таблиц
+        formatted = format_price(val, currency="", decimal_places=0)
+        if formatted == "—":
+            return formatted
+        # Добавляем IDR если нужно
+        return f"{formatted} IDR" if formatted else "—"
+    except Exception:
+        return "—"

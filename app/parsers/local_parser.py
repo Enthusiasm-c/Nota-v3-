@@ -24,44 +24,8 @@ def parse_command(text: str) -> Optional[Dict[str, Any]]:
     Returns:
         Dict или None: Распознанный интент или None, если команда не распознана
     """
-    start_time = time.time()
-    logger.info(f"Запуск локального парсера для команды: '{text}'")
-
-    # Попытка парсинга команды даты
-    date_result = parse_date_command(text)
-    if date_result:
-        elapsed_ms = (time.time() - start_time) * 1000
-        logger.info(
-            f"Локальный парсер обработал команду даты за {elapsed_ms:.1f} мс: {date_result}"
-        )
-        return date_result
-
-    # Попытка парсинга команды поставщика
-    supplier_result = parse_supplier_command(text)
-    if supplier_result:
-        elapsed_ms = (time.time() - start_time) * 1000
-        logger.info(
-            f"Локальный парсер обработал команду поставщика за {elapsed_ms:.1f} мс: {supplier_result}"
-        )
-        return supplier_result
-
-    # Попытка парсинга команды редактирования строки
-    line_result = parse_line_command(text)
-    if line_result:
-        elapsed_ms = (time.time() - start_time) * 1000
-        logger.info(
-            f"Локальный парсер обработал команду редактирования строки за {elapsed_ms:.1f} мс: {line_result}"
-        )
-        return line_result
-
-    # Если ни один парсер не сработал
-    elapsed_ms = (time.time() - start_time) * 1000
-    logger.info(f"Локальный парсер не смог распознать команду за {elapsed_ms:.1f} мс")
-    return {
-        "action": "unknown",
-        "user_message": "I couldn't understand your command. Please try again with a simpler format.",
-        "source": "local_parser",
-    }
+    from app.parsers.command_parser import parse_command as unified_parse_command
+    return unified_parse_command(text)
 
 
 async def parse_command_async(text: str) -> Optional[Dict[str, Any]]:

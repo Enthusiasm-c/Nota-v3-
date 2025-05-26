@@ -7,22 +7,11 @@ import logging
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
+from app.utils.data_utils import normalize_text
+
 logger = logging.getLogger(__name__)
 
 
-def normalize_text(text: str) -> str:
-    """
-    Нормализует текст: приводит к нижнему регистру, удаляет лишние пробелы.
-
-    Args:
-        text: Исходный текст
-
-    Returns:
-        Нормализованный текст
-    """
-    if not text:
-        return ""
-    return text.lower().strip()
 
 
 def parse_number(value: str) -> Optional[float]:

@@ -4,46 +4,15 @@ from typing import List, Optional, Union
 
 from app.data_loader import load_products
 from app.models import ParsedData
+from app.utils.data_utils import clean_number, parse_date, convert_weight_to_kg, should_convert_to_kg
 from app.utils.enhanced_logger import log_format_issues, log_indonesian_invoice
 
 
-# Автокоррекция числовых значений с надежной обработкой различных форматов
-def clean_num(
-    val: Optional[Union[str, float, int]], default: Optional[float] = None
-) -> Optional[float]:
-    """
-    Очищает и конвертирует числовое значение.
-
-    Args:
-        val: Исходное значение
-        default: Значение по умолчанию
-
-    Returns:
-        Очищенное числовое значение или None
-    """
-    if val is None:
-        return default
-
-    try:
-        if isinstance(val, (int, float)):
-            return float(val)
-
-        # Удаляем все нечисловые символы, кроме точки и запятой
-        clean_str = re.sub(r"[^\d.,]", "", str(val))
-
-        # Заменяем запятую на точку
-        clean_str = clean_str.replace(",", ".")
-
-        # Если строка пустая, возвращаем значение по умолчанию
-        if not clean_str:
-            return default
-
-        return float(clean_str)
-    except (ValueError, TypeError):
-        return default
+# Для обратной совместимости оставляем алиас
+clean_num = clean_number
 
 
-# Автозамена названий по словарю (расстояние Левенштейна <= 2)
+# Автозамена названий по словарю
 def autocorrect_name(name: str, allowed_names: List[str]) -> str:
     """
     Автокоррекция названий товаров на основе списка разрешенных названий.
@@ -55,31 +24,31 @@ def autocorrect_name(name: str, allowed_names: List[str]) -> str:
     Returns:
         Исправленное или исходное название
     """
-    from rapidfuzz.distance import Levenshtein
+    from app.matcher import fuzzy_find, normalize_product_name
 
     # Проверка на None
     if name is None:
         return name
 
     name = name.strip()
-    best = name
-    min_dist = 3
-
-    # Отладочное логирование
-    logging.debug(
-        f"autocorrect_name: проверяем '{name}' среди {len(allowed_names)} допустимых названий"
+    
+    # Используем fuzzy_find для поиска лучшего совпадения
+    # Threshold 0.85 примерно соответствует расстоянию Левенштейна <= 2
+    matches = fuzzy_find(
+        normalize_product_name(name),
+        [{'name': n, 'alias': n} for n in allowed_names],
+        threshold=0.85,
+        key='alias',
+        limit=1
     )
-
-    for ref in allowed_names:
-        dist = Levenshtein.distance(name.lower(), ref.lower())
-        if dist < min_dist:
-            min_dist = dist
-            best = ref
-            logging.debug(f"Найдено лучшее совпадение: '{ref}' с расстоянием {dist}")
-
-    result = best if min_dist <= 2 else name
-    logging.debug(f"autocorrect_name: '{name}' -> '{result}' (расстояние={min_dist})")
-    return result
+    
+    if matches:
+        result = matches[0]['alias']
+        logging.debug(f"autocorrect_name: '{name}' -> '{result}' (score={matches[0]['score']})")
+        return result
+    
+    logging.debug(f"autocorrect_name: '{name}' -> '{name}' (no match found)")
+    return name
 
 
 # Словарь для нормализации единиц измерения
@@ -295,18 +264,13 @@ def postprocess_parsed_data(parsed: ParsedData, req_id: str = "unknown") -> Pars
             logging.info(f"Первые 5 продуктов: {allowed_names[:5]}")
 
         # Обработка даты инвойса (если есть)
-        if parsed.date and isinstance(parsed.date, str):
-            try:
-                # Если дата в формате DD.MM.YYYY или DD/MM/YYYY, конвертируем в ISO
-                date_match = re.match(r"(\d{1,2})[./-](\d{1,2})[./-](\d{4})", parsed.date)
-                if date_match:
-                    day, month, year = map(int, date_match.groups())
-                    from datetime import date
-
-                    parsed.date = date(year, month, day)
-                    logging.info(f"Дата конвертирована в ISO формат: {parsed.date.isoformat()}")
-            except Exception as date_err:
-                logging.warning(f"Ошибка при конвертации даты: {date_err}")
+        if parsed.date:
+            parsed_date = parse_date(parsed.date)
+            if parsed_date:
+                parsed.date = parsed_date
+                logging.info(f"Дата конвертирована в ISO формат: {parsed.date.isoformat()}")
+            else:
+                logging.warning(f"Не удалось распарсить дату: {parsed.date}")
 
         # Обработка общей суммы
         total_price = clean_num(parsed.total_price)
@@ -354,6 +318,30 @@ def postprocess_parsed_data(parsed: ParsedData, req_id: str = "unknown") -> Pars
                 pos.unit = normalize_units(pos.unit, pos.name)
                 if old_unit != pos.unit:
                     logging.info(f"Нормализация единицы: '{old_unit}' -> '{pos.unit}'")
+                
+                # Преобразование весовых единиц в килограммы
+                if should_convert_to_kg(pos.qty or 0, pos.unit):
+                    old_qty = pos.qty
+                    old_unit = pos.unit
+                    
+                    # Получаем цену за единицу (если есть price_per_unit, используем его, иначе price)
+                    price_per = getattr(pos, 'price_per_unit', None) or pos.price
+                    
+                    # Преобразуем
+                    new_qty, new_unit, new_price = convert_weight_to_kg(pos.qty, pos.unit, price_per)
+                    
+                    # Обновляем значения
+                    pos.qty = new_qty
+                    pos.unit = new_unit
+                    
+                    # Обновляем цену за единицу
+                    if new_price is not None:
+                        if hasattr(pos, 'price_per_unit') and pos.price_per_unit is not None:
+                            pos.price_per_unit = new_price
+                        else:
+                            pos.price = new_price
+                    
+                    logging.info(f"Преобразование веса: {old_qty}{old_unit} -> {new_qty}{new_unit}")
 
             # Обеспечение целостности данных
 

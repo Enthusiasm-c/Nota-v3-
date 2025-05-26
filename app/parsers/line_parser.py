@@ -7,7 +7,8 @@ import logging
 import re
 from typing import Any, Dict, Optional
 
-from app.parsers.text_processor import create_error_response, normalize_text, parse_number
+from app.parsers.text_processor import create_error_response, parse_number
+from app.utils.data_utils import normalize_text
 
 logger = logging.getLogger(__name__)
 

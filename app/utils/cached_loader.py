@@ -404,28 +404,6 @@ def get_cache_stats() -> Dict[str, Any]:
     Returns:
         Словарь со статистикой кеша
     """
-    stats = {}
-
-    with _CACHE_LOCK:
-        stats["data_cache"] = {
-            "size": len(_DATA_CACHE),
-            "keys": list(_DATA_CACHE.keys()),
-            "entry_sizes": {
-                k: len(_DATA_CACHE[k]) if hasattr(_DATA_CACHE[k], "__len__") else 1
-                for k in _DATA_CACHE
-            },
-            "last_modified": {k: time.ctime(_MODIFIED_TIMES[k]["mtime"]) for k in _MODIFIED_TIMES},
-        }
-
-    with _STRING_CACHE_LOCK:
-        total_queries = _STRING_CACHE_HITS + _STRING_CACHE_MISSES
-        hit_rate = (_STRING_CACHE_HITS / total_queries * 100) if total_queries > 0 else 0
-
-        stats["string_cache"] = {
-            "size": len(_STRING_CACHE),
-            "max_size": _STRING_CACHE_MAX_SIZE,
-            "hits": _STRING_CACHE_HITS,
-            "misses": _STRING_CACHE_MISSES,
-            "hit_rate": hit_rate,
-            "memory_usage_approx": len(_STRING_CACHE) * 100,  # Примерный размер в байтах
-        }
+    from app.utils.cache_stats import DataCacheStatsProvider
+    provider = DataCacheStatsProvider()
+    return provider.get_stats()

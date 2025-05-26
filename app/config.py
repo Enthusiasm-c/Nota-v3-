@@ -15,6 +15,13 @@ class Settings(BaseSettings):
     MATCH_EXACT_BONUS: float = 0.05  # Bonus for substring matches (0-1.0)
     MATCH_LENGTH_PENALTY: float = 0.1  # Penalty weight for length differences (0-1.0)
     MATCH_MIN_SCORE: float = 0.5  # Minimum score to show in suggestions (0-1.0)
+    
+    # Syrve API configuration
+    SYRVE_SERVER_URL: str = ""
+    SYRVE_LOGIN: str = ""
+    SYRVE_PASSWORD: str = ""  # Plain text password (dev/test only)
+    SYRVE_PASS_SHA1: str = ""  # SHA1 hashed password (production)
+    VERIFY_SSL: bool = False  # SSL verification (enable for production)
 
     # OpenAI API configuration
     USE_OPENAI_OCR: bool = True  # Enable OpenAI OCR by default
