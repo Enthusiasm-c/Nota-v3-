@@ -119,10 +119,8 @@ class Invoice:
         if not self.default_store_id:
             raise SyrveValidationError("Default store ID is required")
         
-        # Auto-generate document number if not provided
-        if not self.document_number:
-            today_str = date.today().strftime("%Y%m%d")
-            self.document_number = f"AUTO-{today_str}-{uuid.uuid4().hex[:8].upper()}"
+        # Document number is optional - let Syrve auto-assign if not provided
+        # No auto-generation needed - Syrve will assign next sequential number
         
         # Auto-set date if not provided
         if not self.date_incoming:

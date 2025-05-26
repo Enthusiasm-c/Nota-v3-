@@ -216,8 +216,17 @@ async def handle_invoice_confirm_final(callback: CallbackQuery, state: FSMContex
             except Exception as e:
                 logger.error(f"Error learning aliases from invoice: {str(e)}", exc_info=True)
 
+        # Extract manual supplier if set by user  
+        manual_supplier = None
+        if hasattr(invoice, 'supplier'):
+            manual_supplier = invoice.supplier
+        elif isinstance(invoice, dict):
+            manual_supplier = invoice.get('supplier')
+        elif hasattr(invoice, '__dict__') and 'supplier' in invoice.__dict__:
+            manual_supplier = invoice.__dict__['supplier']
+        
         # Prepare data for Syrve XML generation
-        syrve_data = prepare_invoice_data(invoice, match_results)
+        syrve_data = prepare_invoice_data(invoice, match_results, manual_supplier)
 
         # Generate XML with OpenAI using global client if available
         from app.config import get_ocr_client
@@ -337,13 +346,14 @@ async def handle_invoice_confirm_final(callback: CallbackQuery, state: FSMContex
     # await state.set_state(NotaStates.main_menu)  # УДАЛЕНО!
 
 
-def prepare_invoice_data(invoice, match_results):
+def prepare_invoice_data(invoice, match_results, manual_supplier=None):
     """
     Prepare invoice data for Syrve XML generation.
 
     Args:
         invoice: Invoice data from state
         match_results: Match results with product IDs
+        manual_supplier: Manual supplier name entered by user (optional)
 
     Returns:
         Dictionary with structured data for XML generation
@@ -356,10 +366,24 @@ def prepare_invoice_data(invoice, match_results):
         logger.error("SYRVE_STORE_ID not set in environment")
         raise ValueError("SYRVE_STORE_ID environment variable is required")
 
-    supplier_id = os.getenv("SYRVE_DEFAULT_SUPPLIER_ID")
-    if not supplier_id:
-        logger.error("SYRVE_DEFAULT_SUPPLIER_ID not set in environment")
-        raise ValueError("SYRVE_DEFAULT_SUPPLIER_ID environment variable is required")
+    # Resolve supplier using mapping system
+    from app.supplier_mapping import resolve_supplier_for_invoice
+    
+    # Convert invoice to dict for supplier resolution
+    invoice_dict = {}
+    if hasattr(invoice, '__dict__'):
+        invoice_dict = invoice.__dict__
+    elif hasattr(invoice, 'to_dict'):
+        invoice_dict = invoice.to_dict()
+    elif isinstance(invoice, dict):
+        invoice_dict = invoice
+    else:
+        # Fallback: try to extract supplier from common attributes
+        supplier = getattr(invoice, 'supplier', None)
+        if supplier:
+            invoice_dict = {'supplier': supplier}
+    
+    supplier_id = resolve_supplier_for_invoice(invoice_dict, manual_supplier)
 
     # Get invoice date
     invoice_date = getattr(invoice, "date", None)
