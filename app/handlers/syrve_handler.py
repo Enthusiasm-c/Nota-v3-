@@ -226,7 +226,16 @@ async def handle_invoice_confirm_final(callback: CallbackQuery, state: FSMContex
             manual_supplier = invoice.__dict__['supplier']
         
         # Prepare data for Syrve XML generation
-        syrve_data = prepare_invoice_data(invoice, match_results, manual_supplier)
+        try:
+            syrve_data = prepare_invoice_data(invoice, match_results, manual_supplier)
+        except ValueError as e:
+            # Ошибка маппинга поставщика - показываем пользователю понятное сообщение
+            await processing_msg.edit_text(
+                f"❌ Ошибка поставщика:\n\n{str(e)}",
+                reply_markup=kb_main(lang)
+            )
+            increment_counter("nota_invoices_total", {"status": "supplier_error"})
+            return
 
         # Generate XML with OpenAI using global client if available
         from app.config import get_ocr_client

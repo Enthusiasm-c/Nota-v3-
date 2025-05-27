@@ -380,7 +380,18 @@ def build_report(parsed_data, match_results, escape_html=True, page=1, page_size
     date = getattr(parsed_data, "date", None)
     if date is None and isinstance(parsed_data, dict):
         date = parsed_data.get("date", None)
-    supplier_str = "Unknown supplier" if not supplier else supplier
+    
+    # Проверяем статус поставщика аналогично товарам
+    if not supplier:
+        supplier_str = "❌ Supplier not detected"
+    else:
+        from app.supplier_mapping import get_supplier_syrve_guid
+        syrve_guid = get_supplier_syrve_guid(supplier)
+        if syrve_guid:
+            supplier_str = f"✅ {supplier}"
+        else:
+            supplier_str = f"❌ {supplier} (not found)"
+    
     date_str = "—" if not date else date
 
     # Проверяем наличие потенциально опасных символов
