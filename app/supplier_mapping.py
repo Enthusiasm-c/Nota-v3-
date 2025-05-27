@@ -52,6 +52,7 @@ class SupplierMapper:
     def get_syrve_guid(self, supplier_name: str) -> Optional[str]:
         """
         Получает Syrve GUID по названию поставщика.
+        Сначала ищет в собственном маппинге, затем в base_suppliers.csv
         
         Args:
             supplier_name: Название поставщика
@@ -65,23 +66,54 @@ class SupplierMapper:
         if not supplier_name:
             return None
             
-        # Прямое совпадение
         normalized_name = supplier_name.strip().lower()
+        
+        # 1. Прямое совпадение в собственном маппинге
         if normalized_name in self.mapping:
             return self.mapping[normalized_name]
         
-        # Fuzzy поиск
+        # 2. Fuzzy поиск в собственном маппинге
         best_match = None
         best_score = 0.0
         
         for mapped_name, guid in self.mapping.items():
             similarity = calculate_string_similarity(normalized_name, mapped_name)
-            if similarity > best_score and similarity >= 0.7:  # Порог 70% для автоматического подтягивания
+            if similarity > best_score and similarity >= 0.7:
                 best_score = similarity
                 best_match = guid
         
         if best_match:
-            logger.info(f"Fuzzy match for supplier '{supplier_name}' -> score: {best_score:.3f}")
+            logger.info(f"Fuzzy match in mapping for supplier '{supplier_name}' -> score: {best_score:.3f}")
+            return best_match
+            
+        # 3. Поиск в base_suppliers.csv
+        try:
+            from app.data_loader import load_suppliers
+            base_suppliers = load_suppliers()
+            
+            for supplier in base_suppliers:
+                supplier_base_name = supplier.get('name', '').strip().lower()
+                supplier_id = supplier.get('id', '').strip()
+                
+                if not supplier_base_name or not supplier_id:
+                    continue
+                    
+                # Прямое совпадение в базе
+                if normalized_name == supplier_base_name:
+                    logger.info(f"Direct match in base_suppliers for '{supplier_name}' -> {supplier_id}")
+                    return supplier_id
+                    
+                # Fuzzy поиск в базе
+                similarity = calculate_string_similarity(normalized_name, supplier_base_name)
+                if similarity > best_score and similarity >= 0.7:
+                    best_score = similarity
+                    best_match = supplier_id
+            
+            if best_match:
+                logger.info(f"Fuzzy match in base_suppliers for supplier '{supplier_name}' -> score: {best_score:.3f}")
+                
+        except Exception as e:
+            logger.error(f"Error searching in base_suppliers.csv: {e}")
             
         return best_match
     
