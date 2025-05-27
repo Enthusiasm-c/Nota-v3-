@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 from app.edit.free_parser import detect_intent
 from app.parsers.date_parser import parse_date_command
 from app.parsers.line_parser import parse_line_command
+from app.parsers.supplier_parser import parse_supplier_command
 from app.parsers.text_processor import split_command
 from app.utils.data_utils import normalize_text
 
@@ -102,20 +103,26 @@ def parse_command(text: str, invoice_lines: Optional[int] = None) -> Dict[str, A
             date_result["source"] = "date_parser"
         return date_result
 
-    # 2. Проверяем через парсер строк
+    # 2. Проверяем через парсер поставщиков
+    supplier_result = parse_supplier_command(text)
+    if supplier_result:
+        logger.info(f"Распознана команда поставщика: {supplier_result}")
+        return supplier_result
+
+    # 3. Проверяем через парсер строк
     line_result = parse_line_command(text, invoice_lines)
     if line_result and line_result.get("action") != "unknown":
         logger.info(f"Распознана команда строки: {line_result}")
         return line_result
 
-    # 3. Проверяем через парсер составных команд
+    # 4. Проверяем через парсер составных команд
     compound_results = _parse_compound_line_command(text, invoice_lines)
     if compound_results:
         logger.info(f"Распознаны составные команды: {compound_results}")
         # Возвращаем первый результат, остальные будут обработаны в parse_compound_command
         return compound_results[0]
 
-    # 4. Проверяем через свободный парсер
+    # 5. Проверяем через свободный парсер
     free_result = detect_intent(text)
     if free_result and free_result.get("action") != "unknown":
         logger.info(f"Распознана свободная команда: {free_result}")
