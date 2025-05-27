@@ -76,7 +76,7 @@ class SupplierMapper:
         
         for mapped_name, guid in self.mapping.items():
             similarity = calculate_string_similarity(normalized_name, mapped_name)
-            if similarity > best_score and similarity >= 0.9:  # Очень высокий порог 90% для поставщиков
+            if similarity > best_score and similarity >= 0.7:  # Порог 70% для автоматического подтягивания
                 best_score = similarity
                 best_match = guid
         
@@ -306,52 +306,30 @@ def resolve_supplier_for_invoice(invoice_data: dict, manual_supplier: Optional[s
         if syrve_guid:
             return syrve_guid
         else:
-            # Ручной ввод не найден - показываем доступные варианты
-            available_suppliers = get_available_suppliers()
-            suppliers_list = "\n".join([f"• {supplier}" for supplier in available_suppliers[:10]])
-            
-            if len(available_suppliers) > 10:
-                suppliers_list += f"\n... и еще {len(available_suppliers) - 10} поставщиков"
-            
+            # Ручной ввод не найден
             raise ValueError(
                 f"❌ Поставщик '{manual_supplier}' не найден в базе данных.\n\n"
-                f"📋 Доступные поставщики:\n{suppliers_list}\n\n"
-                f"💡 Пожалуйста, введите точное название поставщика из списка выше."
+                f"💡 Пожалуйста, проверьте правильность написания поставщика."
             )
     
     # Получаем поставщика из накладной OCR
     detected_supplier = invoice_data.get('supplier')
     
     if not detected_supplier:
-        available_suppliers = get_available_suppliers()
-        suppliers_list = "\n".join([f"• {supplier}" for supplier in available_suppliers[:10]])
-        
-        if len(available_suppliers) > 10:
-            suppliers_list += f"\n... и еще {len(available_suppliers) - 10} поставщиков"
-        
         raise ValueError(
             "❌ Поставщик не обнаружен в накладной OCR.\n\n"
-            f"📋 Доступные поставщики:\n{suppliers_list}\n\n"
-            "💡 Пожалуйста, введите название поставщика вручную командой 'поставщик [название]'."
+            "💡 Пожалуйста, введите название поставщика кнопкой 'Указать поставщика'."
         )
     
-    # Пытаемся найти маппинг с высоким порогом точности (90%)
+    # Пытаемся найти маппинг с порогом точности 70% для автоподтягивания
     syrve_guid = get_supplier_syrve_guid(detected_supplier)
     
     if syrve_guid:
         logger.info(f"✅ Resolved supplier '{detected_supplier}' -> {syrve_guid}")
         return syrve_guid
     
-    # Поставщик не найден - требуем от пользователя ввод
-    available_suppliers = get_available_suppliers()
-    suppliers_list = "\n".join([f"• {supplier}" for supplier in available_suppliers[:10]])  # Показываем первые 10
-    
-    if len(available_suppliers) > 10:
-        suppliers_list += f"\n... и еще {len(available_suppliers) - 10} поставщиков"
-    
+    # Поставщик не найден - предлагаем ручной ввод
     raise ValueError(
         f"❌ Поставщик '{detected_supplier}' не найден в базе данных.\n\n"
-        f"📋 Доступные поставщики:\n{suppliers_list}\n\n"
-        f"💡 Пожалуйста, введите корректное название поставщика командой 'поставщик [название]',\n"
-        f"или добавьте маппинг для '{detected_supplier}' в файл data/supplier_mapping.csv"
+        f"💡 Пожалуйста, введите корректное название поставщика кнопкой 'Указать поставщика'"
     )

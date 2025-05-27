@@ -390,7 +390,7 @@ def build_report(parsed_data, match_results, escape_html=True, page=1, page_size
         if syrve_guid:
             supplier_str = f"✅ {supplier}"
         else:
-            supplier_str = f"❌ {supplier} (not found)"
+            supplier_str = f"❌ {supplier}"
     
     date_str = "—" if not date else date
 
