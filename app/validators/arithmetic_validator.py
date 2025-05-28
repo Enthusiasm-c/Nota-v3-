@@ -10,6 +10,7 @@
 import logging
 import re
 from typing import Any, Dict, Optional
+from app.utils.data_utils import clean_number
 
 logger = logging.getLogger(__name__)
 
@@ -48,9 +49,9 @@ class ArithmeticValidator:
         for i, line in enumerate(lines):
             # Получаем значения полей (с проверкой типов)
             try:
-                qty = self._parse_numeric(line.get("qty", 0))
-                price = self._parse_numeric(line.get("price", 0))
-                amount = self._parse_numeric(line.get("amount", 0))
+                qty = clean_number(line.get("qty", 0))
+                price = clean_number(line.get("price", 0))
+                amount = clean_number(line.get("amount", 0))
 
                 # Если какое-то из значений отсутствует или равно 0, но другие есть
                 # пытаемся вычислить его
@@ -68,7 +69,7 @@ class ArithmeticValidator:
                                 "type": "ARITHMETIC_FIX",
                                 "line": i,
                                 "field": "amount",
-                                "message": f"Исправлена сумма: {qty} × {price} = {calculated_amount}",
+                                "message": f"Fixed amount: {qty} × {price} = {calculated_amount}",
                                 "severity": "info",
                             }
                         )
@@ -87,7 +88,7 @@ class ArithmeticValidator:
                                     "type": "ARITHMETIC_FIX",
                                     "line": i,
                                     "field": "qty",
-                                    "message": f"Исправлено количество: {amount} ÷ {price} = {calculated_qty}",
+                                    "message": f"Fixed quantity: {amount} ÷ {price} = {calculated_qty}",
                                     "severity": "info",
                                 }
                             )
@@ -106,7 +107,7 @@ class ArithmeticValidator:
                                     "type": "ARITHMETIC_FIX",
                                     "line": i,
                                     "field": "price",
-                                    "message": f"Исправлена цена: {amount} ÷ {qty} = {calculated_price}",
+                                    "message": f"Fixed price: {amount} ÷ {qty} = {calculated_price}",
                                     "severity": "info",
                                 }
                             )
@@ -131,7 +132,7 @@ class ArithmeticValidator:
                                             "type": "ARITHMETIC_FIX",
                                             "line": i,
                                             "field": "all",
-                                            "message": f'Исправлены десятичные ошибки: {fixed_values["qty"]} × {fixed_values["price"]} = {fixed_values["amount"]}',
+                                            "message": f'Fixed decimal errors: {fixed_values["qty"]} × {fixed_values["price"]} = {fixed_values["amount"]}',
                                             "severity": "info",
                                         }
                                     )
@@ -148,7 +149,7 @@ class ArithmeticValidator:
                                                 "type": "ARITHMETIC_FIX",
                                                 "line": i,
                                                 "field": "all",
-                                                "message": f'Исправлены ошибки с нулями: {fixed_values["qty"]} × {fixed_values["price"]} = {fixed_values["amount"]}',
+                                                "message": f'Fixed zero errors: {fixed_values["qty"]} × {fixed_values["price"]} = {fixed_values["amount"]}',
                                                 "severity": "info",
                                             }
                                         )
@@ -158,7 +159,7 @@ class ArithmeticValidator:
                                         {
                                             "type": "ARITHMETIC_ERROR",
                                             "line": i,
-                                            "message": f"Ошибка в расчетах: {qty} × {price} = {amount}, ожидалось {expected_amount}",
+                                            "message": f"Calculation error: {qty} × {price} = {amount}, expected {expected_amount}",
                                             "severity": "warning",
                                         }
                                     )
@@ -168,7 +169,7 @@ class ArithmeticValidator:
                     {
                         "type": "VALIDATION_ERROR",
                         "line": i,
-                        "message": f"Ошибка при валидации: {str(e)}",
+                        "message": f"Validation error: {str(e)}",
                         "severity": "error",
                     }
                 )
@@ -177,35 +178,6 @@ class ArithmeticValidator:
         result["issues"] = issues
         return result
 
-    def _parse_numeric(self, value: Any) -> float:
-        """
-        Преобразует значение в число.
-        Обрабатывает строки с разными форматами (запятая/точка).
-
-        Args:
-            value: Значение для преобразования
-
-        Returns:
-            Числовое значение
-        """
-        if isinstance(value, (int, float)):
-            return float(value)
-        elif isinstance(value, str):
-            # Удаляем все пробелы и символы тысяч
-            cleaned = re.sub(r"[,\s]", "", value)
-            # Заменяем запятую на точку, если это десятичный разделитель
-            if "," in cleaned and "." not in cleaned:
-                cleaned = cleaned.replace(",", ".")
-
-            try:
-                return float(cleaned)
-            except ValueError:
-                logger.warning(
-                    f"Не удалось преобразовать '{value}' в число. Использую значение по умолчанию: 0"
-                )
-                return 0.0
-        else:
-            return 0.0
 
     def _is_close(self, a: float, b: float) -> bool:
         """

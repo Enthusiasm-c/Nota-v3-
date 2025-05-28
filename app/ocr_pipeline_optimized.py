@@ -34,6 +34,7 @@ from app.ocr_prompt import OCR_SYSTEM_PROMPT
 from app.utils.async_ocr import async_ocr as call_openai_ocr_async  # Use the one from utils
 from app.utils.redis_cache import cache_get, cache_set
 from app.validators.pipeline import ValidationPipeline
+from app.validators.ocr_prevalidator import validate_ocr_result
 
 logger = logging.getLogger(__name__)
 
@@ -264,11 +265,39 @@ class OCRPipelineOptimized:
                                     "amount": pos.get("total_price", 0),
                                 }
                                 lines.append(line)
+                            # Apply OCR pre-validation before returning
+                            raw_result = {
+                                "status": "success", 
+                                "positions": parsed.get("positions", []),
+                                "total_price": parsed.get("total_price"),
+                                "supplier": parsed.get("supplier"),
+                                "date": parsed.get("date"),
+                                "accuracy": 0.9,
+                                "issues": [],
+                            }
+                            
+                            # Run pre-validation on OCR result
+                            validated_result = validate_ocr_result(raw_result)
+                            
+                            # Convert to lines format for compatibility
+                            lines = []
+                            for pos in validated_result.get("positions", []):
+                                line = {
+                                    "name": pos.get("name", ""),
+                                    "qty": pos.get("qty", 0),
+                                    "unit": pos.get("unit", "pcs"),
+                                    "price": pos.get("price", 0),
+                                    "amount": pos.get("total_price", 0),
+                                    "validation_warnings": pos.get("validation_warnings", []),
+                                }
+                                lines.append(line)
+                            
                             return {
                                 "status": "success",
                                 "lines": lines,
                                 "accuracy": 0.9,
-                                "issues": [],
+                                "issues": validated_result.get("validation_warnings", []),
+                                "validation_passed": validated_result.get("validation_passed", True),
                             }
                 except json.JSONDecodeError:
                     # If result is not JSON, try to process text

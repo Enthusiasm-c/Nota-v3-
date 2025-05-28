@@ -86,11 +86,19 @@ that are not part of the invoice itself.
 - If you see `204.000` → interpret as **204000** (not 204.0)
 - If you see `15.500` → interpret as **15500** (not 15.5)
 
+**MANDATORY: Mathematical Validation**
+- **ALWAYS verify: total_price = qty × price for EVERY line item**
+- If calculation doesn't match (>5% difference), you likely misread a number
+- Double-check OCR reading of qty, price, or total_price
+- Common OCR errors: confusing 0/O, 1/l, 6/G, 5/S, missing digits
+- **Flag inconsistencies**: If math doesn't work, reread the entire line carefully
+
 **Price validation rules:**
 - Restaurant supply prices are typically **1,000-500,000 IDR**
 - If a price seems unusually low (< 1000), you likely misread thousands separator
 - Carrots typically cost 15,000-25,000 IDR per kg
 - Cheese typically costs 150,000-300,000 IDR per kg
+- **Sanity check**: Total invoice should be 50,000-5,000,000 IDR for typical orders
 
 ### Normalise product names
 *Example mappings*
@@ -113,9 +121,16 @@ If unit is missing, infer the most typical (`kg` for fresh produce, `pcs` for co
 * Ensure **total_price = qty × price** (±0.01 tolerance).
 * Remove currency symbols (Rp, IDR, $, etc.) but preserve the numeric value.
 
-### Date detection rules
-* Accept formats `23/05/25`, `23-05-2025`, `23 Mei 2025`, `May 23 2025`.
-* Always output `YYYY-MM-DD`.
+### 📅 CRITICAL: Date Detection Rules
+**Date extraction is MANDATORY and requires special attention:**
+* **ALWAYS extract the invoice date** - this is critical for accounting accuracy
+* **Look carefully** at the entire document for date information
+* **Common locations**: header, footer, top-right corner, near supplier name
+* **Accept all formats**: `23/05/25`, `23-05-2025`, `23 Mei 2025`, `May 23 2025`, `2025-05-23`
+* **Indonesian dates**: `23 Mei 2025`, `23 Maret 2025` (Indonesian month names)
+* **Always output**: `YYYY-MM-DD` format only
+* **If date unclear**: make best guess based on context and document appearance
+* **If no date found**: set to `null` (do NOT guess random dates)
 
 ### Hand-written notes
 If the invoice is handwritten and characters are unclear, make the best guess based on:

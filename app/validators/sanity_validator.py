@@ -13,6 +13,7 @@ import datetime
 import logging
 import re
 from typing import Any, Dict, List
+from app.utils.data_utils import clean_number, is_valid_price
 
 logger = logging.getLogger(__name__)
 
@@ -223,7 +224,7 @@ class SanityValidator:
                     {
                         "type": "QTY_TOO_LARGE",
                         "line": index,
-                        "message": f"Подозрительно большое количество: {qty}",
+                        "message": f"Suspiciously large quantity: {qty}",
                         "severity": "warning",
                     }
                 )
@@ -231,30 +232,27 @@ class SanityValidator:
             pass
 
         # Проверка цены
-        try:
-            price = float(line.get("price", 0))
-            if price < self.min_price:
-                if self.auto_fix and price < 0:
-                    line["price"] = abs(price)
-                    issues.append(
-                        {
-                            "type": "PRICE_NEGATIVE",
-                            "line": index,
-                            "message": f"Отрицательная цена ({price}) исправлена на положительную ({abs(price)})",
-                            "severity": "warning",
-                        }
-                    )
-                else:
-                    issues.append(
-                        {
-                            "type": "PRICE_TOO_LOW",
-                            "line": index,
-                            "message": f"Подозрительно низкая цена: {price}",
-                            "severity": "info",
-                        }
-                    )
-        except (ValueError, TypeError):
-            pass
+        price = clean_number(line.get("price", 0))
+        if not is_valid_price(price):
+            if self.auto_fix and price < 0:
+                line["price"] = abs(price)
+                issues.append(
+                    {
+                        "type": "PRICE_NEGATIVE",
+                        "line": index,
+                        "message": f"Fixed negative price ({price}) to positive ({abs(price)})",
+                        "severity": "warning",
+                    }
+                )
+            else:
+                issues.append(
+                    {
+                        "type": "PRICE_TOO_LOW",
+                        "line": index,
+                        "message": f"Suspiciously low price: {price}",
+                        "severity": "info",
+                    }
+                )
 
         # Проверка единиц измерения
         unit = line.get("unit")

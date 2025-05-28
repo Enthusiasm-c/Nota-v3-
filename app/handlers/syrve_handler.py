@@ -394,10 +394,40 @@ def prepare_invoice_data(invoice, match_results, manual_supplier=None):
     
     supplier_id = resolve_supplier_for_invoice(invoice_dict, manual_supplier)
 
-    # Get invoice date
+    # Get invoice date with validation
     invoice_date = getattr(invoice, "date", None)
     if not invoice_date and hasattr(invoice, "__dict__"):
         invoice_date = invoice.__dict__.get("date")
+
+    # Check if date is missing and warn user
+    date_missing = False
+    if not invoice_date:
+        date_missing = True
+        logger.warning("Invoice date is missing from OCR - using current date as fallback")
+        
+        # Show warning to user about missing date
+        try:
+            current_date_formatted = datetime.now().strftime('%d.%m.%Y')
+            warning_msg = (
+                "⚠️ <b>Warning: Invoice date not recognized!</b>\n\n"
+                f"OCR could not extract the date from the invoice.\n"
+                f"Current date will be used: {current_date_formatted}\n\n"
+                f"💡 <i>If this is incorrect, cancel sending and fix the date with command: 'date 2025-05-15'</i>"
+            )
+            
+            # Send warning message
+            await callback.bot.send_message(
+                callback.message.chat.id,
+                warning_msg,
+                parse_mode="HTML"
+            )
+            
+            # Add a small delay to ensure user sees the warning
+            import asyncio
+            await asyncio.sleep(2)
+            
+        except Exception as e:
+            logger.error(f"Failed to send date warning: {e}")
 
     # Format date if needed
     if hasattr(invoice_date, "isoformat"):
