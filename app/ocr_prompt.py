@@ -69,8 +69,8 @@ that are not part of the invoice itself.
    • `name`   (normalised, singular)
    • `qty`    (number)
    • `unit`   (standard unit)
-   • `price`  (unit price)
-   • `total_price` (line sum = qty × price)
+   • `price`  (unit price - calculate if only total sum visible)
+   • `total_price` (line sum = qty × price, or original Jumlah)
 4. `"total_price"` - grand total of the invoice.
 
 ---
@@ -86,7 +86,12 @@ that are not part of the invoice itself.
 - If you see `204.000` → interpret as **204000** (not 204.0)
 - If you see `15.500` → interpret as **15500** (not 15.5)
 
-**MANDATORY: Mathematical Validation**
+**MANDATORY: Mathematical Validation & Indonesian Invoice Logic**
+- **Indonesian invoices often show only quantity and total sum (Jumlah), NOT unit price**
+- **CRITICAL: If you see quantity + total sum but NO unit price:**
+  - Calculate unit price = total_sum ÷ quantity
+  - Set "price" to calculated unit price
+  - Set "total_price" to original total sum (Jumlah)
 - **ALWAYS verify: total_price = qty × price for EVERY line item**
 - If calculation doesn't match (>5% difference), you likely misread a number
 - Double-check OCR reading of qty, price, or total_price
@@ -99,6 +104,17 @@ that are not part of the invoice itself.
 - Carrots typically cost 15,000-25,000 IDR per kg
 - Cheese typically costs 150,000-300,000 IDR per kg
 - **Sanity check**: Total invoice should be 50,000-5,000,000 IDR for typical orders
+
+**Example: Indonesian Invoice with only Quantity + Jumlah**
+- Invoice shows: "Carrot 1.065 kg - Jumlah: 22.000"
+- NO unit price shown explicitly
+- **Correct extraction:**
+  - `qty`: 1.065
+  - `price`: 20657.28 (calculated: 22000 ÷ 1.065)
+  - `total_price`: 22000 (original Jumlah)
+- **WRONG extraction:**
+  - `price`: 22000 (copying Jumlah as unit price) ❌
+  - `total_price`: 22000 (math doesn't work: 1.065 × 22000 ≠ 22000) ❌
 
 ### Normalise product names
 *Example mappings*
