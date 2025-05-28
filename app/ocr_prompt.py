@@ -79,12 +79,18 @@ that are not part of the invoice itself.
 **Indonesian invoices use dots as thousands separators:**
 - `22.000` = 22,000 (twenty-two thousand)
 - `204.000` = 204,000 (two hundred four thousand)
+- `1.470.000` = 1,470,000 (one million four hundred seventy thousand)
 - `1.500.000` = 1,500,000 (one million five hundred thousand)
+- `2.350.000` = 2,350,000 (two million three hundred fifty thousand)
 
-**NEVER interpret dots as decimal points in prices!**
-- If you see `22.000` → interpret as **22000** (not 22.0)
-- If you see `204.000` → interpret as **204000** (not 204.0)
-- If you see `15.500` → interpret as **15500** (not 15.5)
+**MANDATORY: Large Number Recognition Rules**
+- **NEVER interpret dots as decimal points in prices!**
+- **Large numbers with multiple dots**: `1.470.000` → **1470000** (not 1470.0 or 1190)
+- **Medium numbers**: `204.000` → **204000** (not 204.0)
+- **Small numbers**: `22.000` → **22000** (not 22.0)
+- **OCR Common Error**: Reading `1.470.000` as `1190` - THIS IS WRONG!
+- **Verification**: If total seems too low for restaurant supply, reread the original number
+- **Context Check**: Swiss cheese typically costs 200,000-400,000 IDR per kg, not 200 IDR
 
 **MANDATORY: Mathematical Validation & Indonesian Invoice Logic**
 - **Indonesian invoices often show only quantity and total sum (Jumlah), NOT unit price**
@@ -104,6 +110,14 @@ that are not part of the invoice itself.
 - Carrots typically cost 15,000-25,000 IDR per kg
 - Cheese typically costs 150,000-300,000 IDR per kg
 - **Sanity check**: Total invoice should be 50,000-5,000,000 IDR for typical orders
+
+**OCR VERIFICATION PROTOCOL:**
+1. **If you read a large number (>100,000) and it seems too small, STOP AND REREAD**
+2. **Look again at the original text - count the digits carefully**
+3. **Examples of common misreading:**
+   - `1.470.000` misread as `1190` → Should be `1470000`
+   - `2.340.000` misread as `2340` → Should be `2340000`
+4. **When in doubt, choose the larger interpretation for Indonesian restaurant invoices**
 
 **Example: Indonesian Invoice with only Quantity + Jumlah**
 - Invoice shows: "Carrot 1.065 kg - Jumlah: 22.000"
@@ -153,6 +167,16 @@ If the invoice is handwritten and characters are unclear, make the best guess ba
 - Context of restaurant supply invoice
 - Typical price ranges for Indonesian products
 - Mark low-confidence fields with `"?"` but **never break JSON schema**.
+
+---
+
+### ⚠️ FINAL CRITICAL CHECK BEFORE OUTPUTTING JSON:
+**MANDATORY VERIFICATION**: Before returning your JSON response, check every price field:
+1. **Look for Indonesian large numbers with dots**: `1.470.000`, `2.350.000`, etc.
+2. **Verify you interpreted them correctly**: `1.470.000` = `1470000` (NOT `1470` or `1190`)
+3. **Sanity check**: Does the math work? qty × price ≈ total_price?
+4. **Price reality check**: Are prices reasonable for Indonesian restaurant supply?
+5. **If any number seems too small**, reread the original invoice image carefully
 
 ---
 
